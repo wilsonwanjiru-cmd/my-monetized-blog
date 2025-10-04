@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <meta name="description" content="<%= description %>">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="<%= url %>">
+    <meta property="og:title" content="<%= title %>">
+    <meta property="og:description" content="<%= description %>">
+    <meta property="og:image" content="<%= image %>">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="<%= url %>">
+    <meta property="twitter:title" content="<%= title %>">
+    <meta property="twitter:description" content="<%= description %>">
+    <meta property="twitter:image" content="<%= image %>">
+
+    <!-- Structured data (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "headline": "<%= post.title %>",
+      "description": "<%= post.metaDescription || post.excerpt %>",
+      "image": "<%= post.featuredImage || `${process.env.SITE_URL}/default-image.jpg` %>",
+      "author": {
+        "@type": "Person",
+        "name": "<%= post.author %>"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Your Blog Name",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "<%= process.env.SITE_URL %>/logo.png"
+        }
+      },
+      "datePublished": "<%= post.publishedAt.toISOString() %>",
+      "dateModified": "<%= post.updatedAt.toISOString() %>",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "<%= url %>"
+      }
+    }
+    </script>
+</head>
+<body>
+    <h1><%= title %></h1>
+    <p><%= description %></p>
+    <img src="<%= image %>" alt="<%= title %>" />
+</body>
+</html>
