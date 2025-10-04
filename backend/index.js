@@ -24,7 +24,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000', // Your React app URL
+  origin: process.env.CLIENT_URL || 'http://localhost:3000', // React app URL in dev
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -67,7 +67,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ✅ FIXED: MongoDB connection without deprecated options
+// ✅ MongoDB connection
 mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/monetized-blog')
   .then(() => console.log('✅ Connected to MongoDB'))
@@ -91,10 +91,19 @@ if (process.env.NODE_ENV === 'production') {
 
 // Ad injection middleware for monetization
 app.use('/api/posts', (req, res, next) => {
-  // This will be used by the posts controller to inject ads
   res.locals.adInjectionEnabled = true;
   next();
 });
+
+// ✅ Serve frontend build (React) after API routes
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '../frontend/build');
+  app.use(express.static(frontendPath));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -105,7 +114,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ✅ FIXED: 404 handler - CORRECT approach for Express
+// ✅ 404 handler for unknown API routes (only if not handled above)
 app.use((req, res) => {
   res.status(404).json({ 
     message: 'Route not found',
