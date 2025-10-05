@@ -22,11 +22,24 @@ const cacheMiddleware = require('./middleware/cache');
 
 const app = express();
 
+// ✅ UPDATED: CORS Configuration for production and development
+const corsOptions = {
+  origin: [
+    'https://my-monetized-blog-2.onrender.com', // Your live frontend URL
+    'http://localhost:3000', // Local development frontend
+    'http://localhost:3001' // Alternative local port
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 // Middleware
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000', // React app URL in dev
-  credentials: true
-}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -57,6 +70,11 @@ app.get('/api/health', (req, res) => {
     status: 'OK',
     message: 'Blog API is running',
     timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    cors: {
+      allowedOrigins: corsOptions.origin,
+      enabled: true
+    },
     features: {
       seo: true,
       analytics: true,
@@ -138,6 +156,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
   console.log('✅ All features integrated successfully!');
   console.log('📊 Available features:');
   console.log('   - SEO: Sitemap, Robots, RSS, AMP');
