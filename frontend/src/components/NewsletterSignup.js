@@ -1,5 +1,6 @@
 // frontend/src/components/NewsletterSignup.js
 import React, { useState } from 'react';
+import API_BASE_URL from '../utils/api'; // Import the centralized API configuration
 
 const NewsletterSignup = () => {
   const [formData, setFormData] = useState({
@@ -34,7 +35,8 @@ const NewsletterSignup = () => {
         utm_campaign: urlParams.get('utm_campaign') || 'general'
       };
 
-      const response = await fetch('http://localhost:5000/api/newsletter/subscribe', {
+      // ✅ UPDATED: Use centralized API configuration
+      const response = await fetch(`${API_BASE_URL}/newsletter/subscribe`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

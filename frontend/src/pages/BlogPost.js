@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import NewsletterSignup from '../components/NewsletterSignup';
+import API_BASE_URL from '../utils/api'; // Import the centralized API configuration
 
 const BlogPost = () => {
   const { slug } = useParams();
@@ -12,8 +13,8 @@ const BlogPost = () => {
   useEffect(() => {
     const fetchPost = async () => {
       try {
-        // ✅ FIXED: Correct endpoint to match backend route
-        const response = await fetch(`http://localhost:5000/api/posts/slug/${slug}`);
+        // ✅ UPDATED: Use centralized API configuration
+        const response = await fetch(`${API_BASE_URL}/posts/slug/${slug}`);
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);
         }
@@ -143,7 +144,7 @@ const BlogPost = () => {
     <div style={{ padding: '2rem', color: 'red', textAlign: 'center' }}>
       ❌ Error: {error}
       <br />
-      <small>Check if the backend is running on port 5000</small>
+      <small>Unable to load the blog post. Please try again later.</small>
     </div>
   );
   if (!post) return <div style={{ padding: '2rem', textAlign: 'center' }}>Post not found.</div>;

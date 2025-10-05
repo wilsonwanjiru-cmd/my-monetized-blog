@@ -1,6 +1,7 @@
 // frontend/src/pages/BlogListPage.js
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import API_BASE_URL from '../utils/api'; // Import the centralized API configuration
 
 const BlogListPage = () => {
   const [posts, setPosts] = useState([]);
@@ -10,7 +11,8 @@ const BlogListPage = () => {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        const response = await fetch('/api/posts'); // Proxy handles localhost:5000
+        // ✅ UPDATED: Use centralized API configuration
+        const response = await fetch(`${API_BASE_URL}/posts`);
         if (!response.ok) {
           throw new Error(`Error: ${response.status}`);
         }

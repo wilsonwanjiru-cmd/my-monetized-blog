@@ -1,5 +1,6 @@
 // frontend/src/pages/ContactPage.js
 import React, { useState } from 'react';
+import API_BASE_URL from '../utils/api'; // Import the centralized API configuration
 
 const ContactPage = () => {
     const [formData, setFormData] = useState({
@@ -22,7 +23,8 @@ const ContactPage = () => {
         setLoading(true);
 
         try {
-            const response = await fetch('http://localhost:5000/api/contact', {
+            // ✅ UPDATED: Use centralized API configuration
+            const response = await fetch(`${API_BASE_URL}/contact`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
