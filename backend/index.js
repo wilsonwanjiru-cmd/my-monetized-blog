@@ -34,10 +34,11 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
+// ✅ FIXED: Use CORS middleware globally. This automatically handles preflight for all routes.
 app.use(cors(corsOptions));
 
-// Handle preflight requests
-app.options('*', cors(corsOptions));
+// ❌ REMOVED: The line below is no longer needed and was causing the crash.
+// app.options('*', cors(corsOptions));
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
