@@ -143,7 +143,8 @@ function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/blog" element={<BlogListPage />} />
-              <Route path="/blog/:slug" element={<BlogPost />} />
+              {/* ✅ FIXED: Changed from /blog/:slug to /post/:slug to match your URL structure */}
+              <Route path="/post/:slug" element={<BlogPost />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
               {/* Add more routes as needed */}

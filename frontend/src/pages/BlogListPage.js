@@ -49,6 +49,7 @@ const BlogListPage = () => {
                 style={{ maxWidth: '100%', height: 'auto', marginBottom: '1rem' }}
               />
             )}
+            {/* ✅ This link already uses the correct /post/ prefix */}
             <h2>
               <Link to={`/post/${post.slug}`}>{post.title}</Link>
             </h2>
@@ -57,6 +58,7 @@ const BlogListPage = () => {
               By {post.author} | {new Date(post.publishedAt).toLocaleDateString()}
             </small>
             <br />
+            {/* ✅ This link also correctly uses the /post/ prefix */}
             <Link to={`/post/${post.slug}`}>Read More →</Link>
           </div>
         ))
