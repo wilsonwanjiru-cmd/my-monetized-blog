@@ -5,16 +5,68 @@
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#000000" />
-    <meta
-      name="description"
-      content="Web site created using create-react-app"
-    />
+    
+    <!-- ✅ Enhanced SEO Meta Tags -->
+    <meta name="description" content="A high-quality monetized blog with engaging content, SEO optimization, and Google AdSense compliance. Read insightful articles on various topics." />
+    <meta name="keywords" content="blog, articles, monetization, SEO, Google AdSense, content creation" />
+    <meta name="author" content="Your Name" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    
+    <!-- ✅ Open Graph Meta Tags for Social Sharing -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Your Blog Name - Quality Content for Readers" />
+    <meta property="og:description" content="Discover engaging articles and insights on our monetized blog with SEO-optimized content." />
+    <meta property="og:image" content="%PUBLIC_URL%/default-og-image.jpg" />
+    <meta property="og:url" content="https://my-monetized-blog-2.onrender.com" />
+    <meta property="og:site_name" content="Your Blog Name" />
+    
+    <!-- ✅ Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Your Blog Name - Quality Content for Readers" />
+    <meta name="twitter:description" content="Discover engaging articles and insights on our monetized blog with SEO-optimized content." />
+    <meta name="twitter:image" content="%PUBLIC_URL%/default-og-image.jpg" />
+    <meta name="twitter:creator" content="@yourtwitterhandle" />
+    
+    <!-- ✅ Structured Data for SEO (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Your Blog Name",
+      "description": "A high-quality monetized blog with engaging content and SEO optimization",
+      "url": "https://my-monetized-blog-2.onrender.com",
+      "publisher": {
+        "@type": "Organization",
+        "name": "Your Blog Name",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://my-monetized-blog-2.onrender.com/logo.png"
+        }
+      },
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": "https://my-monetized-blog-2.onrender.com/search?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    
+    <!-- ✅ Preconnect for Performance -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.clarity.ms">
+    
+    <!-- ✅ Canonical URL -->
+    <link rel="canonical" href="https://my-monetized-blog-2.onrender.com" />
+    
     <!--
       manifest.json provides metadata used when your web app is installed on a
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+    
     <!--
       Notice the use of %PUBLIC_URL% in the tags above.
       It will be replaced with the URL of the `public` folder during the build.
@@ -24,14 +76,26 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-         <!-- Load runtime configuration -->
+    
+    <!-- ✅ Load runtime configuration -->
     <script src="%PUBLIC_URL%/config.js"></script>
     
-    <title>React App</title>
+    <!-- ✅ Google AdSense Verification (Add your own ID) -->
+    <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_ADSENSE_ID" crossorigin="anonymous"></script> -->
+    
+    <title>Your Blog Name - Quality Content for Readers</title>
   </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>
+      <div style="text-align: center; padding: 2rem; font-family: Arial, sans-serif;">
+        <h1>JavaScript Required</h1>
+        <p>You need to enable JavaScript to run this application.</p>
+        <p>Our blog uses modern web technologies to provide the best reading experience.</p>
+      </div>
+    </noscript>
+    
     <div id="root"></div>
+    
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
@@ -42,5 +106,65 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+    
+    <!-- ✅ Microsoft Clarity Heatmap & Analytics -->
+    <script type="text/javascript">
+      (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+      })(window, document, "clarity", "script", "YOUR_CLARITY_PROJECT_ID");
+    </script>
+    
+    <!-- ✅ Google Analytics (Optional - Add your own ID) -->
+    <!--
+    <script async src="https://www.googletagmanager.com/gtag/js?id=GA_MEASUREMENT_ID"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'GA_MEASUREMENT_ID');
+    </script>
+    -->
+    
+    <!-- ✅ Performance & Error Tracking Script -->
+    <script>
+      // Performance monitoring
+      if ('performance' in window) {
+        window.addEventListener('load', function() {
+          const perfData = window.performance.timing;
+          const loadTime = perfData.loadEventEnd - perfData.navigationStart;
+          
+          // Send performance data to your analytics
+          if (loadTime > 0) {
+            fetch('/api/analytics/track', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                eventType: 'performance_metrics',
+                loadTime: loadTime,
+                url: window.location.href,
+                userAgent: navigator.userAgent
+              })
+            }).catch(console.error);
+          }
+        });
+      }
+      
+      // Global error handler
+      window.addEventListener('error', function(e) {
+        fetch('/api/analytics/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventType: 'javascript_error',
+            errorMessage: e.message,
+            errorStack: e.error?.stack,
+            url: window.location.href,
+            userAgent: navigator.userAgent
+          })
+        }).catch(console.error);
+      });
+    </script>
   </body>
 </html>

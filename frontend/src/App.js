@@ -1,6 +1,6 @@
 // frontend/src/App.js
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 
 // Import pages
@@ -12,142 +12,274 @@ import ContactPage from './pages/ContactPage';
 import Layout from './components/Layout';
 
 // Import tracking utilities
-import { initUTMTracking, AffiliateLink } from './utils/utmTracker';
+import utmTracker from './utils/utmTracker';
 import { initHeatmapTracking } from './utils/heatmapTracker';
-import { initAnalyticsTracking } from './utils/analyticsTracker';
 
-// Generate a unique session ID with localStorage safety check
-const generateSessionId = () => {
-  // Check if localStorage is available (browser environment)
-  if (typeof localStorage !== 'undefined') {
-    let sessionId = localStorage.getItem('session_id');
-    if (!sessionId) {
-      sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem('session_id', sessionId);
-    }
-    return sessionId;
-  }
-  // Fallback for when localStorage isn't available
-  return 'session_' + Math.random().toString(36).substr(2, 9);
+// Component to handle page view tracking
+const PageViewTracker = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Track page view when route changes
+    const trackPageView = async () => {
+      const pageData = {
+        eventType: 'pageview',
+        url: window.location.href,
+        path: location.pathname,
+        sessionId: utmTracker.getCurrentSessionId(),
+        metadata: {
+          title: document.title,
+          referrer: document.referrer,
+          previousPath: sessionStorage.getItem('previous_path') || ''
+        }
+      };
+
+      try {
+        // Send to backend analytics
+        await fetch('/api/analytics/track', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(pageData)
+        });
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('📊 Page View:', pageData);
+        }
+      } catch (error) {
+        console.warn('Page view tracking failed:', error);
+      }
+
+      // Store current path for next page view
+      sessionStorage.setItem('previous_path', location.pathname);
+    };
+
+    trackPageView();
+  }, [location]);
+
+  return null;
 };
 
-// Track custom events
-const trackEvent = (eventType, metadata = {}) => {
-  if (process.env.NODE_ENV === 'production') {
-    fetch('/api/analytics/track', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        eventType,
-        url: window.location.pathname,
-        timestamp: new Date().toISOString(),
-        sessionId: generateSessionId(),
-        metadata,
-        userAgent: navigator.userAgent,
-        screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown' // ✅ Fixed: using window.screen
-      })
-    }).catch(error => {
+// Generate a robust session ID
+const generateSessionId = () => {
+  // Check if we're in a browser environment
+  if (typeof window === 'undefined') {
+    return 'server-side-session';
+  }
+
+  try {
+    let sessionId = sessionStorage.getItem('blog_session_id');
+    
+    if (!sessionId) {
+      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('blog_session_id', sessionId);
+      
+      // Also store in localStorage for cross-tab session persistence
+      localStorage.setItem('blog_session_id', sessionId);
+    }
+    
+    return sessionId;
+  } catch (error) {
+    // Fallback if storage is not available
+    console.warn('Session storage not available, using memory session');
+    return 'memory_session_' + Math.random().toString(36).substr(2, 9);
+  }
+};
+
+// Enhanced event tracking function - REMOVED DUPLICATE EXPORT
+const trackEvent = async (eventType, metadata = {}) => {
+  const eventData = {
+    eventType,
+    url: window.location.href,
+    path: window.location.pathname,
+    timestamp: new Date().toISOString(),
+    sessionId: generateSessionId(),
+    metadata,
+    userAgent: navigator.userAgent,
+    screenResolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    language: navigator.language
+  };
+
+  // Always log events in development for debugging
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('🎯 Event Tracked:', eventType, eventData);
+  }
+
+  // Only send to backend in production or if explicitly enabled
+  if (process.env.NODE_ENV === 'production' || process.env.REACT_APP_ANALYTICS_DEV === 'true') {
+    try {
+      const response = await fetch('/api/analytics/track', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(eventData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
       console.warn('Event tracking failed:', error);
-    });
+      
+      // Optional: Implement retry logic or offline queue here
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Event data that failed to send:', eventData);
+      }
+    }
   }
 };
 
 // Global click handler for automatic event tracking
 const handleGlobalClick = (event) => {
-  if (process.env.NODE_ENV !== 'production') return;
-
   const target = event.target;
   
   // Track affiliate link clicks
-  if (target.closest('.affiliate-link') || target.href?.includes('utm_source=affiliate')) {
+  if (target.closest('.affiliate-link') || target.getAttribute('rel')?.includes('sponsored')) {
+    const link = target.closest('a');
     trackEvent('affiliate_click', {
       element: 'affiliate_link',
-      href: target.href,
-      text: target.textContent?.substring(0, 100)
+      href: link?.href,
+      text: link?.textContent?.substring(0, 100),
+      product: link?.getAttribute('data-affiliate-product'),
+      position: link?.getAttribute('data-affiliate-position')
     });
   }
   
   // Track CTA button clicks
-  if (target.classList.contains('cta-button') || target.type === 'submit') {
+  if (target.classList.contains('cta-button') || 
+      target.classList.contains('newsletter-signup') || 
+      target.type === 'submit') {
     trackEvent('cta_click', {
       element: target.className,
       text: target.textContent?.substring(0, 100),
-      type: target.type
+      type: target.type,
+      id: target.id
     });
   }
   
-  // Track newsletter signups
-  if (target.type === 'email' || target.form?.classList.contains('newsletter-form')) {
-    trackEvent('newsletter_engagement', {
-      element: 'newsletter_form',
-      action: 'interaction'
+  // Track external link clicks
+  if (target.tagName === 'A' && target.href) {
+    try {
+      const url = new URL(target.href);
+      const isExternal = url.hostname !== window.location.hostname;
+      
+      if (isExternal && !target.href.includes('utm_source')) {
+        trackEvent('external_link_click', {
+          href: target.href,
+          text: target.textContent?.substring(0, 100),
+          isAffiliate: target.classList.contains('affiliate-link')
+        });
+      }
+    } catch (error) {
+      // Invalid URL, skip tracking
+    }
+  }
+};
+
+// Enhanced error boundary and performance tracking
+const setupErrorTracking = () => {
+  // Global error handler
+  window.addEventListener('error', (event) => {
+    trackEvent('javascript_error', {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      error: event.error?.toString()
+    });
+  });
+
+  // Promise rejection handler
+  window.addEventListener('unhandledrejection', (event) => {
+    trackEvent('promise_rejection', {
+      reason: event.reason?.toString()
+    });
+  });
+
+  // Performance monitoring
+  if ('performance' in window) {
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const navigationTiming = performance.getEntriesByType('navigation')[0];
+        if (navigationTiming) {
+          trackEvent('performance_metrics', {
+            loadTime: navigationTiming.loadEventEnd - navigationTiming.navigationStart,
+            domContentLoaded: navigationTiming.domContentLoadedEventEnd - navigationTiming.navigationStart,
+            firstPaint: performance.getEntriesByName('first-paint')[0]?.startTime,
+            firstContentfulPaint: performance.getEntriesByName('first-contentful-paint')[0]?.startTime
+          });
+        }
+      }, 0);
     });
   }
 };
 
 function App() {
-  // Function to track page views
-  const trackPageView = (pathname) => {
-    if (process.env.NODE_ENV === 'production') {
-      // Send pageview to your analytics backend
-      fetch('/api/analytics/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          eventType: 'pageview',
-          url: pathname,
-          timestamp: new Date().toISOString(),
-          sessionId: generateSessionId(),
-        })
-      }).catch(error => {
-        console.warn('Analytics tracking failed:', error);
+  useEffect(() => {
+    // Initialize all tracking systems
+    console.log('🔍 Initializing analytics and tracking systems...');
+    
+    // Initialize UTM tracking for affiliate links and campaign tracking
+    utmTracker.initUTMTracking();
+    
+    // Initialize heatmap tracking for user behavior visualization
+    if (process.env.NODE_ENV === 'production' || process.env.REACT_APP_HEATMAP_DEV === 'true') {
+      initHeatmapTracking({
+        clickTracking: true,
+        scrollTracking: true,
+        movementTracking: true
       });
     }
-  };
+    
+    // Setup error and performance tracking
+    setupErrorTracking();
+    
+    // Track initial app load
+    trackEvent('app_loaded', {
+      environment: process.env.NODE_ENV,
+      reactVersion: React.version,
+      userAgent: navigator.userAgent
+    });
 
-  useEffect(() => {
-    // Initialize all tracking systems in production only
-    if (process.env.NODE_ENV === 'production') {
-      console.log('🔍 Initializing analytics and tracking...');
-      
-      // Initialize UTM tracking for affiliate links and campaign tracking
-      initUTMTracking();
-      
-      // Initialize heatmap tracking for user behavior visualization
-      initHeatmapTracking();
-      
-      // Initialize custom analytics event tracking
-      initAnalyticsTracking();
-      
-      // Track initial page view
-      trackPageView(window.location.pathname);
-    } else {
-      console.log('🚫 Analytics disabled in development mode');
-    }
+    // Add global click listener
+    document.addEventListener('click', handleGlobalClick);
+
+    // Cleanup function
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
   }, []);
 
   return (
     <HelmetProvider>
       <Router>
+        {/* Page view tracker component */}
+        <PageViewTracker />
+        
         {/* Global click handler for automatic link tracking */}
         <div 
           className="App" 
-          onClick={handleGlobalClick}
           style={{ minHeight: '100vh' }}
         >
           <Layout>
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/blog" element={<BlogListPage />} />
-              {/* ✅ FIXED: Changed from /blog/:slug to /post/:slug to match your URL structure */}
               <Route path="/post/:slug" element={<BlogPost />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              {/* Add more routes as needed */}
+              {/* 404 fallback */}
+              <Route path="*" element={
+                <div style={{ padding: '2rem', textAlign: 'center' }}>
+                  <h1>404 - Page Not Found</h1>
+                  <p>The page you're looking for doesn't exist.</p>
+                </div>
+              } />
             </Routes>
           </Layout>
         </div>
@@ -156,6 +288,6 @@ function App() {
   );
 }
 
-// Export for use in other components
-export { trackEvent, AffiliateLink };
+// ✅ FIXED: Only export trackEvent once
+export { trackEvent };
 export default App;

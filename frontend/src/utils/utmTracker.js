@@ -1,4 +1,5 @@
 // frontend/src/utils/utmTracker.js
+import API_BASE_URL from './api';
 
 /**
  * Comprehensive UTM Tracking Utility
@@ -15,15 +16,31 @@ const UTM_CONFIG = {
   socialMedium: 'social'
 };
 
+// Global session management
+let currentSessionId = null;
+
+/**
+ * Initialize UTM tracking and session management
+ */
+export const initUTMTracking = () => {
+  if (typeof document === 'undefined') return;
+
+  currentSessionId = getSessionId();
+  
+  // Track page view with UTM parameters
+  trackPageView();
+  
+  // Auto-enhance external links
+  enhanceExternalLinks();
+  
+  // Auto-enhance affiliate links
+  enhanceAffiliateLinks();
+  
+  console.log('🔗 UTM Tracking initialized with session:', currentSessionId);
+};
+
 /**
  * Add UTM parameters to any URL with comprehensive tracking
- * @param {string} url - The original URL
- * @param {string} source - UTM source (default: 'yourblog')
- * @param {string} medium - UTM medium (default: 'content')
- * @param {string} campaign - UTM campaign name
- * @param {string} content - UTM content for A/B testing
- * @param {string} term - UTM term for keyword tracking
- * @returns {string} URL with UTM parameters
  */
 export const addUTMParams = (
   url, 
@@ -33,25 +50,27 @@ export const addUTMParams = (
   content = '',
   term = ''
 ) => {
-  // Validate URL
   if (!url || typeof url !== 'string') {
     console.warn('UTM Tracking: Invalid URL provided', url);
     return url;
   }
 
   try {
-    const urlObj = new URL(url);
-    const utmParams = new URLSearchParams({
+    // Handle relative URLs
+    const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+    const urlObj = new URL(fullUrl);
+    
+    const utmParams = {
       utm_source: source,
       utm_medium: medium,
       utm_campaign: campaign || UTM_CONFIG.defaultCampaign,
       utm_content: content || getDefaultContent(),
       utm_term: term || getDefaultTerm()
-    });
+    };
 
-    // Merge with existing parameters
-    utmParams.forEach((value, key) => {
-      if (!urlObj.searchParams.has(key)) {
+    // Add only non-empty parameters
+    Object.entries(utmParams).forEach(([key, value]) => {
+      if (value && !urlObj.searchParams.has(key)) {
         urlObj.searchParams.set(key, value);
       }
     });
@@ -64,130 +83,126 @@ export const addUTMParams = (
 };
 
 /**
- * Affiliate Link Component with automatic tracking and disclosure
- * @param {Object} props - Component props
- * @param {string} props.url - The affiliate URL
- * @param {string} props.product - Product name for tracking
- * @param {string} props.position - Position on page (e.g., 'sidebar', 'content')
- * @param {ReactNode} props.children - Link content
- * @param {string} props.className - Additional CSS classes
- * @param {boolean} props.showDisclosure - Whether to show affiliate disclosure
- * @param {Object} props.rest - Other anchor tag attributes
+ * Track page view with UTM parameters from URL
  */
-export const AffiliateLink = ({ 
-  url, 
-  children, 
-  product, 
-  position = 'inline',
-  className = '',
-  showDisclosure = true,
-  ...props 
-}) => {
-  const trackedUrl = addUTMParams(
-    url, 
-    UTM_CONFIG.defaultSource, 
-    UTM_CONFIG.affiliateMedium, 
-    product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
-    position,
-    product
-  );
-  
-  const handleClick = (e) => {
-    // Track affiliate click event
-    trackAffiliateClick({
-      url: trackedUrl,
-      product,
-      position,
-      text: typeof children === 'string' ? children : 'Affiliate Link'
-    });
-    
-    // Optional: Open in new tab for affiliate links
-    if (props.target !== '_self') {
-      e.preventDefault();
-      window.open(trackedUrl, '_blank', 'noopener,noreferrer');
+export const trackPageView = async () => {
+  const utmParams = getCurrentUTMParams();
+  const pageData = {
+    eventType: 'pageview',
+    url: window.location.href,
+    sessionId: currentSessionId,
+    ...utmParams,
+    metadata: {
+      referrer: document.referrer,
+      title: document.title,
+      path: window.location.pathname
     }
   };
 
-  return (
-    <a 
-      href={trackedUrl}
-      onClick={handleClick}
-      {...props}
-      rel="sponsored noopener noreferrer"
-      className={`affiliate-link ${className}`}
-      data-affiliate-product={product}
-      data-affiliate-position={position}
-      target="_blank"
-    >
-      {children}
-      {showDisclosure && (
-        <span className="affiliate-disclosure" style={{ fontSize: '0.8em', opacity: 0.7 }}>
-          {' '}(Affiliate Link)
-        </span>
-      )}
-    </a>
-  );
+  try {
+    await sendToAnalyticsAPI(pageData);
+  } catch (error) {
+    console.warn('Page view tracking failed:', error);
+  }
 };
 
 /**
- * Social Share Link Component with UTM tracking
- * @param {Object} props - Component props
- * @param {string} props.platform - Social platform (twitter, facebook, linkedin, etc.)
- * @param {string} props.url - URL to share
- * @param {string} props.text - Share text
- * @param {string} props.campaign - Campaign name
+ * Track affiliate link clicks
  */
-export const SocialShareLink = ({ 
-  platform, 
-  url = typeof window !== 'undefined' ? window.location.href : '', 
-  text = '', 
-  campaign = 'social_share',
-  children,
-  ...props 
-}) => {
-  const shareUrls = {
-    twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`,
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
-    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
-    pinterest: `https://pinterest.com/pin/create/button/?url=${encodeURIComponent(url)}&description=${encodeURIComponent(text)}`,
-    reddit: `https://reddit.com/submit?url=${encodeURIComponent(url)}&title=${encodeURIComponent(text)}`
+export const trackAffiliateClick = async (data) => {
+  const eventData = {
+    eventType: 'affiliate_click',
+    url: data.url,
+    sessionId: currentSessionId,
+    utmSource: UTM_CONFIG.defaultSource,
+    utmMedium: UTM_CONFIG.affiliateMedium,
+    utmCampaign: data.product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
+    utmContent: data.position,
+    utmTerm: data.product,
+    metadata: {
+      product: data.product,
+      position: data.position,
+      linkText: data.text,
+      elementId: data.elementId
+    }
   };
 
-  const shareUrl = shareUrls[platform.toLowerCase()];
-  
-  if (!shareUrl) {
-    console.warn(`SocialShareLink: Unknown platform ${platform}`);
-    return children || null;
+  try {
+    await sendToAnalyticsAPI(eventData);
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📊 Affiliate Click:', eventData);
+    }
+  } catch (error) {
+    console.warn('Affiliate click tracking failed:', error);
   }
-
-  const trackedUrl = addUTMParams(
-    shareUrl,
-    UTM_CONFIG.defaultSource,
-    UTM_CONFIG.socialMedium,
-    `${campaign}_${platform}`,
-    'share_button'
-  );
-
-  return (
-    <a 
-      href={trackedUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`social-share-link share-${platform}`}
-      onClick={() => trackSocialShare(platform, url)}
-      {...props}
-    >
-      {children || `Share on ${platform.charAt(0).toUpperCase() + platform.slice(1)}`}
-    </a>
-  );
 };
 
 /**
- * Initialize automatic UTM tracking for all external links
+ * Track outbound link clicks
  */
-export const initUTMTracking = () => {
-  if (typeof document === 'undefined') return;
+export const trackOutboundClick = async (data) => {
+  const eventData = {
+    eventType: 'click',
+    url: data.originalUrl,
+    sessionId: currentSessionId,
+    utmSource: data.utmSource || UTM_CONFIG.defaultSource,
+    utmMedium: data.utmMedium || UTM_CONFIG.referralMedium,
+    utmCampaign: data.campaign || 'outbound',
+    utmContent: data.content,
+    utmTerm: data.term,
+    metadata: {
+      element: data.element,
+      text: data.text,
+      isExternal: true,
+      isAffiliate: data.isAffiliate || false
+    }
+  };
 
+  try {
+    await sendToAnalyticsAPI(eventData);
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔗 Outbound Click:', eventData);
+    }
+  } catch (error) {
+    console.warn('Outbound click tracking failed:', error);
+  }
+};
+
+/**
+ * Track social media shares
+ */
+export const trackSocialShare = async (platform, url, campaign = 'social_share') => {
+  const eventData = {
+    eventType: 'social_share',
+    url: url,
+    sessionId: currentSessionId,
+    utmSource: UTM_CONFIG.defaultSource,
+    utmMedium: UTM_CONFIG.socialMedium,
+    utmCampaign: campaign,
+    utmContent: platform,
+    metadata: {
+      platform: platform,
+      sharedUrl: url
+    }
+  };
+
+  try {
+    await sendToAnalyticsAPI(eventData);
+    
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📤 Social Share:', eventData);
+    }
+  } catch (error) {
+    console.warn('Social share tracking failed:', error);
+  }
+};
+
+/**
+ * Auto-enhance external links with UTM parameters
+ */
+const enhanceExternalLinks = () => {
   document.addEventListener('click', (e) => {
     const link = e.target.closest('a[href^="http"]');
     if (!link) return;
@@ -199,134 +214,125 @@ export const initUTMTracking = () => {
       const url = new URL(href);
       const isInternal = url.hostname === window.location.hostname;
       
-      if (!isInternal && !url.searchParams.has('utm_source')) {
-        const isAffiliate = link.classList.contains('affiliate-link');
-        const isSocial = link.classList.contains('social-share-link');
-        
-        let medium = UTM_CONFIG.referralMedium;
-        let campaign = 'outbound';
-        let content = '';
-
-        if (isAffiliate) {
-          medium = UTM_CONFIG.affiliateMedium;
-          campaign = link.getAttribute('data-affiliate-product') || 'affiliate';
-          content = link.getAttribute('data-affiliate-position') || 'unknown';
-        } else if (isSocial) {
-          medium = UTM_CONFIG.socialMedium;
-          campaign = 'social_share';
-          content = link.className.match(/share-(\w+)/)?.[1] || 'unknown';
-        }
-
-        const trackedUrl = addUTMParams(
-          href,
-          UTM_CONFIG.defaultSource,
-          medium,
-          campaign,
-          content
-        );
-
-        link.setAttribute('href', trackedUrl);
-        
-        // Track the outbound click
-        trackOutboundClick({
-          originalUrl: href,
-          trackedUrl,
-          medium,
-          campaign,
-          content,
-          element: link.tagName,
-          text: link.textContent?.substring(0, 100)
-        });
+      // Skip if already has UTM params or is internal
+      if (isInternal || url.searchParams.has('utm_source')) {
+        return;
       }
+
+      const isAffiliate = link.classList.contains('affiliate-link') || 
+                         link.getAttribute('rel')?.includes('sponsored');
+      
+      let medium = UTM_CONFIG.referralMedium;
+      let campaign = 'outbound';
+      let content = 'auto_enhanced';
+
+      if (isAffiliate) {
+        medium = UTM_CONFIG.affiliateMedium;
+        campaign = link.getAttribute('data-affiliate-product') || 'affiliate';
+        content = link.getAttribute('data-affiliate-position') || 'unknown';
+      }
+
+      const trackedUrl = addUTMParams(
+        href,
+        UTM_CONFIG.defaultSource,
+        medium,
+        campaign,
+        content
+      );
+
+      // Update the link href
+      link.setAttribute('href', trackedUrl);
+      
+      // Track the click
+      trackOutboundClick({
+        originalUrl: href,
+        trackedUrl,
+        utmSource: UTM_CONFIG.defaultSource,
+        utmMedium: medium,
+        campaign,
+        content,
+        element: link.tagName,
+        text: link.textContent?.substring(0, 100),
+        isAffiliate
+      });
     } catch (error) {
       console.warn('UTM Tracking: Error processing link', href, error);
     }
   });
-
-  console.log('🔗 UTM Tracking initialized');
 };
 
 /**
- * Track affiliate link clicks for analytics
+ * Auto-enhance affiliate links
  */
-const trackAffiliateClick = (data) => {
-  if (typeof window === 'undefined') return;
+const enhanceAffiliateLinks = () => {
+  // Enhance existing affiliate links
+  const affiliateLinks = document.querySelectorAll('a[href*="amazon"], a[href*="partner"], a[data-affiliate]');
+  
+  affiliateLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href) return;
 
-  // Send to your analytics backend
-  if (typeof trackEvent === 'function') {
-    trackEvent('affiliate_click', data);
-  }
+    const product = link.getAttribute('data-affiliate-product') || 
+                   extractProductFromUrl(href);
+    const position = link.getAttribute('data-affiliate-position') || 'content';
 
-  // Also log to console in development
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('📊 Affiliate Click:', data);
-  }
+    const trackedUrl = addUTMParams(
+      href,
+      UTM_CONFIG.defaultSource,
+      UTM_CONFIG.affiliateMedium,
+      product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
+      position,
+      product
+    );
 
-  // Optional: Send to analytics API
-  sendToAnalytics('affiliate_click', data);
-};
+    link.setAttribute('href', trackedUrl);
+    link.setAttribute('rel', 'sponsored noopener noreferrer');
+    link.setAttribute('target', '_blank');
+    
+    if (!link.classList.contains('affiliate-link')) {
+      link.classList.add('affiliate-link');
+    }
 
-/**
- * Track social shares
- */
-const trackSocialShare = (platform, url) => {
-  const data = {
-    platform,
-    url,
-    timestamp: new Date().toISOString()
-  };
-
-  if (typeof trackEvent === 'function') {
-    trackEvent('social_share', data);
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('📤 Social Share:', data);
-  }
-
-  sendToAnalytics('social_share', data);
-};
-
-/**
- * Track outbound link clicks
- */
-const trackOutboundClick = (data) => {
-  if (typeof trackEvent === 'function') {
-    trackEvent('outbound_click', data);
-  }
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('🔗 Outbound Click:', data);
-  }
-
-  sendToAnalytics('outbound_click', data);
-};
-
-/**
- * Send analytics data to backend
- */
-const sendToAnalytics = (eventType, data) => {
-  if (process.env.NODE_ENV !== 'production') return;
-
-  const analyticsData = {
-    eventType,
-    ...data,
-    sessionId: getSessionId(),
-    userAgent: navigator.userAgent,
-    timestamp: new Date().toISOString(),
-    url: window.location.href
-  };
-
-  // Use fetch or your preferred analytics service
-  fetch('/api/analytics/track', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(analyticsData)
-  }).catch(error => {
-    console.warn('Analytics tracking failed:', error);
+    // Add click listener for tracking
+    link.addEventListener('click', (e) => {
+      trackAffiliateClick({
+        url: trackedUrl,
+        product,
+        position,
+        text: link.textContent?.substring(0, 100),
+        elementId: link.id
+      });
+    });
   });
+};
+
+/**
+ * Send analytics data to backend API
+ */
+const sendToAnalyticsAPI = async (data) => {
+  // Don't send analytics in development unless explicitly enabled
+  if (process.env.NODE_ENV !== 'production' && !process.env.REACT_APP_ANALYTICS_DEV) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/analytics/track`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Analytics API responded with status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.warn('Analytics API request failed:', error);
+    throw error;
+  }
 };
 
 /**
@@ -335,16 +341,16 @@ const sendToAnalytics = (eventType, data) => {
 const getSessionId = () => {
   if (typeof window === 'undefined') return 'server-side';
   
-  let sessionId = localStorage.getItem('blog_session_id');
+  let sessionId = sessionStorage.getItem('blog_session_id');
   if (!sessionId) {
-    sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('blog_session_id', sessionId);
+    sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    sessionStorage.setItem('blog_session_id', sessionId);
   }
   return sessionId;
 };
 
 /**
- * Get default UTM content based on current page and date
+ * Get default UTM content based on current page
  */
 const getDefaultContent = () => {
   if (typeof window === 'undefined') return 'server_side';
@@ -360,32 +366,52 @@ const getDefaultContent = () => {
 const getDefaultTerm = () => {
   if (typeof window === 'undefined') return '';
   
-  // Try to get relevant keywords from page
   const title = document.title || '';
   const h1 = document.querySelector('h1')?.textContent || '';
   return `${title} ${h1}`.trim().substring(0, 50);
 };
 
 /**
+ * Extract product name from affiliate URL
+ */
+const extractProductFromUrl = (url) => {
+  try {
+    const urlObj = new URL(url);
+    // Common affiliate URL patterns
+    if (url.includes('amazon')) {
+      return urlObj.pathname.split('/').find(part => part.length > 10) || 'amazon_product';
+    }
+    return 'affiliate_product';
+  } catch {
+    return 'affiliate_product';
+  }
+};
+
+/**
  * Manual UTM parameter extraction for analytics
- * @returns {Object} UTM parameters from current URL
  */
 export const getCurrentUTMParams = () => {
   if (typeof window === 'undefined') return {};
   
   const params = new URLSearchParams(window.location.search);
-  return {
+  const utmParams = {
     utm_source: params.get('utm_source'),
     utm_medium: params.get('utm_medium'),
     utm_campaign: params.get('utm_campaign'),
     utm_content: params.get('utm_content'),
     utm_term: params.get('utm_term')
   };
+
+  // Store UTM parameters in session storage for future events
+  if (Object.values(utmParams).some(value => value !== null)) {
+    sessionStorage.setItem('utm_params', JSON.stringify(utmParams));
+  }
+
+  return utmParams;
 };
 
 /**
  * Check if current visit came from a UTM campaign
- * @returns {boolean}
  */
 export const hasUTMParams = () => {
   const params = getCurrentUTMParams();
@@ -393,9 +419,21 @@ export const hasUTMParams = () => {
 };
 
 /**
- * Clean URL by removing UTM parameters (useful for sharing)
- * @param {string} url - URL to clean
- * @returns {string} Clean URL without UTM parameters
+ * Get stored UTM parameters from session
+ */
+export const getStoredUTMParams = () => {
+  if (typeof window === 'undefined') return {};
+  
+  try {
+    const stored = sessionStorage.getItem('utm_params');
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Clean URL by removing UTM parameters
  */
 export const removeUTMParams = (url) => {
   try {
@@ -413,23 +451,21 @@ export const removeUTMParams = (url) => {
   }
 };
 
-// Export trackEvent for external use (will be implemented in App.js)
-export let trackEvent = (eventType, data) => {
-  console.log('Track Event (placeholder):', eventType, data);
-};
-
-// Allow setting trackEvent from App.js
-export const setTrackEvent = (trackingFunction) => {
-  trackEvent = trackingFunction;
-};
+/**
+ * Get current session ID
+ */
+export const getCurrentSessionId = () => currentSessionId;
 
 export default {
-  addUTMParams,
-  AffiliateLink,
-  SocialShareLink,
   initUTMTracking,
+  addUTMParams,
+  trackPageView,
+  trackAffiliateClick,
+  trackOutboundClick,
+  trackSocialShare,
   getCurrentUTMParams,
+  getStoredUTMParams,
   hasUTMParams,
   removeUTMParams,
-  setTrackEvent
+  getCurrentSessionId
 };

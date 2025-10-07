@@ -13,12 +13,13 @@ const sitemapRoutes = require('./routes/sitemap');
 const robotsRoutes = require('./routes/robots');
 const rssRoutes = require('./routes/rss');
 const ampRoutes = require('./routes/amp');
-const analyticsRoutes = require('./routes/analytics');
+const analyticsRoutes = require('./routes/analytics'); // Make sure this path is correct
 const consentRoutes = require('./routes/consent');
 const videoSitemapRoutes = require('./routes/videoSitemap');
 
 // Import middleware
 const cacheMiddleware = require('./middleware/cache');
+const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
@@ -37,25 +38,23 @@ const corsOptions = {
 // ✅ FIXED: Use CORS middleware globally. This automatically handles preflight for all routes.
 app.use(cors(corsOptions));
 
-// ❌ REMOVED: The line below is no longer needed and was causing the crash.
-// app.options('*', cors(corsOptions));
-
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Cache middleware for performance optimization
 app.use(cacheMiddleware);
+app.use(etagMiddleware);
 
 // Set view engine for OG tags, AMP, and dynamic sitemaps
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// API Routes
+// API Routes - ✅ CRITICAL: Make sure analyticsRoutes is properly mounted
 app.use('/api/posts', postsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
-app.use('/api/analytics', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes); // This should mount all analytics routes
 app.use('/api/consent', consentRoutes);
 
 // SEO Routes
@@ -124,18 +123,26 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Error handling middleware
+// Error handling middleware - ✅ IMPROVED: Better error handling :cite[1]:cite[5]
 app.use((err, req, res, next) => {
   console.error('🔥 Error:', err.stack);
-  res.status(500).json({ 
-    message: 'Something went wrong!', 
-    error: process.env.NODE_ENV === 'production' ? {} : err.message 
+  
+  // Check if headers already sent :cite[1]
+  if (res.headersSent) {
+    return next(err);
+  }
+  
+  res.status(err.status || 500).json({ 
+    success: false,
+    message: process.env.NODE_ENV === 'production' ? 'Something went wrong!' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
   });
 });
 
 // ✅ 404 handler for unknown API routes (only if not handled above)
 app.use((req, res) => {
   res.status(404).json({ 
+    success: false,
     message: 'Route not found',
     path: req.originalUrl,
     suggestion: 'Check the API documentation for available endpoints',
@@ -144,6 +151,8 @@ app.use((req, res) => {
       '/api/posts',
       '/api/contact', 
       '/api/newsletter',
+      '/api/analytics',
+      '/api/consent',
       '/sitemap.xml',
       '/robots.txt',
       '/rss.xml'
