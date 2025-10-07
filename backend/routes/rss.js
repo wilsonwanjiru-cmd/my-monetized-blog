@@ -11,7 +11,7 @@ router.get('/rss.xml', async (req, res) => {
     const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Your Blog</title>
+    <title>Wilson</title>
     <description>Your blog description</description>
     <link>https://yourblog.com</link>
     <atom:link href="https://yourblog.com/rss.xml" rel="self" type="application/rss+xml" />

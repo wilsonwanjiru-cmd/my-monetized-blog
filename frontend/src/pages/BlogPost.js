@@ -27,6 +27,9 @@ const BlogPost = () => {
         updateMetaTags(postData);
         // Add structured data for rich snippets
         addStructuredData(postData);
+        
+        // 🖼️ LAZY LOADING: Process content images after post data is set
+        processContentImages();
       } catch (err) {
         setError(err.message);
         console.error('Fetch error:', err);
@@ -126,6 +129,28 @@ const BlogPost = () => {
       document.head.appendChild(script);
     };
 
+    // 🖼️ PROCESS CONTENT IMAGES: Add lazy loading to all images in post content
+    const processContentImages = () => {
+      // Use setTimeout to ensure this runs after the DOM is updated with post content
+      setTimeout(() => {
+        const contentImages = document.querySelectorAll('.post-content img');
+        contentImages.forEach(img => {
+          // Add lazy loading attribute if not already present
+          if (!img.getAttribute('loading')) {
+            img.setAttribute('loading', 'lazy');
+          }
+          
+          // Ensure alt text is meaningful
+          if (!img.getAttribute('alt') || img.getAttribute('alt') === '') {
+            // Use image filename or post title as fallback alt text
+            const src = img.getAttribute('src') || '';
+            const fileName = src.split('/').pop()?.split('.')[0] || 'blog image';
+            img.setAttribute('alt', `${fileName} - ${post?.title || 'Blog post'}`);
+          }
+        });
+      }, 100);
+    };
+
     if (slug) {
       fetchPost();
     }
@@ -151,10 +176,12 @@ const BlogPost = () => {
 
   return (
     <article style={{ padding: '2rem', maxWidth: '800px', margin: 'auto' }}>
+      {/* 🖼️ FEATURED IMAGE with lazy loading and improved alt text */}
       {post.featuredImage && (
         <img
           src={post.featuredImage}
-          alt={post.title}
+          alt={post.imageAltText || post.title} // ✅ Use dynamic alt text if available
+          loading="lazy" // ✅ Native lazy loading
           style={{ width: '100%', height: 'auto', marginBottom: '1rem', borderRadius: '5px' }}
         />
       )}
@@ -175,7 +202,9 @@ const BlogPost = () => {
           <strong>Tags:</strong> {post.tags.join(', ')}
         </p>
       )}
+      {/* 🖼️ POST CONTENT: Images will be processed for lazy loading */}
       <div
+        className="post-content" // ✅ Added class for image processing
         style={{ marginTop: '1rem', lineHeight: '1.6' }}
         dangerouslySetInnerHTML={{ __html: post.content }}
       />

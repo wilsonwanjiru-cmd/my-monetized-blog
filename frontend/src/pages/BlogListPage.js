@@ -42,10 +42,12 @@ const BlogListPage = () => {
             key={post._id}
             style={{ marginBottom: '2rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '5px' }}
           >
+            {/* 🖼️ FEATURED IMAGE with lazy loading and improved alt text */}
             {post.featuredImage && (
               <img
                 src={post.featuredImage}
-                alt={post.title}
+                alt={post.imageAltText || post.title} // ✅ Use dynamic alt text if available
+                loading="lazy" // ✅ Native lazy loading
                 style={{ maxWidth: '100%', height: 'auto', marginBottom: '1rem' }}
               />
             )}
