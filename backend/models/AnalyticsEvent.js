@@ -31,7 +31,15 @@ const AnalyticsEventSchema = new mongoose.Schema({
       'app_loaded',
       'scroll_milestone',
       'scroll_depth',
-      'heatmap_interaction'
+      'heatmap_interaction',
+      
+      // NEWLY ADDED EVENT TYPES (from your frontend)
+      'mouse_movements_batch',    // Added for heatmap tracking
+      'form_submit',              // Added for form submissions
+      'newsletter_signup',        // Added for newsletter tracking
+      'session_start',            // Added for session tracking
+      'session_end',              // Added for session tracking
+      'heatmap_data'              // Added for heatmap data collection
     ]
   },
   // Post reference for blog post analytics
@@ -73,7 +81,7 @@ const AnalyticsEventSchema = new mongoose.Schema({
   timestamps: true // This adds createdAt and updatedAt automatically
 });
 
-// Indexes for efficient querying :cite[1]:cite[6]:cite[10]
+// Indexes for efficient querying
 AnalyticsEventSchema.index({ eventType: 1, timestamp: 1 });
 AnalyticsEventSchema.index({ postId: 1, timestamp: 1 });
 AnalyticsEventSchema.index({ sessionId: 1 });
@@ -81,7 +89,7 @@ AnalyticsEventSchema.index({ utmSource: 1, utmMedium: 1 });
 // Compound index for common dashboard queries
 AnalyticsEventSchema.index({ eventType: 1, postId: 1, timestamp: -1 });
 
-// Optional: Disable autoIndex in production for better performance :cite[3]:cite[5]
+// Optional: Disable autoIndex in production for better performance
 const isProduction = process.env.NODE_ENV === 'production';
 AnalyticsEventSchema.set('autoIndex', !isProduction);
 
