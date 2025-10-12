@@ -87,7 +87,7 @@ const generateSessionId = () => {
   }
 };
 
-// Enhanced event tracking function - REMOVED DUPLICATE EXPORT
+// Enhanced event tracking function
 const trackEvent = async (eventType, metadata = {}) => {
   const eventData = {
     eventType,
@@ -268,16 +268,26 @@ function App() {
         >
           <Layout>
             <Routes>
+              {/* Home Route */}
               <Route path="/" element={<HomePage />} />
+              
+              {/* Blog Routes - ADDED THE MISSING /blog ROUTE */}
               <Route path="/blog" element={<BlogListPage />} />
               <Route path="/post/:slug" element={<BlogPost />} />
+              
+              {/* Other Routes */}
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              
               {/* 404 fallback */}
               <Route path="*" element={
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <h1>404 - Page Not Found</h1>
                   <p>The page you're looking for doesn't exist.</p>
+                  <p>
+                    <a href="/">Go back to home</a> | 
+                    <a href="/blog"> View all blog posts</a>
+                  </p>
                 </div>
               } />
             </Routes>
