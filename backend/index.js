@@ -113,21 +113,50 @@ app.use('/api/posts', (req, res, next) => {
   next();
 });
 
-// ✅ Serve frontend build (React) after API routes
+// ✅ ENHANCED: Serve frontend build (React) after API routes with improved SPA routing
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/build');
-  app.use(express.static(frontendPath));
+  
+  // Serve static files from React build with optimized settings
+  app.use(express.static(frontendPath, {
+    index: false, // Don't serve index.html for directory requests
+    maxAge: '1d', // Cache static assets for 1 day
+    etag: true, // Enable ETag for cache validation
+    lastModified: true // Enable last-modified headers
+  }));
 
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
+  // Enhanced catch-all handler for SPA routing
+  app.get('*', (req, res, next) => {
+    // Skip API routes - let them be handled by API routes or 404 handler
+    if (req.originalUrl.startsWith('/api/')) {
+      return next();
+    }
+    
+    // Skip SEO and known file routes that should be handled by specific routes
+    if (req.originalUrl.includes('.xml') || 
+        req.originalUrl.includes('.txt') ||
+        req.originalUrl.includes('sitemap') ||
+        req.originalUrl.includes('robots') ||
+        req.originalUrl.includes('rss')) {
+      return next();
+    }
+    
+    // Serve index.html for all other routes (SPA fallback)
+    console.log(`🔄 SPA Routing: Serving index.html for ${req.originalUrl}`);
+    res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
+      if (err) {
+        console.error(`❌ Error serving SPA route ${req.originalUrl}:`, err);
+        next(err);
+      }
+    });
   });
 }
 
-// Error handling middleware - ✅ IMPROVED: Better error handling :cite[1]:cite[5]
+// Error handling middleware - ✅ IMPROVED: Better error handling
 app.use((err, req, res, next) => {
   console.error('🔥 Error:', err.stack);
   
-  // Check if headers already sent :cite[1]
+  // Check if headers already sent
   if (res.headersSent) {
     return next(err);
   }
@@ -141,23 +170,39 @@ app.use((err, req, res, next) => {
 
 // ✅ 404 handler for unknown API routes (only if not handled above)
 app.use((req, res) => {
-  res.status(404).json({ 
-    success: false,
-    message: 'Route not found',
-    path: req.originalUrl,
-    suggestion: 'Check the API documentation for available endpoints',
-    availableEndpoints: [
-      '/api/health',
-      '/api/posts',
-      '/api/contact', 
-      '/api/newsletter',
-      '/api/analytics',
-      '/api/consent',
-      '/sitemap.xml',
-      '/robots.txt',
-      '/rss.xml'
-    ]
-  });
+  // Only handle API routes with 404 JSON response
+  if (req.originalUrl.startsWith('/api/')) {
+    return res.status(404).json({ 
+      success: false,
+      message: 'API route not found',
+      path: req.originalUrl,
+      suggestion: 'Check the API documentation for available endpoints',
+      availableEndpoints: [
+        '/api/health',
+        '/api/posts',
+        '/api/contact', 
+        '/api/newsletter',
+        '/api/analytics',
+        '/api/consent',
+        '/sitemap.xml',
+        '/robots.txt',
+        '/rss.xml'
+      ]
+    });
+  }
+  
+  // For non-API routes that reach here, it means the SPA routing didn't work
+  // This should not happen in production with the enhanced SPA configuration
+  res.status(404).send(`
+    <html>
+      <head><title>404 - Page Not Found</title></head>
+      <body>
+        <h1>404 - Page Not Found</h1>
+        <p>The page you are looking for does not exist.</p>
+        <p><a href="/">Go to Homepage</a></p>
+      </body>
+    </html>
+  `);
 });
 
 const PORT = process.env.PORT || 5000;
@@ -174,4 +219,5 @@ app.listen(PORT, () => {
   console.log('   - Monetization: Ad injection, newsletter');
   console.log('   - Performance: Caching, broken link checker');
   console.log('   - Compliance: GDPR/CCPA consent management');
+  console.log('   - SPA Routing: Enhanced client-side routing support');
 });
