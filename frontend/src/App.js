@@ -271,9 +271,9 @@ function App() {
               {/* Home Route */}
               <Route path="/" element={<HomePage />} />
               
-              {/* Blog Routes - ADDED THE MISSING /blog ROUTE */}
+              {/* Blog Routes - ✅ UPDATED: Changed from /post/:slug to /blog/:slug */}
               <Route path="/blog" element={<BlogListPage />} />
-              <Route path="/post/:slug" element={<BlogPost />} />
+              <Route path="/blog/:slug" element={<BlogPost />} />
               
               {/* Other Routes */}
               <Route path="/about" element={<AboutPage />} />
