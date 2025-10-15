@@ -23,10 +23,13 @@ const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
-// ✅ UPDATED: CORS Configuration for production and development
+// ✅ UPDATED: CORS Configuration for production domains
 const corsOptions = {
   origin: [
-    'https://my-monetized-blog-2.onrender.com', // Your live frontend URL
+    'https://wilsonmuita.com', // Your new custom domain
+    'https://www.wilsonmuita.com', // WWW version
+    'https://api.wilsonmuita.com', // Your API domain
+    'https://my-monetized-blog-2.onrender.com', // Your live frontend Render URL
     'http://localhost:3000', // Local development frontend
     'http://localhost:3001' // Alternative local port
   ],
@@ -50,6 +53,27 @@ app.use(etagMiddleware);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+// ✅ ADDED: Root route to fix 404 error
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Backend API is running successfully!', 
+    timestamp: new Date().toISOString(),
+    domain: 'api.wilsonmuita.com',
+    status: 'active',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      posts: '/api/posts',
+      contact: '/api/contact',
+      newsletter: '/api/newsletter',
+      analytics: '/api/analytics',
+      sitemap: '/sitemap.xml',
+      robots: '/robots.txt',
+      rss: '/rss.xml'
+    }
+  });
+});
+
 // API Routes - ✅ CRITICAL: Make sure analyticsRoutes is properly mounted
 app.use('/api/posts', postsRoutes);
 app.use('/api/contact', contactRoutes);
@@ -71,6 +95,7 @@ app.get('/api/health', (req, res) => {
     message: 'Blog API is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
+    domain: 'api.wilsonmuita.com',
     cors: {
       allowedOrigins: corsOptions.origin,
       enabled: true
@@ -81,6 +106,9 @@ app.get('/api/health', (req, res) => {
       monetization: true,
       caching: true,
       amp: true
+    },
+    database: {
+      status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
     }
   });
 });
@@ -210,7 +238,10 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  console.log(`🌐 Frontend Domain: https://wilsonmuita.com`);
+  console.log(`🔗 Backend Domain: https://api.wilsonmuita.com`);
+  console.log(`✅ Health check: https://api.wilsonmuita.com/api/health`);
+  console.log(`✅ Root endpoint: https://api.wilsonmuita.com/`);
   console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
   console.log('✅ All features integrated successfully!');
   console.log('📊 Available features:');

@@ -67,6 +67,10 @@ router.get('/slug/:slug', async (req, res) => {
     post.views += 1;
     await post.save();
 
+    // ✅ UPDATED: Use environment variable for site URL
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
+
     // Add structured data for SEO
     const postWithStructuredData = post.toObject();
     postWithStructuredData.structuredData = {
@@ -81,17 +85,17 @@ router.get('/slug/:slug', async (req, res) => {
       },
       "publisher": {
         "@type": "Organization",
-        "name": "Your Blog",
+        "name": process.env.SITE_NAME || "Wilson Muita",
         "logo": {
           "@type": "ImageObject",
-          "url": "https://yourblog.com/logo.png"
+          "url": `${siteUrl}/logo.png`
         }
       },
       "datePublished": post.publishedAt,
       "dateModified": post.updatedAt,
       "mainEntityOfPage": {
         "@type": "WebPage",
-        "@id": `https://yourblog.com/blog/${post.slug}`
+        "@id": `${blogUrl}/blog/${post.slug}`
       }
     };
 
@@ -393,6 +397,10 @@ router.post('/', async (req, res) => {
     // Calculate read time if not provided
     const calculatedReadTime = readTime || Math.max(1, Math.round(content.split(/\s+/).length / 200));
 
+    // ✅ UPDATED: Use environment variables for site URLs
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
+
     const postData = {
       title,
       content,
@@ -405,7 +413,7 @@ router.post('/', async (req, res) => {
       readTime: calculatedReadTime,
       isPublished: isPublished !== undefined ? isPublished : false,
       slug,
-      canonicalUrl: canonicalUrl || `https://yourblog.com/blog/${slug}`,
+      canonicalUrl: canonicalUrl || `${blogUrl}/blog/${slug}`,
       ogImage: ogImage || featuredImage,
       twitterImage: twitterImage || featuredImage,
       publishedAt: isPublished ? new Date() : null
@@ -555,12 +563,13 @@ router.get('/search/:query', async (req, res) => {
   }
 });
 
-// PING search engines function
+// ✅ UPDATED: PING search engines function with new domain
 async function pingSearchEngines(slug) {
   try {
-    const siteUrl = process.env.SITE_URL || 'https://yourblog.com';
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
     const sitemapUrl = `${siteUrl}/sitemap.xml`;
-    const postUrl = `${siteUrl}/blog/${slug}`;
+    const postUrl = `${blogUrl}/blog/${slug}`;
 
     const engines = [
       `http://www.google.com/ping?sitemap=${sitemapUrl}`,

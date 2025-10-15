@@ -1,33 +1,450 @@
 <!doctype html>
-<html amp lang="en">
+<html ⚡ lang="en">
 <head>
   <meta charset="utf-8">
   <script async src="https://cdn.ampproject.org/v0.js"></script>
-  <title><%= post.title %></title>
-  <link rel="canonical" href="https://yourblog.com/blog/<%= post.slug %>">
+  
+  <!-- Title and Meta -->
+  <title><%= post.title %> - <%= siteName %></title>
+  <link rel="canonical" href="<%= blogUrl %>/blog/<%= post.slug %>">
   <meta name="viewport" content="width=device-width,minimum-scale=1,initial-scale=1">
+  
+  <!-- Preconnect for performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  
+  <!-- AMP Components -->
+  <script async custom-element="amp-analytics" src="https://cdn.ampproject.org/v0/amp-analytics-0.1.js"></script>
+  <script async custom-element="amp-ad" src="https://cdn.ampproject.org/v0/amp-ad-0.1.js"></script>
+  <script async custom-element="amp-social-share" src="https://cdn.ampproject.org/v0/amp-social-share-0.1.js"></script>
+  <script async custom-element="amp-iframe" src="https://cdn.ampproject.org/v0/amp-iframe-0.1.js"></script>
+  <script async custom-element="amp-form" src="https://cdn.ampproject.org/v0/amp-form-0.1.js"></script>
+  <script async custom-element="amp-consent" src="https://cdn.ampproject.org/v0/amp-consent-0.1.js"></script>
+  
+  <!-- Meta Tags -->
+  <meta name="description" content="<%= post.metaDescription || post.excerpt %>">
+  <meta name="author" content="<%= post.author %>">
+  <meta name="keywords" content="<%= post.tags.join(', ') %>">
+  
+  <!-- Open Graph -->
+  <meta property="og:title" content="<%= post.title %>">
+  <meta property="og:description" content="<%= post.metaDescription || post.excerpt %>">
+  <meta property="og:image" content="<%= post.featuredImage %>">
+  <meta property="og:url" content="<%= blogUrl %>/blog/<%= post.slug %>">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="<%= siteName %>">
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="<%= post.title %>">
+  <meta name="twitter:description" content="<%= post.metaDescription || post.excerpt %>">
+  <meta name="twitter:image" content="<%= post.featuredImage %>">
+  <meta name="twitter:creator" content="<%= twitterHandle %>">
+  
+  <!-- Structured Data -->
   <script type="application/ld+json">
     {
-      "@context": "http://schema.org",
-      "@type": "NewsArticle",
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "<%= blogUrl %>/blog/<%= post.slug %>"
+      },
       "headline": "<%= post.title %>",
-      "datePublished": "<%= post.publishedAt %>",
-      "image": [
-        "<%= post.featuredImage %>"
-      ]
+      "description": "<%= post.metaDescription || post.excerpt %>",
+      "image": {
+        "@type": "ImageObject",
+        "url": "<%= post.featuredImage %>",
+        "width": "800",
+        "height": "400"
+      },
+      "datePublished": "<%= new Date(post.publishedAt).toISOString() %>",
+      "dateModified": "<%= new Date(post.updatedAt).toISOString() %>",
+      "author": {
+        "@type": "Person",
+        "name": "<%= post.author %>",
+        "url": "<%= siteUrl %>/about"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "<%= siteName %>",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "<%= siteUrl %>/logo.png",
+          "width": "180",
+          "height": "60"
+        }
+      },
+      "articleSection": "<%= post.category %>",
+      "keywords": "<%= post.tags.join(', ') %>",
+      "wordCount": "<%= post.content.split(' ').length %>",
+      "timeRequired": "PT<%= post.readTime || 5 %>M",
+      "inLanguage": "en-US"
     }
   </script>
+
+  <!-- AMP Boilerplate -->
   <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+
+  <!-- Custom Styles -->
   <style amp-custom>
-    /* Add your custom styles here */
+    /* Base Styles */
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    
+    .site-title {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    
+    .site-title a {
+      color: white;
+      text-decoration: none;
+    }
+    
+    /* Article Container */
+    .article-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem 1rem;
+    }
+    
+    /* Article Header */
+    .article-header {
+      margin-bottom: 2rem;
+      border-bottom: 1px solid #eaeaea;
+      padding-bottom: 1rem;
+    }
+    
+    .article-title {
+      font-size: 2.5rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin: 0 0 1rem 0;
+      color: #2d3748;
+    }
+    
+    .article-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      color: #718096;
+      font-size: 0.9rem;
+    }
+    
+    .author, .date, .read-time {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    
+    /* Featured Image */
+    .featured-image {
+      margin: 2rem 0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    /* Article Content */
+    .article-content {
+      font-size: 1.1rem;
+      color: #4a5568;
+    }
+    
+    .article-content h2 {
+      font-size: 1.8rem;
+      margin: 2rem 0 1rem 0;
+      color: #2d3748;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 0.5rem;
+    }
+    
+    .article-content h3 {
+      font-size: 1.4rem;
+      margin: 1.5rem 0 0.75rem 0;
+      color: #2d3748;
+    }
+    
+    .article-content p {
+      margin-bottom: 1.5rem;
+    }
+    
+    .article-content blockquote {
+      border-left: 4px solid #667eea;
+      padding-left: 1rem;
+      margin: 2rem 0;
+      font-style: italic;
+      color: #718096;
+      background: #f7fafc;
+      padding: 1rem 1rem 1rem 1.5rem;
+      border-radius: 0 8px 8px 0;
+    }
+    
+    .article-content code {
+      background: #f7fafc;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.9em;
+      color: #e53e3e;
+    }
+    
+    .article-content pre {
+      background: #2d3748;
+      color: #e2e8f0;
+      padding: 1.5rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 2rem 0;
+    }
+    
+    .article-content ul, .article-content ol {
+      margin: 1.5rem 0;
+      padding-left: 2rem;
+    }
+    
+    .article-content li {
+      margin-bottom: 0.5rem;
+    }
+    
+    /* Ads */
+    .ad-container {
+      margin: 2rem 0;
+      text-align: center;
+      padding: 1rem;
+      background: #f7fafc;
+      border-radius: 8px;
+    }
+    
+    .ad-label {
+      font-size: 0.75rem;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.5rem;
+    }
+    
+    /* Social Sharing */
+    .social-sharing {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 2rem 0;
+    }
+    
+    amp-social-share {
+      background: #667eea;
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+    }
+    
+    /* Article Footer */
+    .article-footer {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid #eaeaea;
+    }
+    
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .tag {
+      background: #edf2f7;
+      color: #4a5568;
+      padding: 0.5rem 1rem;
+      border-radius: 20px;
+      font-size: 0.9rem;
+      text-decoration: none;
+    }
+    
+    .tag:hover {
+      background: #667eea;
+      color: white;
+    }
+    
+    /* Back to Blog */
+    .back-to-blog {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+      margin-top: 1rem;
+    }
+    
+    /* Footer */
+    .footer {
+      background: #2d3748;
+      color: white;
+      text-align: center;
+      padding: 2rem 1rem;
+      margin-top: 3rem;
+    }
+    
+    .footer a {
+      color: #a0aec0;
+      text-decoration: none;
+    }
+    
+    .footer a:hover {
+      color: white;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .article-title {
+        font-size: 2rem;
+      }
+      
+      .article-container {
+        padding: 1rem;
+      }
+      
+      .article-meta {
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+    }
   </style>
+  
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h1><%= post.title %></h1>
-  <p>By <%= post.author %></p>
-  <amp-img src="<%= post.featuredImage %>" width="800" height="400" layout="responsive"></amp-img>
-  <div>
-    <%- post.content %>
-  </div>
+  <!-- Header -->
+  <header class="header">
+    <h1 class="site-title">
+      <a href="<%= siteUrl %>"><%= siteName %></a>
+    </h1>
+  </header>
+
+  <!-- Main Content -->
+  <main class="article-container">
+    <article>
+      <!-- Article Header -->
+      <header class="article-header">
+        <h1 class="article-title"><%= post.title %></h1>
+        <div class="article-meta">
+          <span class="author">👤 <%= post.author %></span>
+          <span class="date">📅 <%= new Date(post.publishedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></span>
+          <span class="read-time">⏱️ <%= post.readTime || 5 %> min read</span>
+        </div>
+      </header>
+
+      <!-- Featured Image -->
+      <% if (post.featuredImage) { %>
+        <div class="featured-image">
+          <amp-img src="<%= post.featuredImage %>" 
+                  width="800" 
+                  height="400" 
+                  layout="responsive"
+                  alt="<%= post.title %>">
+          </amp-img>
+        </div>
+      <% } %>
+
+      <!-- Article Content -->
+      <div class="article-content">
+        <%- post.content %>
+      </div>
+
+      <!-- Social Sharing -->
+      <div class="social-sharing">
+        <amp-social-share type="twitter" 
+                         width="48" 
+                         height="48"
+                         data-param-text="<%= post.title %>"
+                         data-param-url="<%= blogUrl %>/blog/<%= post.slug %>">
+        </amp-social-share>
+        <amp-social-share type="linkedin" 
+                         width="48" 
+                         height="48"
+                         data-param-text="<%= post.title %>"
+                         data-param-url="<%= blogUrl %>/blog/<%= post.slug %>">
+        </amp-social-share>
+        <amp-social-share type="facebook" 
+                         width="48" 
+                         height="48"
+                         data-param-text="<%= post.title %>"
+                         data-param-url="<%= blogUrl %>/blog/<%= post.slug %>">
+        </amp-social-share>
+      </div>
+
+      <!-- Article Footer -->
+      <footer class="article-footer">
+        <% if (post.tags && post.tags.length > 0) { %>
+          <div class="tags">
+            <% post.tags.forEach(tag => { %>
+              <a href="<%= siteUrl %>/tag/<%= tag %>" class="tag">#<%= tag %></a>
+            <% }); %>
+          </div>
+        <% } %>
+        
+        <a href="<%= siteUrl %>" class="back-to-blog">
+          ← Back to Blog
+        </a>
+      </footer>
+    </article>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>&copy; <%= new Date().getFullYear() %> <%= siteName %>. All rights reserved.</p>
+    <p>
+      <a href="<%= siteUrl %>/privacy">Privacy Policy</a> | 
+      <a href="<%= siteUrl %>/terms">Terms of Service</a> | 
+      <a href="<%= siteUrl %>/contact">Contact</a>
+    </p>
+  </footer>
+
+  <!-- AMP Analytics -->
+  <amp-analytics type="googleanalytics">
+    <script type="application/json">
+      {
+        "vars": {
+          "account": "<%= analyticsId %>"
+        },
+        "triggers": {
+          "trackPageview": {
+            "on": "visible",
+            "request": "pageview"
+          }
+        }
+      }
+    </script>
+  </amp-analytics>
+
+  <!-- AMP Ads -->
+  <amp-ad width="100vw" 
+          height="320"
+          type="adsense"
+          data-ad-client="<%= adsenseClientId %>"
+          data-ad-slot="<%= adsenseSlotId %>"
+          data-auto-format="rspv"
+          data-full-width>
+    <div overflow></div>
+  </amp-ad>
 </body>
 </html>
