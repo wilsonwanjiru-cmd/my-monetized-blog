@@ -118,7 +118,20 @@
     
     <!-- ✅ Preload Critical Resources -->
     <link rel="preload" href="%PUBLIC_URL%/config.js" as="script">
-    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" as="style">
+    
+    <!-- ✅ Fixed Font Preload - using correct as="style" attribute -->
+    <link 
+      rel="preload" 
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
+    >
+    <noscript>
+      <link 
+        rel="stylesheet" 
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      >
+    </noscript>
     
     <!-- ✅ Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -242,7 +255,7 @@
             </p>
           </div>
           <div style="margin-top: 2rem; color: #718096; font-size: 0.9rem;">
-            <p>© 2024 Wilson Muita. All rights reserved.</p>
+            <p>© 2025 Wilson Muita. All rights reserved.</p>
           </div>
         </div>
       </div>
@@ -368,18 +381,8 @@
         }
       });
 
-      // Service Worker Registration (if using PWA)
-      if ('serviceWorker' in navigator && window.getConfig && window.isFeatureEnabled('ENABLE_SERVICE_WORKER')) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js')
-            .then(function(registration) {
-              console.log('SW registered: ', registration);
-            })
-            .catch(function(registrationError) {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
+      // Service Worker Registration (if using PWA) - REMOVED to avoid 404 errors
+      // We'll add this back when you actually have a service worker file
     </script>
 
     <!-- ✅ Schema.org for Current Page -->
@@ -390,7 +393,7 @@
       "name": "Wilson Muita - Technology, Programming & Web Development Blog",
       "description": "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more.",
       "url": "https://wilsonmuita.com",
-      "lastReviewed": "2024-01-01",
+      "lastReviewed": "2025-01-01",
       "reviewedBy": {
         "@type": "Person",
         "name": "Wilson Muita"
