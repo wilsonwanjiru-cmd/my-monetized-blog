@@ -3,8 +3,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
-import { blogAPI } from '../utils/api';
-import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams } from '../utils/utmTracker';
+import { blogAPI, trackPostView } from '../utils/api';
+import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams, getCurrentSessionId } from '../utils/utmTracker';
 
 const BlogPost = () => {
   const { slug } = useParams();
@@ -51,7 +51,7 @@ const BlogPost = () => {
       // 📊 Track page view after meta tags are set
       setTimeout(() => {
         trackPageView();
-        trackPostView(postData);
+        trackPostViewHandler(postData);
       }, 500);
 
     } catch (err) {
@@ -66,7 +66,8 @@ const BlogPost = () => {
         metadata: {
           slug: slug,
           error: err.message,
-          url: window.location.href
+          url: window.location.href,
+          timestamp: new Date().toISOString()
         }
       });
     } finally {
@@ -74,13 +75,18 @@ const BlogPost = () => {
     }
   }, [slug]);
 
-  // ✅ Track post view for analytics
-  const trackPostView = async (postData) => {
+  // ✅ Updated track post view for analytics with fallback
+  const trackPostViewHandler = async (postData) => {
     if (viewTracked || !postData) return;
 
     try {
-      // Track view in backend
-      await blogAPI.posts.trackView(postData._id);
+      // ✅ Use the helper function with fallback mechanism
+      await trackPostView(postData._id, {
+        title: postData.title,
+        slug: postData.slug,
+        category: postData.category,
+        readTime: postData.readTime
+      });
       
       // Track custom event
       await trackCustomEvent('post_view', {
@@ -94,20 +100,24 @@ const BlogPost = () => {
           category: postData.category,
           readTime: postData.readTime,
           author: postData.author,
-          sessionId: window.getCurrentSessionId?.() || 'unknown'
+          sessionId: getCurrentSessionId(),
+          timestamp: new Date().toISOString()
         }
       });
 
       setViewTracked(true);
+      console.log('✅ Post view tracked successfully');
     } catch (error) {
       console.warn('Failed to track post view:', error);
+      // Even if tracking fails, mark as tracked to avoid multiple attempts
+      setViewTracked(true);
     }
   };
 
   // ✅ Enhanced meta tags update
   const updateMetaTags = (postData) => {
-    const siteUrl = window.getConfig?.('SITE_URL') || 'https://wilsonmuita.com';
-    const siteName = window.getConfig?.('SITE_NAME') || 'Wilson Muita';
+    const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
+    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
     const postUrl = `${siteUrl}/blog/${postData.slug}`;
     
     // Update document title
@@ -116,7 +126,7 @@ const BlogPost = () => {
     // Basic meta tags
     updateMetaTag('description', postData.metaDescription || postData.excerpt || postData.title);
     updateMetaTag('keywords', postData.tags?.join(', ') || 'technology, programming, web development');
-    updateMetaTag('author', postData.author);
+    updateMetaTag('author', postData.author || siteName);
     
     // Open Graph meta tags
     updateMetaTag('og:title', postData.title, 'property');
@@ -133,13 +143,19 @@ const BlogPost = () => {
     updateMetaTag('twitter:description', postData.metaDescription || postData.excerpt || postData.title, 'name');
     updateMetaTag('twitter:image', postData.twitterImage || postData.featuredImage || `${siteUrl}/default-og-image.jpg`, 'name');
     updateMetaTag('twitter:url', postUrl, 'name');
-    updateMetaTag('twitter:creator', window.getConfig?.('REACT_APP_TWITTER_HANDLE') || '@WilsonMuit48811', 'name');
+    updateMetaTag('twitter:creator', window.REACT_APP_TWITTER_HANDLE || '@WilsonMuita', 'name');
 
     // Article-specific meta tags
-    updateMetaTag('article:published_time', new Date(postData.publishedAt).toISOString(), 'property');
-    updateMetaTag('article:modified_time', new Date(postData.updatedAt).toISOString(), 'property');
-    updateMetaTag('article:author', postData.author, 'property');
-    updateMetaTag('article:section', postData.category, 'property');
+    if (postData.publishedAt) {
+      updateMetaTag('article:published_time', new Date(postData.publishedAt).toISOString(), 'property');
+    }
+    if (postData.updatedAt) {
+      updateMetaTag('article:modified_time', new Date(postData.updatedAt).toISOString(), 'property');
+    }
+    updateMetaTag('article:author', postData.author || siteName, 'property');
+    if (postData.category) {
+      updateMetaTag('article:section', postData.category, 'property');
+    }
     
     if (postData.tags && postData.tags.length > 0) {
       postData.tags.forEach(tag => {
@@ -182,8 +198,8 @@ const BlogPost = () => {
 
   // ✅ Add JSON-LD structured data
   const addStructuredData = (postData) => {
-    const siteUrl = window.getConfig?.('SITE_URL') || 'https://wilsonmuita.com';
-    const siteName = window.getConfig?.('SITE_NAME') || 'Wilson Muita';
+    const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
+    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
 
     // Remove existing structured data
     const existingScript = document.getElementById('blog-post-structured-data');
@@ -204,8 +220,8 @@ const BlogPost = () => {
       },
       "author": {
         "@type": "Person",
-        "name": postData.author,
-        "url": `${siteUrl}/author/${postData.author.toLowerCase().replace(/\s+/g, '-')}`
+        "name": postData.author || siteName,
+        "url": `${siteUrl}/about`
       },
       "publisher": {
         "@type": "Organization",
@@ -218,14 +234,14 @@ const BlogPost = () => {
         }
       },
       "datePublished": postData.publishedAt,
-      "dateModified": postData.updatedAt,
+      "dateModified": postData.updatedAt || postData.publishedAt,
       "mainEntityOfPage": {
         "@type": "WebPage",
         "@id": `${siteUrl}/blog/${postData.slug}`
       },
       "wordCount": postData.content ? postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length : 0,
       "timeRequired": `PT${postData.readTime || 5}M`,
-      "articleSection": postData.category,
+      "articleSection": postData.category || 'Technology',
       "keywords": postData.tags?.join(', ') || '',
       "inLanguage": "en-US"
     };
@@ -276,7 +292,8 @@ const BlogPost = () => {
             postId: postData._id,
             imageSrc: img.src,
             imageIndex: index,
-            imageAlt: img.alt
+            imageAlt: img.alt,
+            timestamp: new Date().toISOString()
           }
         });
       });
@@ -317,7 +334,8 @@ const BlogPost = () => {
               originalUrl: originalHref,
               trackedUrl: trackedUrl,
               linkText: link.textContent,
-              isAffiliate: link.classList.contains('affiliate-link')
+              isAffiliate: link.classList.contains('affiliate-link'),
+              timestamp: new Date().toISOString()
             }
           });
         });
@@ -354,7 +372,8 @@ const BlogPost = () => {
       metadata: {
         postId: post?._id,
         platform: platform,
-        url: postUrl
+        url: postUrl,
+        timestamp: new Date().toISOString()
       }
     });
 
@@ -372,7 +391,7 @@ const BlogPost = () => {
     // Cleanup function
     return () => {
       // Reset document title
-      const siteName = window.getConfig?.('SITE_NAME') || 'Wilson Muita';
+      const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
       document.title = siteName;
       
       // Remove structured data script
@@ -570,12 +589,14 @@ const BlogPost = () => {
           fontSize: '0.95rem',
           marginBottom: '1rem'
         }}>
-          <span>👤 By {post.author}</span>
-          <span>📅 {new Date(post.publishedAt).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-          })}</span>
+          <span>👤 By {post.author || 'Wilson Muita'}</span>
+          {post.publishedAt && (
+            <span>📅 {new Date(post.publishedAt).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
+            })}</span>
+          )}
           <span>⏱️ {post.readTime || 5} min read</span>
           {post.views !== undefined && (
             <span>👁️ {post.views.toLocaleString()} views</span>
@@ -711,7 +732,7 @@ const BlogPost = () => {
             No spam, unsubscribe anytime.
           </p>
         </div>
-        <NewsletterSignup />
+        <NewsletterSignup source="blog_post" location="post_bottom" />
       </section>
 
       {/* 🔗 RELATED POSTS */}

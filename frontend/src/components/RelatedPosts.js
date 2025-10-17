@@ -1,7 +1,7 @@
 // frontend/src/components/RelatedPosts.js
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { blogAPI } from '../utils/api'; // Import the centralized API
+import { blogAPI, fetchRelatedPosts } from '../utils/api'; // Import the centralized API
 import { trackCustomEvent, getCurrentSessionId, addUTMParams } from '../utils/utmTracker'; // Import UTM tracking
 
 const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
@@ -13,28 +13,46 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
   const sectionRef = useRef(null);
 
   useEffect(() => {
-    const fetchRelatedPosts = async () => {
+    const fetchRelatedPostsData = async () => {
       try {
         setLoading(true);
         
         // ✅ UPDATED: Use the centralized blogAPI with better error handling
-        let data;
+        let posts = [];
+        
         if (post._id) {
-          data = await blogAPI.posts.getRelated(post._id);
+          // Use the new getRelated method with post ID
+          const response = await blogAPI.posts.getRelated(post._id, { limit: maxPosts });
+          posts = response.posts || response.relatedPosts || [];
         } else if (post.slug) {
-          data = await blogAPI.posts.getRelatedBySlug(post.slug);
+          // Fallback: Get post by slug first, then get related posts
+          try {
+            const postResponse = await blogAPI.posts.getBySlug(post.slug);
+            if (postResponse.post && postResponse.post._id) {
+              const relatedResponse = await blogAPI.posts.getRelated(postResponse.post._id, { limit: maxPosts });
+              posts = relatedResponse.posts || relatedResponse.relatedPosts || [];
+            } else {
+              throw new Error('Could not find post ID from slug');
+            }
+          } catch (slugError) {
+            console.warn('Failed to get post by slug, using alternative method:', slugError);
+            // Alternative: Use the helper function
+            posts = await fetchRelatedPosts(post.slug, { limit: maxPosts });
+          }
         } else {
           throw new Error('Post must have either _id or slug');
         }
         
-        // Limit to maxPosts
-        const limitedPosts = (data.relatedPosts || []).slice(0, maxPosts);
+        // Limit to maxPosts and ensure we have valid posts
+        const limitedPosts = posts.slice(0, maxPosts).filter(p => p && (p._id || p.slug));
         setRelatedPosts(limitedPosts);
         setError(null);
 
         // 📊 Track related posts impression when fetched
         if (limitedPosts.length > 0) {
           trackRelatedPostsImpression(limitedPosts, 'fetched');
+        } else {
+          console.warn('No related posts found for:', post.title || post.slug);
         }
       } catch (error) {
         console.error('Error fetching related posts:', error);
@@ -48,8 +66,10 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
           content: 'fetch_error',
           metadata: {
             postId: post._id,
+            postSlug: post.slug,
             error: error.message,
-            position: position
+            position: position,
+            timestamp: new Date().toISOString()
           }
         });
       } finally {
@@ -58,7 +78,11 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
     };
 
     if (post && (post._id || post.slug)) {
-      fetchRelatedPosts();
+      fetchRelatedPostsData();
+    } else {
+      console.warn('RelatedPosts: No post ID or slug provided');
+      setLoading(false);
+      setError('No post data provided');
     }
   }, [post._id, post.slug, maxPosts, position]);
 
@@ -76,8 +100,8 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
         });
       },
       { 
-        threshold: 0.5,
-        rootMargin: '0px 0px -50px 0px' // Trigger when 50px from bottom of viewport
+        threshold: 0.3, // Reduced threshold for better detection
+        rootMargin: '0px 0px -100px 0px' // Trigger when 100px from bottom of viewport
       }
     );
 
@@ -106,8 +130,8 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
           postSlug: post.slug,
           postTitle: post.title,
           relatedPostCount: posts.length,
-          relatedPostIds: posts.map(p => p._id),
-          relatedPostTitles: posts.map(p => p.title),
+          relatedPostIds: posts.map(p => p._id).filter(Boolean),
+          relatedPostTitles: posts.map(p => p.title).filter(Boolean),
           sourcePost: post.title,
           position: position,
           trigger: trigger,
@@ -120,7 +144,8 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
         console.log('📊 Related Posts Impression:', {
           trigger,
           postCount: posts.length,
-          position
+          position,
+          sourcePost: post.title
         });
       }
     } catch (error) {
@@ -252,6 +277,7 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
     }
   };
 
+  // Render loading state
   if (loading) {
     return (
       <section 
@@ -312,13 +338,45 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
     );
   }
 
+  // Render error state or empty state
   if (error || relatedPosts.length === 0) {
     if (error && process.env.NODE_ENV !== 'production') {
       console.warn('RelatedPosts component error:', error);
     }
+    
+    // Don't show anything if no related posts found
+    if (relatedPosts.length === 0) {
+      return null;
+    }
+    
+    // Only show error in development
+    if (process.env.NODE_ENV === 'development' && error) {
+      return (
+        <section 
+          className="related-posts error" 
+          style={{ 
+            marginTop: '3rem', 
+            paddingTop: '2rem', 
+            borderTop: '1px solid #eaeaea' 
+          }}
+        >
+          <div style={{ 
+            padding: '1rem', 
+            background: '#fed7d7', 
+            border: '1px solid #feb2b2',
+            borderRadius: '8px',
+            color: '#742a2a'
+          }}>
+            <strong>Related Posts Error:</strong> {error}
+          </div>
+        </section>
+      );
+    }
+    
     return null;
   }
 
+  // Main render with related posts
   return (
     <section 
       className="related-posts" 
@@ -354,8 +412,8 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
       >
         {relatedPosts.map((relatedPost, index) => (
           <article 
-            key={relatedPost._id} 
-            id={`related-post-${relatedPost._id}`}
+            key={relatedPost._id || relatedPost.slug || index} 
+            id={`related-post-${relatedPost._id || index}`}
             className="related-card"
             style={{
               border: '1px solid #e2e8f0',
@@ -498,7 +556,7 @@ const RelatedPosts = ({ post, maxPosts = 3, position = 'below_content' }) => {
                 overflow: 'hidden',
                 minHeight: '2.7rem'
               }}>
-                {relatedPost.excerpt || 'Discover more insights in this related article.'}
+                {relatedPost.excerpt || relatedPost.description || 'Discover more insights in this related article.'}
               </p>
               
               <div style={{ 

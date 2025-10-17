@@ -1,0 +1,369 @@
+/* NewsletterSignup.css */
+.newsletter-signup {
+  background: #f8fafc;
+  padding: 1.5rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  margin: 1.5rem 0;
+  transition: all 0.3s ease;
+}
+
+.newsletter-signup:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.newsletter-header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.newsletter-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.5rem;
+  line-height: 1.3;
+}
+
+.newsletter-description {
+  color: #718096;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.newsletter-warning {
+  background: #fef3cd;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.warning-icon {
+  font-size: 0.9em;
+}
+
+.newsletter-form {
+  width: 100%;
+}
+
+.form-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.newsletter-input {
+  flex: 1;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  outline: none;
+  background: white;
+}
+
+.newsletter-input:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+}
+
+.newsletter-input:disabled {
+  background-color: #f9fafb;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.name-input {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.newsletter-button {
+  padding: 0.75rem 1.25rem;
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.newsletter-button:hover:not(:disabled) {
+  background-color: #4338ca;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.newsletter-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.newsletter-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.name-toggle {
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.name-toggle-button {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.name-toggle-button:hover {
+  color: #4338ca;
+}
+
+.name-field {
+  display: flex;
+  margin-bottom: 0.75rem;
+}
+
+.name-remove-button {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+  padding: 0 0.75rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+}
+
+.name-remove-button:hover {
+  background: #dc2626;
+}
+
+.newsletter-message {
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.newsletter-message.success {
+  background-color: #d1fae5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.newsletter-message.error {
+  background-color: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.newsletter-message.loading {
+  background-color: #dbeafe;
+  border: 1px solid #93c5fd;
+  color: #1e40af;
+}
+
+.privacy-note {
+  text-align: center;
+  color: #6b7280;
+  margin-top: 0.75rem;
+}
+
+.privacy-note small {
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.button-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid transparent;
+  border-top: 2px solid currentColor;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Success Info */
+.success-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.success-tip {
+  background: #ecfdf5;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #a7f3d0;
+}
+
+.success-tip strong {
+  color: #065f46;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.success-tip ul {
+  margin: 0;
+  padding-left: 1rem;
+  color: #047857;
+}
+
+.success-tip li {
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .newsletter-signup {
+    padding: 1.25rem;
+    margin: 1.25rem 0;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+
+  .newsletter-button {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .name-field {
+    flex-direction: column;
+  }
+
+  .name-input {
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+  }
+
+  .name-remove-button {
+    border-radius: 6px;
+    padding: 0.5rem;
+    align-self: flex-end;
+    width: auto;
+    min-width: auto;
+  }
+
+  .newsletter-title {
+    font-size: 1.1rem;
+  }
+
+  .newsletter-description {
+    font-size: 0.85rem;
+  }
+}
+
+/* Tablet Styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .newsletter-signup {
+    padding: 1.5rem;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .newsletter-signup {
+    background: #1f2937;
+    border-color: #374151;
+  }
+
+  .newsletter-title {
+    color: #f9fafb;
+  }
+
+  .newsletter-description {
+    color: #d1d5db;
+  }
+
+  .newsletter-input {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+
+  .newsletter-input:focus {
+    border-color: #818cf8;
+    box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+  }
+
+  .newsletter-warning {
+    background: #451a03;
+    border-color: #9a3412;
+    color: #fdba74;
+  }
+
+  .privacy-note {
+    color: #9ca3af;
+  }
+
+  .success-tip {
+    background: #064e3b;
+    border-color: #047857;
+  }
+
+  .success-tip strong {
+    color: #a7f3d0;
+  }
+
+  .success-tip ul {
+    color: #6ee7b7;
+  }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .newsletter-signup,
+  .newsletter-button,
+  .newsletter-input {
+    transition: none;
+  }
+  
+  .button-spinner {
+    animation: none;
+  }
+}
+
+/* Focus styles for better accessibility */
+.newsletter-input:focus-visible,
+.newsletter-button:focus-visible,
+.name-toggle-button:focus-visible,
+.name-remove-button:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}

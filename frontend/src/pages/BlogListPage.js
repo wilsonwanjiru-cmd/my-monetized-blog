@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { blogAPI } from '../utils/api';
-// import './BlogListPage.css'; // Make sure this import is correct
+import './BlogListPage.css'; // Make sure this import is correct
 
 const BlogListPage = () => {
   const [posts, setPosts] = useState([]);

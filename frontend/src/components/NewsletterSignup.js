@@ -1,142 +1,318 @@
 // frontend/src/components/NewsletterSignup.js
-import React, { useState } from 'react';
-import API_BASE_URL from '../utils/api'; // Import the centralized API configuration
+import React, { useState, useEffect } from 'react';
+import { blogAPI, apiUtils } from '../utils/api';
+import { trackCustomEvent } from '../utils/utmTracker';
+import './NewsletterSignup.css';
 
-const NewsletterSignup = () => {
-  const [formData, setFormData] = useState({
-    email: '',
-    name: '',
-    source: 'blog_post'
-  });
+const NewsletterSignup = ({ source = 'website_sidebar', location = 'unknown' }) => {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [status, setStatus] = useState('');
   const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [showNameField, setShowNameField] = useState(false);
+  const [apiConnected, setApiConnected] = useState(false);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prevState => ({
-      ...prevState,
-      [name]: value
-    }));
+  // Test API connection on component mount
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const connectionTest = await apiUtils.testConnection();
+        setApiConnected(connectionTest.connected);
+        
+        if (connectionTest.connected) {
+          console.log('✅ Newsletter API connection successful');
+        } else {
+          console.warn('⚠️ Newsletter API connection issues:', connectionTest.error);
+        }
+      } catch (error) {
+        console.error('❌ Newsletter API connection failed:', error);
+        setApiConnected(false);
+      }
+    };
+    
+    testConnection();
+  }, []);
+
+  const getUTMParams = () => {
+    // Get UTM parameters from URL or use defaults
+    const urlParams = new URLSearchParams(window.location.search);
+    return {
+      utm_source: urlParams.get('utm_source') || 'direct',
+      utm_medium: urlParams.get('utm_medium') || 'organic',
+      utm_campaign: urlParams.get('utm_campaign') || 'newsletter_signup',
+      utm_term: urlParams.get('utm_term') || '',
+      utm_content: urlParams.get('utm_content') || location
+    };
+  };
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
+    setStatus('loading');
     setMessage('');
 
+    // Basic validation
+    if (!email) {
+      setStatus('error');
+      setMessage('Please enter your email address.');
+      return;
+    }
+
+    if (!validateEmail(email)) {
+      setStatus('error');
+      setMessage('Please enter a valid email address.');
+      return;
+    }
+
+    // Track subscription attempt
+    trackCustomEvent('newsletter_subscription_attempt', {
+      medium: 'content',
+      campaign: 'newsletter',
+      content: 'subscription_attempt',
+      metadata: {
+        email: email,
+        name: name || 'not_provided',
+        source: source,
+        location: location,
+        timestamp: new Date().toISOString()
+      }
+    });
+
     try {
-      // Get UTM parameters from URL if they exist
-      const urlParams = new URLSearchParams(window.location.search);
+      const utmParams = getUTMParams();
       
-      const payload = {
-        ...formData,
-        utm_source: urlParams.get('utm_source') || 'direct',
-        utm_medium: urlParams.get('utm_medium') || 'organic',
-        utm_campaign: urlParams.get('utm_campaign') || 'general'
+      // Prepare subscriber data for backend
+      const subscriberData = {
+        email: email.trim().toLowerCase(),
+        name: name.trim() || email.split('@')[0], // Use email prefix as name if not provided
+        source: source,
+        ...utmParams
       };
 
-      // ✅ UPDATED: Use centralized API configuration
-      const response = await fetch(`${API_BASE_URL}/newsletter/subscribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      console.log('📤 Subscribing to newsletter:', subscriberData);
 
-      const data = await response.json();
-      
-      if (response.ok) {
-        setMessage('🎉 Successfully subscribed! Welcome to our newsletter.');
-        setFormData({
-          email: '',
-          name: '',
-          source: 'blog_post'
+      const response = await blogAPI.newsletter.subscribe(subscriberData);
+      console.log('✅ Newsletter subscription response:', response);
+
+      // Handle different response scenarios
+      if (response && (response.success || response.message)) {
+        setStatus('success');
+        
+        // Check if already subscribed
+        if (response.message && response.message.includes('Already subscribed')) {
+          setMessage('You are already subscribed to our newsletter. Thank you!');
+        } else {
+          setMessage(response.message || 'Thank you for subscribing! You will receive updates soon.');
+        }
+
+        // Track successful subscription
+        trackCustomEvent('newsletter_subscription_success', {
+          medium: 'content',
+          campaign: 'newsletter',
+          content: 'subscription_success',
+          metadata: {
+            email: email,
+            name: name || 'not_provided',
+            source: source,
+            timestamp: new Date().toISOString(),
+            response: response.message
+          }
         });
+
+        // Reset form
+        setEmail('');
+        setName('');
+        setShowNameField(false);
       } else {
-        setMessage(data.error || 'Subscription failed. Please try again.');
+        throw new Error(response?.error || 'Subscription failed. Please try again.');
       }
+
     } catch (error) {
-      console.error('Subscription error:', error);
-      setMessage('🔌 Network error. Please check your connection and try again.');
-    } finally {
-      setIsLoading(false);
+      console.error('❌ Newsletter subscription error:', error);
+      setStatus('error');
+      
+      // Enhanced error message handling
+      let errorMessage = 'Subscription failed. Please try again.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.data?.message) {
+        errorMessage = error.data.message;
+      }
+      
+      // Handle specific error cases
+      if (errorMessage.includes('Network error') || errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (errorMessage.includes('already subscribed') || errorMessage.includes('Already subscribed')) {
+        errorMessage = 'This email is already subscribed. Thank you!';
+        setStatus('success'); // Treat as success since they're already subscribed
+      } else if (errorMessage.includes('valid') && errorMessage.includes('email')) {
+        errorMessage = 'Please enter a valid email address.';
+      }
+
+      setMessage(errorMessage);
+
+      // Track subscription error
+      trackCustomEvent('newsletter_subscription_error', {
+        medium: 'content',
+        campaign: 'newsletter',
+        content: 'subscription_error',
+        metadata: {
+          email: email,
+          error: errorMessage,
+          timestamp: new Date().toISOString(),
+          errorDetails: {
+            code: error.code,
+            status: error.status
+          }
+        }
+      });
     }
   };
 
+  const toggleNameField = () => {
+    setShowNameField(!showNameField);
+    if (!showNameField) {
+      // Focus on name field when shown
+      setTimeout(() => {
+        const nameInput = document.getElementById('newsletter-name');
+        if (nameInput) nameInput.focus();
+      }, 100);
+    }
+  };
+
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value);
+    // Auto-fill name from email if name is empty and email contains a name pattern
+    if (!name && e.target.value.includes('@')) {
+      const emailName = e.target.value.split('@')[0];
+      // Only auto-fill if it looks like a name (not random characters)
+      if (emailName.length > 2 && emailName.length < 25 && /^[a-zA-Z]+$/.test(emailName)) {
+        setName(emailName.charAt(0).toUpperCase() + emailName.slice(1));
+      }
+    }
+  };
+
+  const handleNameChange = (e) => {
+    setName(e.target.value);
+  };
+
   return (
-    <section className="newsletter-signup" style={{ 
-      padding: '2rem', 
-      border: '1px solid #e0e0e0', 
-      borderRadius: '8px',
-      backgroundColor: '#f9f9f9',
-      margin: '2rem 0'
-    }}>
-      <h3 style={{ marginTop: 0, color: '#333' }}>📬 Stay Updated</h3>
-      <p style={{ color: '#666', marginBottom: '1.5rem' }}>
-        Get the latest posts delivered right to your inbox. No spam, unsubscribe anytime.
-      </p>
-      
-      <form onSubmit={handleSubmit} className="newsletter-form" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <input
-          type="text"
-          name="name"
-          placeholder="Your Name"
-          value={formData.name}
-          onChange={handleChange}
-          required
-          style={{
-            padding: '0.75rem',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontSize: '1rem'
-          }}
-        />
-        <input
-          type="email"
-          name="email"
-          placeholder="Your Email"
-          value={formData.email}
-          onChange={handleChange}
-          required
-          style={{
-            padding: '0.75rem',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            fontSize: '1rem'
-          }}
-        />
-        <button 
-          type="submit" 
-          disabled={isLoading}
-          style={{
-            padding: '0.75rem 1.5rem',
-            backgroundColor: isLoading ? '#ccc' : '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '1rem',
-            cursor: isLoading ? 'not-allowed' : 'pointer',
-            transition: 'background-color 0.2s'
-          }}
-        >
-          {isLoading ? 'Subscribing...' : 'Subscribe'}
-        </button>
-      </form>
-      
-      {message && (
-        <p className="newsletter-message" style={{
-          marginTop: '1rem',
-          padding: '0.75rem',
-          borderRadius: '4px',
-          backgroundColor: message.includes('Successfully') ? '#d4edda' : '#f8d7da',
-          color: message.includes('Successfully') ? '#155724' : '#721c24',
-          border: `1px solid ${message.includes('Successfully') ? '#c3e6cb' : '#f5c6cb'}`
-        }}>
-          {message}
+    <div className="newsletter-signup">
+      <div className="newsletter-header">
+        <h3 className="newsletter-title">📬 Stay Updated</h3>
+        <p className="newsletter-description">
+          Get the latest posts delivered right to your inbox. No spam, unsubscribe anytime.
         </p>
+      </div>
+
+      {/* API Connection Status */}
+      {!apiConnected && (
+        <div className="newsletter-warning">
+          <span className="warning-icon">⚠️</span>
+          <span>Offline mode: Subscription may not work.</span>
+        </div>
       )}
-    </section>
+
+      <form onSubmit={handleSubmit} className="newsletter-form">
+        <div className="form-row">
+          <input
+            type="email"
+            value={email}
+            onChange={handleEmailChange}
+            placeholder="Enter your email"
+            required
+            disabled={status === 'loading'}
+            className="newsletter-input"
+            aria-label="Email address for newsletter subscription"
+          />
+          <button 
+            type="submit" 
+            disabled={status === 'loading' || !email}
+            className="newsletter-button"
+            aria-label="Subscribe to newsletter"
+          >
+            {status === 'loading' ? (
+              <>
+                <span className="button-spinner"></span>
+                Subscribing...
+              </>
+            ) : (
+              'Subscribe'
+            )}
+          </button>
+        </div>
+
+        {/* Optional Name Field */}
+        {!showNameField ? (
+          <div className="name-toggle">
+            <button 
+              type="button" 
+              onClick={toggleNameField}
+              className="name-toggle-button"
+              aria-label="Add name field"
+            >
+              + Add your name (optional)
+            </button>
+          </div>
+        ) : (
+          <div className="name-field">
+            <input
+              id="newsletter-name"
+              type="text"
+              value={name}
+              onChange={handleNameChange}
+              placeholder="Enter your name (optional)"
+              disabled={status === 'loading'}
+              className="newsletter-input name-input"
+              aria-label="Your name for newsletter subscription"
+            />
+            <button 
+              type="button" 
+              onClick={toggleNameField}
+              className="name-remove-button"
+              title="Remove name field"
+              aria-label="Remove name field"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Status Message */}
+        {message && (
+          <div className={`newsletter-message ${status}`}>
+            {message}
+          </div>
+        )}
+
+        {/* Privacy Note */}
+        <div className="privacy-note">
+          <small>
+            We respect your privacy. Unsubscribe at any time. 
+            {!apiConnected && ' (Currently in offline mode)'}
+          </small>
+        </div>
+      </form>
+
+      {/* Success State - Additional Info */}
+      {status === 'success' && (
+        <div className="success-info">
+          <div className="success-tip">
+            <strong>What to expect:</strong>
+            <ul>
+              <li>Weekly blog post updates</li>
+              <li>Exclusive content and tips</li>
+              <li>No spam - we promise!</li>
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
