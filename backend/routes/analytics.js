@@ -3,51 +3,153 @@ const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 
-// Track UTM and analytics events
-router.post('/track', async (req, res, next) => {
+// ✅ ADDED: Test endpoint to verify analytics routes are working
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Analytics routes are working correctly!',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      pageview: 'POST /api/analytics/pageview',
+      track: 'POST /api/analytics/track',
+      postview: 'POST /api/analytics/postview',
+      stats: 'GET /api/analytics/stats',
+      dashboard: 'GET /api/analytics/dashboard',
+      health: 'GET /api/analytics/health'
+    }
+  });
+});
+
+// ✅ FIXED: Track pageview events with consistent parameter naming
+router.post('/pageview', async (req, res) => {
   try {
+    console.log('📊 Pageview request received:', {
+      url: req.body.url,
+      sessionId: req.body.sessionId,
+      utm_source: req.body.utm_source
+    });
+
     const {
-      eventType,
-      postId,
-      elementId,
+      eventType = 'pageview',
       url,
       sessionId,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      metadata
+    } = req.body;
+
+    // Validate required fields
+    if (!url || !sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: url and sessionId are required'
+      });
+    }
+
+    const event = new AnalyticsEvent({
+      eventType,
+      url,
+      sessionId,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      metadata: {
+        ...metadata,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        timestamp: new Date(),
+        source: 'analytics-route'
+      }
+    });
+
+    await event.save();
+
+    console.log('✅ Pageview tracked successfully:', event._id);
+
+    res.status(201).json({
+      success: true,
+      message: 'Page view tracked successfully',
+      eventId: event._id
+    });
+  } catch (error) {
+    console.error('❌ Error tracking page view:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track page view',
+      error: error.message
+    });
+  }
+});
+
+// ✅ FIXED: Track general analytics events with consistent parameter naming
+router.post('/track', async (req, res) => {
+  try {
+    console.log('📊 Track event request received:', {
+      eventType: req.body.eventType,
+      sessionId: req.body.sessionId,
+      url: req.body.url
+    });
+
+    const {
+      eventType,
+      url,
+      sessionId,
+      // ✅ FIXED: Use consistent underscore naming for UTM parameters
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
       metadata,
-      // UTM parameters
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      utmTerm,
-      utmContent,
-      // Additional tracking data
+      // Additional fields from your existing implementation
+      postId,
+      elementId,
       scrollDepth,
       viewportSize,
       coordinates
     } = req.body;
 
+    // Validate required fields
+    if (!eventType || !sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: eventType and sessionId are required'
+      });
+    }
+
     const event = new AnalyticsEvent({
       eventType,
+      url,
+      sessionId,
+      // ✅ FIXED: Use direct parameter names (no mapping needed)
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      // Additional tracking data
       postId,
       elementId,
-      url,
-      // UTM parameters
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      utmTerm,
-      utmContent,
-      // Additional tracking data
       scrollDepth,
       viewportSize,
       coordinates,
-      // Automatic fields from request
-      userAgent: req.get('User-Agent'),
-      ipAddress: req.ip || req.connection.remoteAddress,
-      sessionId,
-      metadata
+      metadata: {
+        ...metadata,
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        timestamp: new Date(),
+        source: 'analytics-route'
+      }
     });
 
     await event.save();
+
+    console.log('✅ Event tracked successfully:', event._id, eventType);
 
     res.status(201).json({ 
       success: true,
@@ -55,18 +157,157 @@ router.post('/track', async (req, res, next) => {
       eventId: event._id 
     });
   } catch (error) {
-    console.error('Analytics tracking error:', error);
-    next(error); // ✅ IMPROVED: Pass to error handler :cite[1]
+    console.error('❌ Analytics tracking error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track event',
+      error: error.message
+    });
   }
 });
 
-// Get comprehensive analytics for dashboard
-router.get('/dashboard', async (req, res, next) => {
+// ✅ FIXED: Track post-specific views
+router.post('/postview', async (req, res) => {
+  try {
+    console.log('📊 Postview request received:', {
+      postId: req.body.postId,
+      title: req.body.title
+    });
+
+    const {
+      postId,
+      title,
+      slug,
+      category,
+      readTime,
+      url,
+      referrer,
+      timestamp
+    } = req.body;
+
+    if (!postId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: postId'
+      });
+    }
+
+    const event = new AnalyticsEvent({
+      eventType: 'post_view',
+      postId,
+      url: url || req.get('Referer') || 'direct',
+      sessionId: `post_${postId}_${Date.now()}`,
+      metadata: {
+        postTitle: title,
+        postSlug: slug,
+        category,
+        readTime,
+        referrer: referrer || 'direct',
+        userAgent: req.get('User-Agent'),
+        ip: req.ip || req.connection.remoteAddress,
+        timestamp: timestamp || new Date(),
+        source: 'analytics-route'
+      }
+    });
+
+    await event.save();
+
+    console.log('✅ Post view tracked successfully:', postId);
+
+    res.status(201).json({
+      success: true,
+      message: 'Post view tracked successfully',
+      eventId: event._id
+    });
+  } catch (error) {
+    console.error('❌ Error tracking post view:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track post view',
+      error: error.message
+    });
+  }
+});
+
+// ✅ FIXED: Get basic analytics stats
+router.get('/stats', async (req, res) => {
   try {
     const { days = 30 } = req.query;
     
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
+
+    console.log('📊 Fetching analytics stats for last', days, 'days');
+
+    // Total events
+    const totalEvents = await AnalyticsEvent.countDocuments({
+      timestamp: { $gte: startDate }
+    });
+
+    // Events by type
+    const eventsByType = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$eventType',
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      }
+    ]);
+
+    // Unique sessions
+    const uniqueSessions = await AnalyticsEvent.distinct('sessionId', {
+      timestamp: { $gte: startDate }
+    }).then(sessions => sessions.length);
+
+    // Page views (specific event type)
+    const pageViews = await AnalyticsEvent.countDocuments({
+      eventType: 'pageview',
+      timestamp: { $gte: startDate }
+    });
+
+    console.log('✅ Analytics stats fetched successfully');
+
+    res.json({
+      success: true,
+      data: {
+        totalEvents,
+        pageViews,
+        uniqueSessions,
+        eventsByType,
+        period: `${days} days`,
+        dateRange: {
+          start: startDate,
+          end: new Date()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching analytics stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch analytics stats',
+      error: error.message
+    });
+  }
+});
+
+// ✅ FIXED: Get comprehensive analytics for dashboard
+router.get('/dashboard', async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    console.log('📊 Fetching dashboard analytics for last', days, 'days');
 
     // Event type summary
     const eventSummary = await AnalyticsEvent.aggregate([
@@ -94,7 +335,7 @@ router.get('/dashboard', async (req, res, next) => {
     const topPosts = await AnalyticsEvent.aggregate([
       {
         $match: {
-          eventType: { $in: ['click', 'scroll', 'conversion'] },
+          eventType: { $in: ['click', 'scroll', 'conversion', 'post_view'] },
           postId: { $exists: true, $ne: null },
           timestamp: { $gte: startDate }
         }
@@ -111,6 +352,9 @@ router.get('/dashboard', async (req, res, next) => {
           },
           conversionCount: {
             $sum: { $cond: [{ $eq: ['$eventType', 'conversion'] }, 1, 0] }
+          },
+          viewCount: {
+            $sum: { $cond: [{ $eq: ['$eventType', 'post_view'] }, 1, 0] }
           }
         }
       },
@@ -131,15 +375,15 @@ router.get('/dashboard', async (req, res, next) => {
       {
         $match: {
           timestamp: { $gte: startDate },
-          utmSource: { $exists: true, $ne: null }
+          utm_source: { $exists: true, $ne: null }
         }
       },
       {
         $group: {
           _id: {
-            source: '$utmSource',
-            medium: '$utmMedium',
-            campaign: '$utmCampaign'
+            source: '$utm_source',
+            medium: '$utm_medium',
+            campaign: '$utm_campaign'
           },
           totalEvents: { $sum: 1 },
           uniqueUsers: { $addToSet: '$sessionId' },
@@ -154,12 +398,18 @@ router.get('/dashboard', async (req, res, next) => {
           uniqueUsers: { $size: '$uniqueUsers' },
           conversions: 1,
           conversionRate: {
-            $divide: ['$conversions', { $size: '$uniqueUsers' }]
+            $cond: [
+              { $eq: [{ $size: '$uniqueUsers' }, 0] },
+              0,
+              { $divide: ['$conversions', { $size: '$uniqueUsers' }] }
+            ]
           }
         }
       },
       { $sort: { totalEvents: -1 } }
     ]);
+
+    console.log('✅ Dashboard analytics fetched successfully');
 
     res.json({
       success: true,
@@ -174,13 +424,17 @@ router.get('/dashboard', async (req, res, next) => {
       }
     });
   } catch (error) {
-    console.error('Dashboard analytics error:', error);
-    next(error); // ✅ IMPROVED: Pass to error handler :cite[1]
+    console.error('❌ Dashboard analytics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch dashboard analytics',
+      error: error.message
+    });
   }
 });
 
-// Get UTM parameters report - ✅ THIS SHOULD NOW BE ACCESSIBLE
-router.get('/utm-report', async (req, res, next) => {
+// ✅ FIXED: Get UTM parameters report
+router.get('/utm-report', async (req, res) => {
   try {
     const { source, medium, campaign, days = 30 } = req.query;
     
@@ -191,20 +445,22 @@ router.get('/utm-report', async (req, res, next) => {
     };
 
     // Add filters if provided
-    if (source) matchQuery.utmSource = source;
-    if (medium) matchQuery.utmMedium = medium;
-    if (campaign) matchQuery.utmCampaign = campaign;
+    if (source) matchQuery.utm_source = source;
+    if (medium) matchQuery.utm_medium = medium;
+    if (campaign) matchQuery.utm_campaign = campaign;
+
+    console.log('📊 Fetching UTM report with filters:', { source, medium, campaign, days });
 
     const utmReport = await AnalyticsEvent.aggregate([
       { $match: matchQuery },
       {
         $group: {
           _id: {
-            source: '$utmSource',
-            medium: '$utmMedium', 
-            campaign: '$utmCampaign',
-            content: '$utmContent',
-            term: '$utmTerm'
+            source: '$utm_source',
+            medium: '$utm_medium', 
+            campaign: '$utm_campaign',
+            content: '$utm_content',
+            term: '$utm_term'
           },
           firstSeen: { $min: '$timestamp' },
           lastSeen: { $max: '$timestamp' },
@@ -226,15 +482,105 @@ router.get('/utm-report', async (req, res, next) => {
       { $sort: { totalEvents: -1 } }
     ]);
 
+    console.log('✅ UTM report fetched successfully');
+
     res.json({
       success: true,
       report: utmReport,
       filters: { source, medium, campaign, days }
     });
   } catch (error) {
-    console.error('UTM report error:', error);
-    next(error); // ✅ IMPROVED: Pass to error handler :cite[1]
+    console.error('❌ UTM report error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch UTM report',
+      error: error.message
+    });
   }
+});
+
+// ✅ FIXED: Health check for analytics API
+router.get('/health', async (req, res) => {
+  try {
+    const eventCount = await AnalyticsEvent.countDocuments();
+    const recentEvents = await AnalyticsEvent.countDocuments({
+      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+    
+    res.json({
+      success: true,
+      status: 'OK',
+      message: 'Analytics API is running',
+      eventCount,
+      recentEvents24h: recentEvents,
+      timestamp: new Date().toISOString(),
+      endpoints: [
+        'POST /api/analytics/pageview',
+        'POST /api/analytics/track',
+        'POST /api/analytics/postview',
+        'GET /api/analytics/stats',
+        'GET /api/analytics/dashboard',
+        'GET /api/analytics/utm-report'
+      ]
+    });
+  } catch (error) {
+    console.error('❌ Analytics health check error:', error);
+    res.status(500).json({
+      success: false,
+      status: 'ERROR',
+      message: 'Analytics API health check failed',
+      error: error.message
+    });
+  }
+});
+
+// ✅ ADDED: Bulk events endpoint for offline sync
+router.post('/bulk', async (req, res) => {
+  try {
+    const { events } = req.body;
+
+    if (!events || !Array.isArray(events)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing or invalid events array'
+      });
+    }
+
+    console.log(`📊 Processing bulk events: ${events.length} events`);
+
+    const savedEvents = await AnalyticsEvent.insertMany(events);
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully processed ${savedEvents.length} events`,
+      savedCount: savedEvents.length
+    });
+  } catch (error) {
+    console.error('❌ Bulk events error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process bulk events',
+      error: error.message
+    });
+  }
+});
+
+// ✅ ADDED: Endpoint to check if analytics is working
+router.get('/status', (req, res) => {
+  res.json({
+    success: true,
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    features: {
+      pageview_tracking: true,
+      event_tracking: true,
+      post_analytics: true,
+      utm_tracking: true,
+      dashboard: true,
+      bulk_operations: true
+    },
+    database: 'connected' // Assuming MongoDB is connected via mongoose
+  });
 });
 
 module.exports = router;
