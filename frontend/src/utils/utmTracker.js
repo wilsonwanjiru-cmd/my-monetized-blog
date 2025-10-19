@@ -24,31 +24,43 @@ const UTM_CONFIG = {
 let currentSessionId = null;
 let isInitialized = false;
 
+// ✅ FIXED: Safe analytics function checking
+const isAnalyticsAvailable = () => {
+  return blogAPI && 
+         blogAPI.analytics && 
+         typeof blogAPI.analytics.trackEvent === 'function' &&
+         typeof blogAPI.analytics.trackPageView === 'function';
+};
+
 /**
- * Initialize UTM tracking and session management
+ * Initialize UTM tracking and session management with safe analytics
  */
 export const initUTMTracking = () => {
   if (typeof document === 'undefined' || isInitialized) return;
 
+  // ✅ FIXED: Check analytics availability first
+  const analyticsAvailable = isAnalyticsAvailable();
+  
+  if (!analyticsAvailable) {
+    console.warn('⚠️ Analytics system not available. UTM tracking will work in offline mode.');
+  }
+
   currentSessionId = getSessionId();
   isInitialized = true;
   
-  // Track page view with UTM parameters
-  trackPageView();
+  // Track page view with UTM parameters (only if analytics available)
+  if (analyticsAvailable) {
+    trackPageView();
+  }
   
-  // Auto-enhance external links
+  // These can still work without analytics
   enhanceExternalLinks();
-  
-  // Auto-enhance affiliate links
   enhanceAffiliateLinks();
-  
-  // Track social share buttons
   enhanceSocialShares();
-  
-  // Track email links
   enhanceEmailLinks();
   
   console.log('🔗 UTM Tracking initialized for Wilson Muita with session:', currentSessionId);
+  console.log('📊 Analytics available:', analyticsAvailable);
 };
 
 /**
@@ -123,7 +135,7 @@ export const trackPageView = async () => {
       hostname: window.location.hostname,
       userAgent: navigator.userAgent,
       language: navigator.language,
-      screenResolution: screenResolution // ✅ Fixed ESLint error
+      screenResolution: screenResolution
     }
   };
 
@@ -356,19 +368,21 @@ const enhanceExternalLinks = () => {
       // Update the link href
       link.setAttribute('href', trackedUrl);
       
-      // Track the click
-      trackOutboundClick({
-        originalUrl: href,
-        trackedUrl,
-        utmSource: UTM_CONFIG.defaultSource,
-        utmMedium: medium,
-        campaign,
-        content,
-        element: link.tagName,
-        text: link.textContent?.substring(0, 100),
-        isAffiliate,
-        linkType
-      });
+      // Track the click (only if analytics available)
+      if (isAnalyticsAvailable()) {
+        trackOutboundClick({
+          originalUrl: href,
+          trackedUrl,
+          utmSource: UTM_CONFIG.defaultSource,
+          utmMedium: medium,
+          campaign,
+          content,
+          element: link.tagName,
+          text: link.textContent?.substring(0, 100),
+          isAffiliate,
+          linkType
+        });
+      }
     } catch (error) {
       console.warn('UTM Tracking: Error processing link', href, error);
     }
@@ -427,20 +441,22 @@ const enhanceAffiliateLinks = () => {
       link.classList.add('affiliate-link');
     }
 
-    // Add click listener for tracking
-    link.addEventListener('click', (e) => {
-      trackAffiliateClick({
-        url: trackedUrl,
-        product,
-        position,
-        text: link.textContent?.substring(0, 100),
-        elementId: link.id,
-        category,
-        price,
-        vendor,
-        commissionRate: link.getAttribute('data-commission')
+    // Add click listener for tracking (only if analytics available)
+    if (isAnalyticsAvailable()) {
+      link.addEventListener('click', (e) => {
+        trackAffiliateClick({
+          url: trackedUrl,
+          product,
+          position,
+          text: link.textContent?.substring(0, 100),
+          elementId: link.id,
+          category,
+          price,
+          vendor,
+          commissionRate: link.getAttribute('data-commission')
+        });
       });
-    });
+    }
   });
 };
 
@@ -461,7 +477,7 @@ const enhanceSocialShares = () => {
       const url = button.getAttribute('data-url') || window.location.href;
       const campaign = button.getAttribute('data-campaign') || 'social_share';
       
-      if (platform) {
+      if (platform && isAnalyticsAvailable()) {
         trackSocialShare(platform, url, campaign, 'social_button');
       }
     });
@@ -481,20 +497,22 @@ const enhanceEmailLinks = () => {
     const href = link.getAttribute('href');
     const email = href.replace('mailto:', '').split('?')[0];
     
-    link.addEventListener('click', (e) => {
-      trackEmailClick({
-        url: href,
-        campaign: 'email_contact',
-        content: 'email_link',
-        emailType: 'contact',
-        subject: link.getAttribute('data-subject') || 'Inquiry from Wilson Muita Blog'
+    if (isAnalyticsAvailable()) {
+      link.addEventListener('click', (e) => {
+        trackEmailClick({
+          url: href,
+          campaign: 'email_contact',
+          content: 'email_link',
+          emailType: 'contact',
+          subject: link.getAttribute('data-subject') || 'Inquiry from Wilson Muita Blog'
+        });
       });
-    });
+    }
   });
 };
 
 /**
- * Send analytics data to backend API using blogAPI
+ * ✅ FIXED: Send analytics data to backend API with correct function names
  */
 const sendToAnalyticsAPI = async (data) => {
   // Don't send analytics in development unless explicitly enabled
@@ -505,30 +523,49 @@ const sendToAnalyticsAPI = async (data) => {
     return { success: true, development: true };
   }
 
+  // ✅ FIXED: Check if analytics functions are available
+  if (!isAnalyticsAvailable()) {
+    console.warn('Analytics functions not available. Storing event offline:', data.eventType);
+    storeEventOffline(data);
+    return { success: false, reason: 'analytics_not_available' };
+  }
+
   try {
-    // Use the blogAPI from our api.js for consistent error handling
-    const result = await blogAPI.analytics.track(data);
+    // ✅ FIXED: Use the correct function names from api.js
+    let result;
+    if (data.eventType === 'pageview') {
+      // Use trackPageView for pageview events
+      result = await blogAPI.analytics.trackPageView(data);
+    } else {
+      // Use trackEvent for all other events
+      result = await blogAPI.analytics.trackEvent(data);
+    }
+    
     return result;
   } catch (error) {
     console.warn('Analytics API request failed:', error);
-    
-    // Fallback to localStorage for offline tracking
-    if (typeof window !== 'undefined') {
-      try {
-        const pendingEvents = JSON.parse(localStorage.getItem('wilsonmuita_pending_analytics') || '[]');
-        pendingEvents.push({
-          ...data,
-          timestamp: new Date().toISOString(),
-          retryCount: 0
-        });
-        localStorage.setItem('wilsonmuita_pending_analytics', JSON.stringify(pendingEvents));
-        console.log('📦 Analytics event stored offline for retry');
-      } catch (storageError) {
-        console.warn('Failed to store analytics event offline:', storageError);
-      }
-    }
-    
+    storeEventOffline(data);
     throw error;
+  }
+};
+
+/**
+ * Store events offline when analytics is unavailable
+ */
+const storeEventOffline = (data) => {
+  if (typeof window !== 'undefined') {
+    try {
+      const pendingEvents = JSON.parse(localStorage.getItem('wilsonmuita_pending_analytics') || '[]');
+      pendingEvents.push({
+        ...data,
+        timestamp: new Date().toISOString(),
+        retryCount: 0
+      });
+      localStorage.setItem('wilsonmuita_pending_analytics', JSON.stringify(pendingEvents));
+      console.log('📦 Analytics event stored offline for retry');
+    } catch (storageError) {
+      console.warn('Failed to store analytics event offline:', storageError);
+    }
   }
 };
 
@@ -536,7 +573,7 @@ const sendToAnalyticsAPI = async (data) => {
  * Retry pending analytics events
  */
 export const retryPendingEvents = async () => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !isAnalyticsAvailable()) return;
   
   try {
     const pendingEvents = JSON.parse(localStorage.getItem('wilsonmuita_pending_analytics') || '[]');
@@ -729,6 +766,11 @@ export const getCurrentSessionId = () => currentSessionId;
 export const isUTMTrackingInitialized = () => isInitialized;
 
 /**
+ * Check if analytics is available
+ */
+export const isAnalyticsAvailableForTracking = () => isAnalyticsAvailable();
+
+/**
  * Reset UTM tracking (for testing)
  */
 export const resetUTMTracking = () => {
@@ -737,6 +779,7 @@ export const resetUTMTracking = () => {
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem('wilsonmuita_session_id');
     sessionStorage.removeItem('wilsonmuita_utm_params');
+    localStorage.removeItem('wilsonmuita_pending_analytics');
   }
 };
 
@@ -755,6 +798,7 @@ export default {
   removeUTMParams,
   getCurrentSessionId,
   isUTMTrackingInitialized,
+  isAnalyticsAvailableForTracking,
   retryPendingEvents,
   resetUTMTracking
 };

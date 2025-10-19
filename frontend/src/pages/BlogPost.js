@@ -253,15 +253,18 @@ const BlogPost = () => {
     document.head.appendChild(script);
   };
 
-  // ✅ Process content images for lazy loading and better SEO
+  // ✅ ENHANCED: Process content images for responsive behavior and better SEO
   const processContentImages = (postData) => {
     const contentImages = document.querySelectorAll('.post-content img');
     
     contentImages.forEach((img, index) => {
-      // Add lazy loading attribute if not already present
-      if (!img.getAttribute('loading')) {
-        img.setAttribute('loading', 'lazy');
-      }
+      // ✅ FIXED: Apply robust responsive image CSS
+      img.style.maxWidth = '100%';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      
+      // ✅ ENHANCED: Add CSS class for additional responsive control
+      img.classList.add('responsive-image');
       
       // Ensure alt text is meaningful
       if (!img.getAttribute('alt') || img.getAttribute('alt') === '') {
@@ -270,20 +273,28 @@ const BlogPost = () => {
         img.setAttribute('alt', `${fileName} - ${postData.title}`);
       }
 
-      // Add image dimensions if available
-      if (!img.getAttribute('width') && !img.getAttribute('height')) {
-        img.setAttribute('width', '800');
-        img.setAttribute('height', '400');
+      // Add lazy loading attribute if not already present
+      if (!img.getAttribute('loading')) {
+        img.setAttribute('loading', 'lazy');
       }
 
-      // Add CSS for better image display
-      img.style.maxWidth = '100%';
-      img.style.height = 'auto';
-      img.style.borderRadius = '8px';
-      img.style.margin = '1rem 0';
+      // ✅ FIXED: Better width/height attributes for layout stability
+      if (!img.getAttribute('width') && !img.getAttribute('height')) {
+        // Remove any inline styles that might force dimensions
+        img.style.width = '';
+        img.style.height = '';
+      }
+
+      // ✅ ADDED: Handle image container overflow
+      const parent = img.parentElement;
+      if (parent && parent.style) {
+        parent.style.overflow = 'hidden';
+        parent.style.borderRadius = '8px';
+      }
 
       // Track image views
       img.addEventListener('load', () => {
+        console.log(`✅ Image ${index + 1} loaded successfully`);
         trackCustomEvent('image_load', {
           medium: 'content',
           campaign: 'blog_post',
@@ -296,6 +307,12 @@ const BlogPost = () => {
             timestamp: new Date().toISOString()
           }
         });
+      });
+
+      // ✅ ADDED: Handle image errors gracefully
+      img.addEventListener('error', () => {
+        console.warn(`❌ Image failed to load: ${img.src}`);
+        img.style.display = 'none';
       });
     });
   };
@@ -547,16 +564,22 @@ const BlogPost = () => {
       margin: '0 auto',
       padding: '0 1rem 3rem 1rem'
     }}>
-      {/* 🖼️ FEATURED IMAGE with enhanced styling */}
+      {/* 🖼️ FEATURED IMAGE with enhanced responsive styling */}
       {post.featuredImage && (
-        <div style={{ marginBottom: '2rem', borderRadius: '12px', overflow: 'hidden' }}>
+        <div style={{ 
+          marginBottom: '2rem', 
+          borderRadius: '12px', 
+          overflow: 'hidden',
+          maxWidth: '100%'
+        }}>
           <img
             src={post.featuredImage}
             alt={post.imageAltText || post.title}
             loading="lazy"
             style={{ 
               width: '100%', 
-              height: '400px', 
+              height: 'auto', 
+              maxHeight: '400px',
               objectFit: 'cover',
               display: 'block'
             }}
@@ -698,13 +721,15 @@ const BlogPost = () => {
         </div>
       </header>
 
-      {/* 📄 POST CONTENT */}
+      {/* 📄 POST CONTENT with enhanced responsive styles */}
       <section 
         className="post-content"
         style={{ 
           lineHeight: '1.7',
           fontSize: '1.1rem',
-          color: '#374151'
+          color: '#374151',
+          maxWidth: '100%',
+          overflow: 'hidden'
         }}
         dangerouslySetInnerHTML={{ __html: post.content }}
       />
@@ -739,6 +764,32 @@ const BlogPost = () => {
       {post && (
         <RelatedPosts post={post} />
       )}
+
+      {/* ✅ ADDED: Global responsive image styles */}
+      <style>{`
+        .post-content img {
+          max-width: 100% !important;
+          height: auto !important;
+          display: block;
+          border-radius: 8px;
+          margin: 1rem 0;
+        }
+        
+        .post-content picture img {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+        
+        .post-content div {
+          max-width: 100%;
+          overflow: hidden;
+        }
+        
+        .responsive-image {
+          max-width: 100% !important;
+          height: auto !important;
+        }
+      `}</style>
     </article>
   );
 };
