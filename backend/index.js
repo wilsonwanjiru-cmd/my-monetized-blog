@@ -18,12 +18,12 @@ const consentRoutes = require('./routes/consent');
 const videoSitemapRoutes = require('./routes/videoSitemap');
 const privacyRoutes = require('./routes/privacy'); // ✅ ADDED: Privacy routes
 
-// ✅ UPDATED: Import enhanced cache middleware
-const { cacheMiddleware, cacheInvalidationMiddleware } = require('./middleware/cache');
+// Import middleware
+const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
-// ✅ UPDATED: CORS Configuration for production domains
+// CORS Configuration for production domains
 const corsOptions = {
   origin: [
     'https://wilsonmuita.com',
@@ -38,24 +38,21 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
-// ✅ FIXED: Use CORS middleware globally
+// Use CORS middleware globally
 app.use(cors(corsOptions));
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ UPDATED: Use enhanced cache middleware for GET requests
-app.use(cacheMiddleware);
-
-// ✅ UPDATED: Use cache invalidation for write operations
-app.use(cacheInvalidationMiddleware);
+// Use ETag middleware for conditional requests
+app.use(etagMiddleware);
 
 // Set view engine for OG tags, AMP, and dynamic sitemaps
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// ✅ ADDED: Route debugging middleware
+// Route debugging middleware
 app.use((req, res, next) => {
   if (req.originalUrl.includes('/api/analytics')) {
     console.log(`🔍 Analytics Route Hit: ${req.method} ${req.originalUrl}`);
@@ -63,7 +60,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ ADDED: Root route to fix 404 error
+// Root route
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Backend API is running successfully!', 
@@ -85,7 +82,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// ✅ ADDED: Analytics test endpoint to verify routes are working
+// Analytics test endpoint
 app.get('/api/analytics/test', (req, res) => {
   res.json({
     success: true,
@@ -150,7 +147,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ✅ IMPROVED: MongoDB connection with better error handling
+// MongoDB connection with better error handling
 mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/monetized-blog', {
     useNewUrlParser: true,
@@ -186,7 +183,7 @@ app.use('/api/posts', (req, res, next) => {
   next();
 });
 
-// ✅ FIXED: Serve frontend build (React) after API routes with CORRECT SPA routing
+// Serve frontend build (React) in production
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/build');
   
@@ -198,7 +195,7 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ FIXED: Enhanced catch-all handler for SPA routing - CORRECT WILDCARD SYNTAX
+  // Enhanced catch-all handler for SPA routing
   app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap).*$/, (req, res, next) => {
     // This regex matches all routes EXCEPT:
     // - /api/* (API routes)
@@ -217,8 +214,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ ADDED: Analytics fallback routes to ensure they work
-// These are temporary routes to ensure analytics work while debugging the main analytics routes
+// Analytics fallback routes to ensure they work
 app.post('/api/analytics/pageview', async (req, res) => {
   try {
     console.log('🔍 Fallback Pageview Route Hit:', req.body);
@@ -352,7 +348,7 @@ app.post('/api/analytics/track', async (req, res) => {
   }
 });
 
-// Error handling middleware - ✅ IMPROVED: Better error handling
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error('🔥 Error:', err.stack);
   
@@ -368,7 +364,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ✅ FIXED: 404 handler for unknown API routes - MOVED AFTER SPA ROUTING
+// 404 handler for unknown API routes
 app.use((req, res, next) => {
   // Only handle API routes with 404 JSON response
   if (req.originalUrl.startsWith('/api/')) {
@@ -396,7 +392,7 @@ app.use((req, res, next) => {
   next(); // Let it fall through to the final 404 handler
 });
 
-// ✅ ADDED: Final 404 handler for all unhandled routes
+// Final 404 handler for all unhandled routes
 app.use((req, res) => {
   if (req.xhr || req.headers.accept.indexOf('json') > -1) {
     // API-like request expecting JSON
@@ -445,20 +441,15 @@ const server = app.listen(PORT, () => {
   console.log('   - SEO: Sitemap, Robots, RSS, AMP');
   console.log('   - Analytics: Event tracking, heatmaps');
   console.log('   - Monetization: Ad injection, newsletter');
-  console.log('   - Performance: Enhanced caching with NodeCache, ETag support, cache invalidation');
+  console.log('   - Performance: ETag support, conditional requests');
   console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
-  console.log('🔧 Cache improvements applied:');
-  console.log('   - ✅ Enhanced cache middleware with NodeCache');
-  console.log('   - ✅ Cache invalidation middleware for write operations');
-  console.log('   - ✅ ETag and conditional request support');
-  console.log('   - ✅ 5-minute TTL with optimized settings');
   console.log('🔒 Privacy features:');
   console.log('   - ✅ Privacy Policy API endpoint added');
   console.log('   - ✅ GDPR/CCPA compliance ready');
 });
 
-// ✅ ADDED: Graceful shutdown handling
+// Graceful shutdown handling
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
@@ -475,7 +466,7 @@ process.on('SIGINT', () => {
   });
 });
 
-// ✅ ADDED: MongoDB connection event handlers
+// MongoDB connection event handlers
 mongoose.connection.on('connected', () => {
   console.log('✅ MongoDB connected successfully');
 });
