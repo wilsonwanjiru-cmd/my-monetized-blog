@@ -1,6 +1,9 @@
 // frontend/src/pages/BlogPost.js
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { LazyLoadImage } from 'react-lazy-load-image-component';
+import 'react-lazy-load-image-component/src/effects/blur.css';
+import Layout from '../components/Layout';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
 import { blogAPI, trackPostView } from '../utils/api';
@@ -419,378 +422,249 @@ const BlogPost = () => {
     };
   }, [fetchPost]);
 
-  // ✅ Loading state
+  // ✅ Loading state with enhanced skeleton UI
   if (loading) {
     return (
-      <div style={{ 
-        padding: '3rem 1rem', 
-        textAlign: 'center',
-        maxWidth: '800px',
-        margin: '0 auto'
-      }}>
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '1rem'
-        }}>
-          <div style={{
-            width: '60px',
-            height: '60px',
-            border: '4px solid #f3f4f6',
-            borderTop: '4px solid #667eea',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite'
-          }}></div>
-          <h2 style={{ 
-            color: '#374151',
-            margin: 0,
-            fontSize: '1.5rem'
-          }}>Loading Article</h2>
-          <p style={{ 
-            color: '#6b7280',
-            margin: 0,
-            fontSize: '1rem'
-          }}>Fetching the latest content for you...</p>
+      <Layout>
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="animate-pulse space-y-6">
+            {/* Title skeleton */}
+            <div className="h-8 bg-gray-200 rounded w-3/4 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/4 mb-8"></div>
+            
+            {/* Featured image skeleton */}
+            <div className="h-64 bg-gray-200 rounded-lg w-full mb-8"></div>
+            
+            {/* Content skeleton */}
+            <div className="space-y-4">
+              <div className="h-4 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+              <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+              <div className="h-4 bg-gray-200 rounded w-full"></div>
+              <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+            </div>
+            
+            <div className="space-y-4 mt-6">
+              <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            </div>
+          </div>
         </div>
-        <style>{`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}</style>
-      </div>
+      </Layout>
     );
   }
 
   // ✅ Error state
   if (error) {
     return (
-      <div style={{ 
-        padding: '3rem 1rem', 
-        textAlign: 'center',
-        maxWidth: '600px',
-        margin: '0 auto'
-      }}>
-        <div style={{
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: '12px',
-          padding: '2rem'
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>❌</div>
-          <h2 style={{ 
-            color: '#dc2626',
-            margin: '0 0 1rem 0'
-          }}>Unable to Load Article</h2>
-          <p style={{ 
-            color: '#7f1d1d',
-            margin: '0 0 1.5rem 0',
-            lineHeight: '1.5'
-          }}>
-            {error}
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              background: '#667eea',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: '500'
-            }}
-          >
-            ← Back to Home
-          </button>
+      <Layout>
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <div className="text-center bg-red-50 border border-red-200 rounded-lg p-8">
+            <div className="text-5xl mb-4">❌</div>
+            <h1 className="text-2xl font-bold text-red-800 mb-4">Unable to Load Article</h1>
+            <p className="text-red-600 mb-6">{error}</p>
+            <button
+              onClick={() => navigate('/')}
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
+            >
+              ← Back to Home
+            </button>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   // ✅ No post found
   if (!post) {
     return (
-      <div style={{ 
-        padding: '3rem 1rem', 
-        textAlign: 'center',
-        maxWidth: '600px',
-        margin: '0 auto'
-      }}>
-        <div style={{
-          background: '#fffbeb',
-          border: '1px solid #fcd34d',
-          borderRadius: '12px',
-          padding: '2rem'
-        }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🔍</div>
-          <h2 style={{ 
-            color: '#d97706',
-            margin: '0 0 1rem 0'
-          }}>Article Not Found</h2>
-          <p style={{ 
-            color: '#92400e',
-            margin: '0 0 1.5rem 0',
-            lineHeight: '1.5'
-          }}>
-            The blog post you're looking for doesn't exist or may have been moved.
-          </p>
-          <button
-            onClick={() => navigate('/blog')}
-            style={{
-              background: '#667eea',
-              color: 'white',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: '500'
-            }}
-          >
-            Browse All Articles
-          </button>
+      <Layout>
+        <div className="container mx-auto px-4 py-8 max-w-2xl">
+          <div className="text-center bg-yellow-50 border border-yellow-200 rounded-lg p-8">
+            <div className="text-5xl mb-4">🔍</div>
+            <h1 className="text-2xl font-bold text-yellow-800 mb-4">Article Not Found</h1>
+            <p className="text-yellow-600 mb-6">
+              The blog post you're looking for doesn't exist or may have been moved.
+            </p>
+            <button
+              onClick={() => navigate('/blog')}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg font-medium transition-colors duration-200"
+            >
+              Browse All Articles
+            </button>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
-  // ✅ Main post content
+  // ✅ Main post content with Layout component
   return (
-    <article style={{ 
-      maxWidth: '800px', 
-      margin: '0 auto',
-      padding: '0 1rem 3rem 1rem'
-    }}>
-      {/* 🖼️ FEATURED IMAGE with enhanced responsive styling */}
-      {post.featuredImage && (
-        <div style={{ 
-          marginBottom: '2rem', 
-          borderRadius: '12px', 
-          overflow: 'hidden',
-          maxWidth: '100%'
-        }}>
-          <img
-            src={post.featuredImage}
-            alt={post.imageAltText || post.title}
-            loading="lazy"
-            style={{ 
-              width: '100%', 
-              height: 'auto', 
-              maxHeight: '400px',
-              objectFit: 'cover',
-              display: 'block'
-            }}
-            onError={(e) => {
-              e.target.style.display = 'none';
-            }}
-          />
-        </div>
-      )}
-
-      {/* 📝 POST HEADER */}
-      <header style={{ marginBottom: '2rem' }}>
-        <h1 style={{ 
-          fontSize: '2.5rem',
-          fontWeight: '800',
-          lineHeight: '1.2',
-          color: '#1f2937',
-          margin: '0 0 1rem 0',
-          fontFamily: 'Inter, sans-serif'
-        }}>
-          {post.title}
-        </h1>
-
-        <div style={{ 
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          alignItems: 'center',
-          color: '#6b7280',
-          fontSize: '0.95rem',
-          marginBottom: '1rem'
-        }}>
-          <span>👤 By {post.author || 'Wilson Muita'}</span>
-          {post.publishedAt && (
-            <span>📅 {new Date(post.publishedAt).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric'
-            })}</span>
-          )}
-          <span>⏱️ {post.readTime || 5} min read</span>
-          {post.views !== undefined && (
-            <span>👁️ {post.views.toLocaleString()} views</span>
-          )}
-        </div>
-
-        {/* 📍 CATEGORY & TAGS */}
-        <div style={{ 
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '0.5rem',
-          marginBottom: '1rem'
-        }}>
-          {post.category && (
-            <span style={{
-              background: '#667eea',
-              color: 'white',
-              padding: '0.25rem 0.75rem',
-              borderRadius: '20px',
-              fontSize: '0.8rem',
-              fontWeight: '500'
-            }}>
-              {post.category}
-            </span>
-          )}
-          {post.tags && post.tags.map(tag => (
-            <span
-              key={tag}
-              style={{
-                background: '#f3f4f6',
-                color: '#374151',
-                padding: '0.25rem 0.75rem',
-                borderRadius: '20px',
-                fontSize: '0.8rem'
+    <Layout 
+      title={post.title} 
+      description={post.metaDescription || post.excerpt}
+    >
+      <article className="container mx-auto px-4 py-8 max-w-4xl">
+        {/* 🖼️ FEATURED IMAGE with LazyLoadImage */}
+        {post.featuredImage && (
+          <div className="mb-8 rounded-xl overflow-hidden">
+            <LazyLoadImage
+              src={post.featuredImage}
+              alt={post.imageAltText || post.title}
+              effect="blur"
+              className="w-full h-64 md:h-96 object-cover"
+              placeholderSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PC9zdmc+"
+              onError={(e) => {
+                e.target.style.display = 'none';
               }}
-            >
-              #{tag}
+            />
+          </div>
+        )}
+
+        {/* 📝 POST HEADER */}
+        <header className="mb-8">
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 leading-tight">
+            {post.title}
+          </h1>
+
+          <div className="flex flex-wrap items-center text-gray-600 space-x-4 mb-4 text-sm md:text-base">
+            <span className="flex items-center">
+              <span className="mr-2">👤</span>
+              By {post.author || 'Wilson Muita'}
             </span>
-          ))}
-        </div>
+            <span>•</span>
+            {post.publishedAt && (
+              <span className="flex items-center">
+                <span className="mr-2">📅</span>
+                {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </span>
+            )}
+            <span>•</span>
+            <span className="flex items-center">
+              <span className="mr-2">⏱️</span>
+              {post.readTime || 5} min read
+            </span>
+            {post.views !== undefined && (
+              <>
+                <span>•</span>
+                <span className="flex items-center">
+                  <span className="mr-2">👁️</span>
+                  {post.views.toLocaleString()} views
+                </span>
+              </>
+            )}
+          </div>
 
-        {/* 📱 SOCIAL SHARING */}
-        <div style={{ 
-          display: 'flex',
-          gap: '0.5rem',
-          marginTop: '1.5rem'
-        }}>
-          <button
-            onClick={() => handleSocialShare('twitter')}
-            style={{
-              background: '#1da1f2',
-              color: 'white',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            🐦 Twitter
-          </button>
-          <button
-            onClick={() => handleSocialShare('linkedin')}
-            style={{
-              background: '#0077b5',
-              color: 'white',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            💼 LinkedIn
-          </button>
-          <button
-            onClick={() => handleSocialShare('facebook')}
-            style={{
-              background: '#4267B2',
-              color: 'white',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem'
-            }}
-          >
-            📘 Facebook
-          </button>
-        </div>
-      </header>
+          {/* 📍 CATEGORY & TAGS */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {post.category && (
+              <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium">
+                {post.category}
+              </span>
+            )}
+            {post.tags && post.tags.map(tag => (
+              <span
+                key={tag}
+                className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
 
-      {/* 📄 POST CONTENT with enhanced responsive styles */}
-      <section 
-        className="post-content"
-        style={{ 
-          lineHeight: '1.7',
-          fontSize: '1.1rem',
-          color: '#374151',
-          maxWidth: '100%',
-          overflow: 'hidden'
-        }}
-        dangerouslySetInnerHTML={{ __html: post.content }}
-      />
+          {/* 📱 SOCIAL SHARING */}
+          <div className="flex gap-2 mt-6">
+            <button
+              onClick={() => handleSocialShare('twitter')}
+              className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium"
+            >
+              <span>🐦</span>
+              Twitter
+            </button>
+            <button
+              onClick={() => handleSocialShare('linkedin')}
+              className="flex items-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium"
+            >
+              <span>💼</span>
+              LinkedIn
+            </button>
+            <button
+              onClick={() => handleSocialShare('facebook')}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium"
+            >
+              <span>📘</span>
+              Facebook
+            </button>
+          </div>
+        </header>
 
-      {/* 📧 NEWSLETTER SIGNUP SECTION */}
-      <section style={{ 
-        marginTop: '4rem', 
-        paddingTop: '3rem', 
-        borderTop: '1px solid #e5e7eb' 
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ 
-            fontSize: '1.75rem',
-            margin: '0 0 1rem 0',
-            color: '#1f2937'
-          }}>💌 Stay Updated</h2>
-          <p style={{ 
-            color: '#6b7280', 
-            fontSize: '1.1rem',
-            lineHeight: '1.6',
-            maxWidth: '600px',
-            margin: '0 auto'
-          }}>
-            Enjoyed this article? Subscribe to my newsletter to get notified when I publish new content. 
-            No spam, unsubscribe anytime.
-          </p>
-        </div>
-        <NewsletterSignup source="blog_post" location="post_bottom" />
-      </section>
+        {/* 📄 POST CONTENT with enhanced responsive styles */}
+        <section 
+          className="post-content prose prose-lg max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-img:rounded-lg prose-img:shadow-md"
+          dangerouslySetInnerHTML={{ __html: post.content }}
+        />
 
-      {/* 🔗 RELATED POSTS */}
-      {post && (
-        <RelatedPosts post={post} />
-      )}
+        {/* 📧 NEWSLETTER SIGNUP SECTION */}
+        <section className="mt-12 pt-8 border-t border-gray-200">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-4">
+              💌 Stay Updated
+            </h2>
+            <p className="text-gray-600 text-lg max-w-2xl mx-auto leading-relaxed">
+              Enjoyed this article? Subscribe to my newsletter to get notified when I publish new content. 
+              No spam, unsubscribe anytime.
+            </p>
+          </div>
+          <NewsletterSignup source="blog_post" location="post_bottom" />
+        </section>
 
-      {/* ✅ ADDED: Global responsive image styles */}
-      <style>{`
-        .post-content img {
-          max-width: 100% !important;
-          height: auto !important;
-          display: block;
-          border-radius: 8px;
-          margin: 1rem 0;
-        }
-        
-        .post-content picture img {
-          max-width: 100% !important;
-          height: auto !important;
-        }
-        
-        .post-content div {
-          max-width: 100%;
-          overflow: hidden;
-        }
-        
-        .responsive-image {
-          max-width: 100% !important;
-          height: auto !important;
-        }
-      `}</style>
-    </article>
+        {/* 🔗 RELATED POSTS */}
+        {post && (
+          <RelatedPosts post={post} />
+        )}
+
+        {/* ✅ ADDED: Global responsive image styles */}
+        <style>{`
+          .post-content img {
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            border-radius: 8px;
+            margin: 1rem 0;
+          }
+          
+          .post-content picture img {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+          
+          .post-content div {
+            max-width: 100%;
+            overflow: hidden;
+          }
+          
+          .responsive-image {
+            max-width: 100% !important;
+            height: auto !important;
+          }
+
+          @media (max-width: 768px) {
+            .post-content {
+              font-size: 1rem;
+              line-height: 1.7;
+            }
+            
+            .post-content img {
+              margin: 0.75rem 0;
+            }
+          }
+        `}</style>
+      </article>
+    </Layout>
   );
 };
 

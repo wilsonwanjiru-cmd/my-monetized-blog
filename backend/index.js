@@ -16,10 +16,10 @@ const ampRoutes = require('./routes/amp');
 const analyticsRoutes = require('./routes/analytics');
 const consentRoutes = require('./routes/consent');
 const videoSitemapRoutes = require('./routes/videoSitemap');
+const privacyRoutes = require('./routes/privacy'); // ✅ ADDED: Privacy routes
 
-// Import middleware
-const cacheMiddleware = require('./middleware/cache');
-const etagMiddleware = require('./middleware/etag');
+// ✅ UPDATED: Import enhanced cache middleware
+const { cacheMiddleware, cacheInvalidationMiddleware } = require('./middleware/cache');
 
 const app = express();
 
@@ -45,9 +45,11 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Cache middleware for performance optimization
+// ✅ UPDATED: Use enhanced cache middleware for GET requests
 app.use(cacheMiddleware);
-app.use(etagMiddleware);
+
+// ✅ UPDATED: Use cache invalidation for write operations
+app.use(cacheInvalidationMiddleware);
 
 // Set view engine for OG tags, AMP, and dynamic sitemaps
 app.set('view engine', 'ejs');
@@ -75,6 +77,7 @@ app.get('/', (req, res) => {
       contact: '/api/contact',
       newsletter: '/api/newsletter',
       analytics: '/api/analytics',
+      privacy: '/api/privacy-policy', // ✅ ADDED: Privacy policy endpoint
       sitemap: '/sitemap.xml',
       robots: '/robots.txt',
       rss: '/rss.xml'
@@ -92,7 +95,8 @@ app.get('/api/analytics/test', (req, res) => {
       pageview: 'POST /api/analytics/pageview',
       track: 'POST /api/analytics/track',
       stats: 'GET /api/analytics/stats',
-      dashboard: 'GET /api/analytics/dashboard'
+      dashboard: 'GET /api/analytics/dashboard',
+      privacy: 'GET /api/privacy-policy' // ✅ ADDED: Privacy policy endpoint
     }
   });
 });
@@ -103,6 +107,7 @@ app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/consent', consentRoutes);
+app.use('/api', privacyRoutes); // ✅ ADDED: Privacy routes
 
 // SEO Routes
 app.use('/', sitemapRoutes);
@@ -128,7 +133,8 @@ app.get('/api/health', (req, res) => {
       analytics: true,
       monetization: true,
       caching: true,
-      amp: true
+      amp: true,
+      privacy: true // ✅ ADDED: Privacy policy feature
     },
     database: {
       status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
@@ -138,7 +144,8 @@ app.get('/api/health', (req, res) => {
       posts: 'active',
       contact: 'active',
       newsletter: 'active',
-      consent: 'active'
+      consent: 'active',
+      privacy: 'active' // ✅ ADDED: Privacy routes status
     }
   });
 });
@@ -377,6 +384,7 @@ app.use((req, res, next) => {
         '/api/newsletter',
         '/api/analytics',
         '/api/consent',
+        '/api/privacy-policy', // ✅ ADDED: Privacy policy endpoint
         '/sitemap.xml',
         '/robots.txt',
         '/rss.xml'
@@ -430,19 +438,24 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Health check: https://api.wilsonmuita.com/api/health`);
   console.log(`✅ Root endpoint: https://api.wilsonmuita.com/`);
   console.log(`✅ Analytics test: https://api.wilsonmuita.com/api/analytics/test`);
+  console.log(`✅ Privacy Policy: https://api.wilsonmuita.com/api/privacy-policy`); // ✅ ADDED: Privacy policy endpoint
   console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
   console.log('✅ All features integrated successfully!');
   console.log('📊 Available features:');
   console.log('   - SEO: Sitemap, Robots, RSS, AMP');
   console.log('   - Analytics: Event tracking, heatmaps');
   console.log('   - Monetization: Ad injection, newsletter');
-  console.log('   - Performance: Caching, broken link checker');
-  console.log('   - Compliance: GDPR/CCPA consent management');
+  console.log('   - Performance: Enhanced caching with NodeCache, ETag support, cache invalidation');
+  console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
-  console.log('🔧 Analytics fixes applied:');
-  console.log('   - ✅ Fallback analytics routes added');
-  console.log('   - ✅ Route debugging enabled');
-  console.log('   - ✅ Test endpoint available');
+  console.log('🔧 Cache improvements applied:');
+  console.log('   - ✅ Enhanced cache middleware with NodeCache');
+  console.log('   - ✅ Cache invalidation middleware for write operations');
+  console.log('   - ✅ ETag and conditional request support');
+  console.log('   - ✅ 5-minute TTL with optimized settings');
+  console.log('🔒 Privacy features:');
+  console.log('   - ✅ Privacy Policy API endpoint added');
+  console.log('   - ✅ GDPR/CCPA compliance ready');
 });
 
 // ✅ ADDED: Graceful shutdown handling

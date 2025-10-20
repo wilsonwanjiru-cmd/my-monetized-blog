@@ -9,6 +9,9 @@ import BlogPost from './pages/BlogPost';
 import BlogListPage from './pages/BlogListPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+
+// Import components
 import Layout from './components/Layout';
 
 // Import tracking utilities
@@ -278,6 +281,9 @@ function App() {
               {/* Other Routes */}
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              
+              {/* ✅ ADDED: Privacy Policy Route */}
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               
               {/* 404 fallback */}
               <Route path="*" element={

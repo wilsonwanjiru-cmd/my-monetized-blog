@@ -17,6 +17,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-helmet-async": "^2.0.5",
+    "react-lazy-load-image-component": "^1.6.3",
     "react-router-dom": "^7.9.3",
     "react-scripts": "5.0.1",
     "typescript": "^4.9.5",
@@ -24,9 +25,16 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "build:analyze": "GENERATE_SOURCEMAP=false npm_config_report=true react-scripts build",
+    "build:dev": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "eject": "react-scripts eject",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "serve": "npx serve -s build -l 3000"
   },
   "eslintConfig": {
     "extends": [
@@ -45,5 +53,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/react-lazy-load-image-component": "^1.6.6"
   }
 }
