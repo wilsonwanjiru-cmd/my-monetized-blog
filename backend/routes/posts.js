@@ -3,6 +3,147 @@ const router = express.Router();
 const Post = require('../models/Post');
 const axios = require('axios');
 
+// =============================================================================
+// HTML RENDERING ROUTES (NEW - THESE FIX THE DUPLICATE ISSUE)
+// =============================================================================
+
+// GET blog post page (HTML) - MAIN FIX
+router.get('/blog/:slug', async (req, res) => {
+  try {
+    const post = await Post.findOne({ 
+      slug: req.params.slug, 
+      isPublished: true 
+    });
+
+    if (!post) {
+      return res.status(404).render('404', {
+        siteName: "Wilson's Blog",
+        siteUrl: process.env.SITE_URL || 'https://wilsonmuita.com'
+      });
+    }
+
+    // Increment views
+    post.views += 1;
+    await post.save();
+
+    // ✅ UPDATED: Use environment variables
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
+    const siteName = process.env.SITE_NAME || "Wilson's Blog";
+
+    // Get related posts
+    const relatedPosts = await Post.find({
+      _id: { $ne: post._id },
+      isPublished: true,
+      $or: [
+        { tags: { $in: post.tags } },
+        { category: post.category }
+      ]
+    })
+    .sort({ views: -1, publishedAt: -1 })
+    .limit(3)
+    .select('title slug excerpt featuredImage readTime publishedAt');
+
+    // Render the blog post template
+    res.render('blog-post', {
+      title: post.title,
+      description: post.metaDescription || post.excerpt,
+      post: post,
+      relatedPosts: relatedPosts,
+      siteName: siteName,
+      siteUrl: siteUrl,
+      blogUrl: blogUrl,
+      twitterHandle: process.env.TWITTER_HANDLE || '@wilsonmuita',
+      fbAppId: process.env.FB_APP_ID || '1234567890',
+      url: `${blogUrl}/blog/${post.slug}`,
+      image: post.featuredImage || `${siteUrl}/default-og-image.jpg`
+    });
+
+  } catch (error) {
+    console.error('Error rendering blog post:', error);
+    res.status(500).render('error', {
+      siteName: "Wilson's Blog",
+      message: 'Error loading post'
+    });
+  }
+});
+
+// GET blog homepage (HTML)
+router.get('/blog', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const posts = await Post.find({ isPublished: true })
+      .sort({ publishedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .select('-content');
+
+    const total = await Post.countDocuments({ isPublished: true });
+
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const siteName = process.env.SITE_NAME || "Wilson's Blog";
+
+    res.render('blog-list', {
+      title: 'Blog - ' + siteName,
+      description: 'Latest articles and insights from ' + siteName,
+      posts: posts,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      siteName: siteName,
+      siteUrl: siteUrl,
+      blogUrl: process.env.BLOG_URL || 'https://wilsonmuita.com'
+    });
+
+  } catch (error) {
+    console.error('Error rendering blog list:', error);
+    res.status(500).render('error', {
+      siteName: "Wilson's Blog",
+      message: 'Error loading blog posts'
+    });
+  }
+});
+
+// GET social media preview (keep using your existing post.ejs)
+router.get('/preview/:slug', async (req, res) => {
+  try {
+    const post = await Post.findOne({ 
+      slug: req.params.slug, 
+      isPublished: true 
+    });
+
+    if (!post) {
+      return res.status(404).send('Post not found');
+    }
+
+    const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
+    const siteName = process.env.SITE_NAME || "Wilson's Blog";
+
+    res.render('post', {
+      title: post.title,
+      description: post.metaDescription || post.excerpt,
+      post: post,
+      siteName: siteName,
+      siteUrl: siteUrl,
+      blogUrl: process.env.BLOG_URL || 'https://wilsonmuita.com',
+      twitterHandle: process.env.TWITTER_HANDLE || '@wilsonmuita',
+      fbAppId: process.env.FB_APP_ID || '1234567890',
+      url: `${siteUrl}/blog/${post.slug}`,
+      image: post.featuredImage || `${siteUrl}/default-og-image.jpg`
+    });
+
+  } catch (error) {
+    console.error('Error rendering preview:', error);
+    res.status(500).send('Error generating preview');
+  }
+});
+
+// =============================================================================
+// API ROUTES (YOUR EXISTING ROUTES - KEEP THESE)
+// =============================================================================
+
 // GET all published posts with advanced filtering
 router.get('/', async (req, res) => {
   try {
@@ -51,7 +192,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single post by slug with enhanced tracking
+// GET single post by slug with enhanced tracking (API)
 router.get('/slug/:slug', async (req, res) => {
   try {
     const post = await Post.findOne({ 
@@ -67,7 +208,6 @@ router.get('/slug/:slug', async (req, res) => {
     post.views += 1;
     await post.save();
 
-    // ✅ UPDATED: Use environment variable for site URL
     const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
     const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
 
@@ -108,7 +248,7 @@ router.get('/slug/:slug', async (req, res) => {
   }
 });
 
-// GET single post by ID
+// GET single post by ID (API)
 router.get('/id/:id', async (req, res) => {
   try {
     const post = await Post.findOne({ 
@@ -126,7 +266,7 @@ router.get('/id/:id', async (req, res) => {
   }
 });
 
-// GET posts by category
+// GET posts by category (API)
 router.get('/category/:category', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -159,7 +299,7 @@ router.get('/category/:category', async (req, res) => {
   }
 });
 
-// GET posts by tag
+// GET posts by tag (API)
 router.get('/tag/:tag', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -192,7 +332,7 @@ router.get('/tag/:tag', async (req, res) => {
   }
 });
 
-// GET popular posts
+// GET popular posts (API)
 router.get('/popular/posts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 5;
@@ -219,7 +359,7 @@ router.get('/popular/posts', async (req, res) => {
   }
 });
 
-// GET related posts by postId
+// GET related posts by postId (API)
 router.get('/related/:postId', async (req, res) => {
   try {
     const currentPost = await Post.findById(req.params.postId);
@@ -290,7 +430,7 @@ router.get('/related/:postId', async (req, res) => {
   }
 });
 
-// GET related posts by slug
+// GET related posts by slug (API)
 router.get('/related/slug/:slug', async (req, res) => {
   try {
     const currentPost = await Post.findOne({ slug: req.params.slug });
@@ -354,7 +494,7 @@ router.get('/related/slug/:slug', async (req, res) => {
   }
 });
 
-// CREATE new post with enhanced features
+// CREATE new post with enhanced features (API)
 router.post('/', async (req, res) => {
   try {
     const { 
@@ -397,7 +537,6 @@ router.post('/', async (req, res) => {
     // Calculate read time if not provided
     const calculatedReadTime = readTime || Math.max(1, Math.round(content.split(/\s+/).length / 200));
 
-    // ✅ UPDATED: Use environment variables for site URLs
     const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
     const blogUrl = process.env.BLOG_URL || 'https://wilsonmuita.com';
 
@@ -455,7 +594,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE post
+// UPDATE post (API)
 router.put('/:id', async (req, res) => {
   try {
     const post = await Post.findByIdAndUpdate(
@@ -482,7 +621,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE post
+// DELETE post (API)
 router.delete('/:id', async (req, res) => {
   try {
     const post = await Post.findByIdAndDelete(req.params.id);
@@ -497,7 +636,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// TRACK post view
+// TRACK post view (API)
 router.post('/:id/view', async (req, res) => {
   try {
     const post = await Post.findByIdAndUpdate(
@@ -519,7 +658,7 @@ router.post('/:id/view', async (req, res) => {
   }
 });
 
-// SEARCH posts
+// SEARCH posts (API)
 router.get('/search/:query', async (req, res) => {
   try {
     const query = req.params.query;
@@ -563,7 +702,7 @@ router.get('/search/:query', async (req, res) => {
   }
 });
 
-// ✅ UPDATED: PING search engines function with new domain
+// PING search engines function
 async function pingSearchEngines(slug) {
   try {
     const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';

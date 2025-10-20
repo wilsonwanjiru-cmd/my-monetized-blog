@@ -48,7 +48,7 @@ app.use(express.urlencoded({ extended: true }));
 // Use ETag middleware for conditional requests
 app.use(etagMiddleware);
 
-// Set view engine for OG tags, AMP, and dynamic sitemaps
+// ✅ UPDATED: Set view engine for EJS templates (CRITICAL FOR FIXING DUPLICATE ISSUE)
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -98,6 +98,10 @@ app.get('/api/analytics/test', (req, res) => {
   });
 });
 
+// ✅ UPDATED: Mount posts routes at root level FIRST to handle blog pages
+// This is CRITICAL for fixing the duplicate content issue
+app.use('/', postsRoutes); // This will handle /blog/:slug and /blog routes
+
 // API Routes
 app.use('/api/posts', postsRoutes);
 app.use('/api/contact', contactRoutes);
@@ -131,7 +135,8 @@ app.get('/api/health', (req, res) => {
       monetization: true,
       caching: true,
       amp: true,
-      privacy: true // ✅ ADDED: Privacy policy feature
+      privacy: true, // ✅ ADDED: Privacy policy feature
+      server_rendering: true // ✅ ADDED: EJS server-side rendering
     },
     database: {
       status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
@@ -142,7 +147,8 @@ app.get('/api/health', (req, res) => {
       contact: 'active',
       newsletter: 'active',
       consent: 'active',
-      privacy: 'active' // ✅ ADDED: Privacy routes status
+      privacy: 'active', // ✅ ADDED: Privacy routes status
+      blog_pages: 'active' // ✅ ADDED: Blog page rendering
     }
   });
 });
@@ -183,7 +189,7 @@ app.use('/api/posts', (req, res, next) => {
   next();
 });
 
-// Serve frontend build (React) in production
+// ✅ UPDATED: Serve frontend build (React) in production with proper route exclusion
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/build');
   
@@ -195,14 +201,15 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // Enhanced catch-all handler for SPA routing
-  app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap).*$/, (req, res, next) => {
+  // ✅ UPDATED: Enhanced catch-all handler for SPA routing - EXCLUDE BLOG ROUTES
+  app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap|blog).*$/, (req, res, next) => {
     // This regex matches all routes EXCEPT:
     // - /api/* (API routes)
     // - /sitemap.xml
     // - /robots.txt  
     // - /rss.xml
     // - /video-sitemap.xml
+    // - /blog/* (Blog routes - now handled by Express EJS templates)
     
     console.log(`🔄 SPA Routing: Serving index.html for ${req.originalUrl}`);
     res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
@@ -402,25 +409,33 @@ app.use((req, res) => {
       path: req.originalUrl
     });
   } else {
-    // Regular web request
-    res.status(404).send(`
-      <html>
-        <head>
-          <title>404 - Page Not Found</title>
-          <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-            h1 { color: #333; }
-            a { color: #667eea; text-decoration: none; }
-            a:hover { text-decoration: underline; }
-          </style>
-        </head>
-        <body>
-          <h1>404 - Page Not Found</h1>
-          <p>The page you are looking for does not exist.</p>
-          <p><a href="/">Go to Homepage</a></p>
-        </body>
-      </html>
-    `);
+    // Regular web request - render 404 EJS template if available
+    try {
+      res.status(404).render('404', {
+        siteName: "Wilson's Blog",
+        siteUrl: process.env.SITE_URL || 'https://wilsonmuita.com'
+      });
+    } catch (e) {
+      // Fallback if 404.ejs doesn't exist yet
+      res.status(404).send(`
+        <html>
+          <head>
+            <title>404 - Page Not Found</title>
+            <style>
+              body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+              h1 { color: #333; }
+              a { color: #667eea; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
+          </head>
+          <body>
+            <h1>404 - Page Not Found</h1>
+            <p>The page you are looking for does not exist.</p>
+            <p><a href="/">Go to Homepage</a></p>
+          </body>
+        </html>
+      `);
+    }
   }
 });
 
@@ -444,9 +459,14 @@ const server = app.listen(PORT, () => {
   console.log('   - Performance: ETag support, conditional requests');
   console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
+  console.log('   - Server Rendering: EJS templates for blog pages'); // ✅ ADDED: Server rendering
   console.log('🔒 Privacy features:');
   console.log('   - ✅ Privacy Policy API endpoint added');
   console.log('   - ✅ GDPR/CCPA compliance ready');
+  console.log('📝 Blog Pages:');
+  console.log('   - ✅ /blog/:slug - Server-rendered blog posts');
+  console.log('   - ✅ /blog - Blog listing page');
+  console.log('   - ✅ /preview/:slug - Social media previews');
 });
 
 // Graceful shutdown handling
