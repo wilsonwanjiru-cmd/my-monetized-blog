@@ -53,8 +53,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "devDependencies": {
-    "@types/react-lazy-load-image-component": "^1.6.6"
   }
 }
