@@ -106,7 +106,7 @@ const Layout = ({ children, title = "Wilson's Blog", description = "Personal blo
         <footer className="footer">
           <div className="footer-content">
             <div className="footer-section">
-              <p>&copy; 2025 Wilson Muita. All rights reserved.</p>
+              
               <div className="footer-links">
                 <a href="/privacy-policy" className="footer-link">
                   Privacy Policy
@@ -121,7 +121,8 @@ const Layout = ({ children, title = "Wilson's Blog", description = "Personal blo
             </div>
             <div className="footer-section">
               <p className="footer-text">
-                Building the future of digital entrepreneurship and passive income.
+                
+                <p>&copy; 2025 Wilson Muita. All rights reserved.</p>
               </p>
             </div>
           </div>

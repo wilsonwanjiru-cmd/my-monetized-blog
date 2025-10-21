@@ -11,9 +11,6 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
-// Import components
-import Layout from './components/Layout';
-
 // Import tracking utilities
 import utmTracker from './utils/utmTracker';
 import { initHeatmapTracking } from './utils/heatmapTracker';
@@ -265,39 +262,60 @@ function App() {
         <PageViewTracker />
         
         {/* Global click handler for automatic link tracking */}
-        <div 
-          className="App" 
-          style={{ minHeight: '100vh' }}
-        >
-          <Layout>
-            <Routes>
-              {/* Home Route */}
-              <Route path="/" element={<HomePage />} />
-              
-              {/* Blog Routes - ✅ UPDATED: Changed from /post/:slug to /blog/:slug */}
-              <Route path="/blog" element={<BlogListPage />} />
-              <Route path="/blog/:slug" element={<BlogPost />} />
-              
-              {/* Other Routes */}
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/contact" element={<ContactPage />} />
-              
-              {/* ✅ ADDED: Privacy Policy Route */}
-              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-              
-              {/* 404 fallback */}
-              <Route path="*" element={
-                <div style={{ padding: '2rem', textAlign: 'center' }}>
-                  <h1>404 - Page Not Found</h1>
-                  <p>The page you're looking for doesn't exist.</p>
-                  <p>
-                    <a href="/">Go back to home</a> | 
-                    <a href="/blog"> View all blog posts</a>
-                  </p>
-                </div>
-              } />
-            </Routes>
-          </Layout>
+        <div className="App" style={{ minHeight: '100vh' }}>
+          {/* ✅ REMOVED: Layout wrapper from here to prevent duplicates */}
+          {/* Each page component now handles its own Layout wrapper */}
+          <Routes>
+            {/* Home Route */}
+            <Route path="/" element={<HomePage />} />
+            
+            {/* Blog Routes */}
+            <Route path="/blog" element={<BlogListPage />} />
+            <Route path="/blog/:slug" element={<BlogPost />} />
+            
+            {/* Other Routes */}
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            
+            {/* 404 fallback - Now with proper Layout wrapper */}
+            <Route path="*" element={
+              <div className="min-h-screen bg-gray-50 flex flex-col">
+                {/* Simple header for 404 page */}
+                <header className="bg-white shadow-sm border-b">
+                  <div className="container mx-auto px-4 py-4">
+                    <a href="/" className="text-xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
+                      Wilson's Blog
+                    </a>
+                  </div>
+                </header>
+                
+                {/* 404 content */}
+                <main className="flex-grow flex items-center justify-center">
+                  <div style={{ padding: '2rem', textAlign: 'center' }}>
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4">404 - Page Not Found</h1>
+                    <p className="text-gray-600 mb-6">The page you're looking for doesn't exist.</p>
+                    <p className="space-x-4">
+                      <a href="/" className="text-blue-600 hover:text-blue-800 font-medium">
+                        Go back to home
+                      </a> 
+                      <span className="text-gray-400">|</span>
+                      <a href="/blog" className="text-blue-600 hover:text-blue-800 font-medium">
+                        View all blog posts
+                      </a>
+                    </p>
+                  </div>
+                </main>
+                
+                {/* Simple footer for 404 page */}
+                <footer className="bg-white border-t py-6">
+                  <div className="container mx-auto px-4 text-center text-gray-600">
+                    <p>&copy; 2025 Wilson Muita. All rights reserved.</p>
+                  </div>
+                </footer>
+              </div>
+            } />
+          </Routes>
         </div>
       </Router>
     </HelmetProvider>
