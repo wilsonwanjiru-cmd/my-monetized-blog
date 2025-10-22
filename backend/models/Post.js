@@ -111,7 +111,8 @@ const PostSchema = new mongoose.Schema({
     default: '',
     validate: {
       validator: function(v) {
-        return v === '' || /^https?:\/\/.+\..+/.test(v);
+        // ✅ UPDATED: More flexible URL validation that allows empty strings
+        return v === '' || /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(v);
       },
       message: 'Canonical URL must be a valid URL'
     }
@@ -169,11 +170,23 @@ const PostSchema = new mongoose.Schema({
   video: {
     url: {
       type: String,
-      default: ''
+      default: '',
+      validate: {
+        validator: function(v) {
+          return v === '' || /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(v);
+        },
+        message: 'Video URL must be a valid URL'
+      }
     },
     thumbnail: {
       type: String,
-      default: ''
+      default: '',
+      validate: {
+        validator: function(v) {
+          return v === '' || /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(v);
+        },
+        message: 'Video thumbnail must be a valid URL'
+      }
     },
     duration: {
       type: Number,
@@ -196,7 +209,15 @@ const PostSchema = new mongoose.Schema({
   }],
   affiliateLinks: [{
     text: String,
-    url: String,
+    url: {
+      type: String,
+      validate: {
+        validator: function(v) {
+          return v === '' || /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/.test(v);
+        },
+        message: 'Affiliate URL must be a valid URL'
+      }
+    },
     product: String,
     position: Number
   }],
@@ -340,8 +361,8 @@ PostSchema.pre('save', async function(next) {
     this.twitterImage = this.featuredImage;
   }
 
-  // ✅ UPDATED: Generate canonical URL with new domain
-  if (!this.canonicalUrl && this.slug) {
+  // ✅ UPDATED: Generate canonical URL with new domain - only if not provided
+  if (!this.canonicalUrl || this.canonicalUrl === '') {
     this.canonicalUrl = `${blogUrl}/blog/${this.slug}`;
   }
 

@@ -86,7 +86,7 @@ router.post('/pageview', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Track general analytics events with consistent parameter naming
+// ✅ UPDATED: Track general analytics events with proper JSON responses
 router.post('/track', async (req, res) => {
   try {
     console.log('📊 Track event request received:', {
@@ -99,14 +99,12 @@ router.post('/track', async (req, res) => {
       eventType,
       url,
       sessionId,
-      // ✅ FIXED: Use consistent underscore naming for UTM parameters
       utm_source,
       utm_medium,
       utm_campaign,
       utm_content,
       utm_term,
       metadata,
-      // Additional fields from your existing implementation
       postId,
       elementId,
       scrollDepth,
@@ -122,17 +120,16 @@ router.post('/track', async (req, res) => {
       });
     }
 
-    const event = new AnalyticsEvent({
+    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
+    const result = await AnalyticsEvent.create({
       eventType,
       url,
       sessionId,
-      // ✅ FIXED: Use direct parameter names (no mapping needed)
       utm_source,
       utm_medium,
       utm_campaign,
       utm_content,
       utm_term,
-      // Additional tracking data
       postId,
       elementId,
       scrollDepth,
@@ -147,21 +144,20 @@ router.post('/track', async (req, res) => {
       }
     });
 
-    await event.save();
+    console.log('✅ Event tracked successfully:', result._id, eventType);
 
-    console.log('✅ Event tracked successfully:', event._id, eventType);
-
-    res.status(201).json({ 
-      success: true,
+    // ✅ UPDATED: Return proper JSON response
+    res.status(200).json({ 
+      success: true, 
       message: 'Event tracked successfully',
-      eventId: event._id 
+      eventId: result._id 
     });
   } catch (error) {
     console.error('❌ Analytics tracking error:', error);
-    res.status(500).json({
-      success: false,
+    res.status(500).json({ 
+      success: false, 
       message: 'Failed to track event',
-      error: error.message
+      error: error.message 
     });
   }
 });
@@ -192,7 +188,8 @@ router.post('/postview', async (req, res) => {
       });
     }
 
-    const event = new AnalyticsEvent({
+    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
+    const result = await AnalyticsEvent.create({
       eventType: 'post_view',
       postId,
       url: url || req.get('Referer') || 'direct',
@@ -210,14 +207,12 @@ router.post('/postview', async (req, res) => {
       }
     });
 
-    await event.save();
-
     console.log('✅ Post view tracked successfully:', postId);
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       message: 'Post view tracked successfully',
-      eventId: event._id
+      eventId: result._id
     });
   } catch (error) {
     console.error('❌ Error tracking post view:', error);
@@ -548,9 +543,10 @@ router.post('/bulk', async (req, res) => {
 
     console.log(`📊 Processing bulk events: ${events.length} events`);
 
+    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
     const savedEvents = await AnalyticsEvent.insertMany(events);
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       message: `Successfully processed ${savedEvents.length} events`,
       savedCount: savedEvents.length
