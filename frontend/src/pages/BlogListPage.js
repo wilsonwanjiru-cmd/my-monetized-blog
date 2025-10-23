@@ -79,7 +79,7 @@ const BlogListPage = () => {
       <div className="blog-list-page">
         <header className="blog-header">
           <h1>Blog Posts</h1>
-          <p>Discover the latest articles on passive income and monetization strategies</p>
+          <p>Explore expert tips and guides to build sustainable online income.</p>
           {posts.length > 0 && (
             <p className="posts-count">{posts.length} article{posts.length !== 1 ? 's' : ''} found</p>
           )}
