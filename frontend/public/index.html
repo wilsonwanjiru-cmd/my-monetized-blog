@@ -172,12 +172,6 @@
     <!-- ✅ Load runtime configuration -->
     <script src="%PUBLIC_URL%/config.js"></script>
     
-    <!-- ✅ Google AdSense Verification -->
-    <!-- Replace with your actual AdSense ID when ready -->
-    <!--
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-YOUR_ADSENSE_ID" crossorigin="anonymous"></script>
-    -->
-    
     <!-- ✅ Microsoft Clarity Heatmap & Analytics -->
     <script type="text/javascript">
       (function(c,l,a,r,i,t,y){
@@ -186,6 +180,10 @@
         y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
       })(window, document, "clarity", "script", "tmnk4u8wvm");
     </script>
+
+    <!-- ✅ Google AdSense Verification & Script -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673"
+     crossorigin="anonymous"></script>
 
     <title>Wilson Muita - Technology, Programming & Web Development Blog</title>
 
@@ -235,6 +233,35 @@
       /* Ensure no flash of unstyled content */
       .js-disabled {
         display: none;
+      }
+
+      /* AdSense Styles */
+      .ad-container {
+        margin: 30px 0;
+        text-align: center;
+        position: relative;
+      }
+
+      .ad-label {
+        font-size: 11px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 8px;
+        text-align: center;
+      }
+
+      /* Responsive ads */
+      @media (max-width: 768px) {
+        .ad-container {
+          margin: 20px 0;
+        }
+      }
+
+      /* Ensure ads don't break layout */
+      .adsbygoogle {
+        border-radius: 8px;
+        overflow: hidden;
       }
     </style>
   </head>

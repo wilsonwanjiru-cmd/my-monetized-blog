@@ -908,8 +908,108 @@ select:focus-visible {
   }
 }
 
+/* ===== ADSENSE STYLES ===== */
+.ad-container {
+  margin: 30px 0;
+  text-align: center;
+  position: relative;
+}
 
-/* wilson */
+.ad-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* Responsive ads */
+@media (max-width: 768px) {
+  .ad-container {
+    margin: 20px 0;
+  }
+}
+
+/* Ensure ads don't break layout */
+.adsbygoogle {
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 90px; /* Prevent layout shift */
+}
+
+/* Ad placeholder for loading states */
+.ad-placeholder {
+  background: #f5f5f5;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+}
+
+/* Different ad types */
+.ad-adsense {
+  background: transparent;
+}
+
+.ad-in-article {
+  margin: 40px 0;
+}
+
+.ad-affiliate {
+  margin: 30px 0;
+}
+
+.ad-native {
+  margin: 25px 0;
+}
+
+/* Ad container variations */
+.ad-container.centered {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.ad-container.sticky {
+  position: sticky;
+  top: 100px;
+  z-index: 100;
+}
+
+/* Ad break styles for blog list */
+.ad-break {
+  grid-column: 1 / -1;
+  margin: 2rem 0;
+}
+
+/* Ensure ads don't break the grid layout */
+.posts-grid .ad-container {
+  margin: 2rem 0;
+}
+
+/* Responsive adjustments for ads */
+@media (max-width: 768px) {
+  .ad-break {
+    margin: 1.5rem 0;
+  }
+  
+  .posts-grid .ad-container {
+    margin: 1.5rem 0;
+  }
+}
+
+/* Hide ads on print */
+@media print {
+  .ad-container {
+    display: none !important;
+  }
+}
+
+/* ===== BLOG LIST PAGE SPECIFIC STYLES ===== */
 .blog-list-page {
   max-width: 1200px;
   margin: 0 auto;

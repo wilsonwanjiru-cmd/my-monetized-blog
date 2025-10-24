@@ -8,10 +8,10 @@ class AdInjector {
       // Google AdSense
       adsense: `
         <div class="ad-container ad-adsense" data-type="adsense" data-ad-format="auto">
-          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673"></script>
           <ins class="adsbygoogle"
                style="display:block; text-align:center;"
-               data-ad-client="${process.env.ADSENSE_CLIENT_ID || 'YOUR-AD-CLIENT-ID'}"
+               data-ad-client="ca-pub-4047817727348673"
                data-ad-slot="${process.env.ADSENSE_SLOT_ID || 'YOUR-AD-SLOT'}"
                data-ad-format="auto"
                data-full-width-responsive="true"></ins>
@@ -39,12 +39,12 @@ class AdInjector {
       // In-Article Ad
       inarticle: `
         <div class="ad-container ad-in-article" data-type="in-article">
-          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+          <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673"></script>
           <ins class="adsbygoogle"
                style="display:block; text-align:center;"
                data-ad-format="fluid"
                data-ad-layout="in-article"
-               data-ad-client="${process.env.ADSENSE_CLIENT_ID || 'YOUR-AD-CLIENT-ID'}"
+               data-ad-client="ca-pub-4047817727348673"
                data-ad-slot="${process.env.ADSENSE_IN_ARTICLE_SLOT || 'YOUR-IN-ARTICLE-SLOT'}"></ins>
           <script>
                (adsbygoogle = window.adsbygoogle || []).push({});

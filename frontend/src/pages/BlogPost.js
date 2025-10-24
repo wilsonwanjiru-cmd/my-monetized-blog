@@ -1,14 +1,15 @@
 // frontend/src/pages/BlogPost.js
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
 import 'react-lazy-load-image-component/src/effects/blur.css';
 import Layout from '../components/Layout';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
+import AdSense, { AdUnits } from '../components/AdSense';
 import { blogAPI, trackPostView } from '../utils/api';
 import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams, getCurrentSessionId } from '../utils/utmTracker';
-import './BlogPost.css'; // Import the CSS file
+import './BlogPost.css';
 
 const BlogPost = () => {
   const { slug } = useParams();
@@ -17,6 +18,11 @@ const BlogPost = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [viewTracked, setViewTracked] = useState(false);
+  const [readingProgress, setReadingProgress] = useState(0);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [tableOfContents, setTableOfContents] = useState([]);
+  const [activeHeading, setActiveHeading] = useState('');
+  const contentRef = useRef(null);
 
   // Enhanced post fetching with error handling and analytics
   const fetchPost = useCallback(async () => {
@@ -30,7 +36,7 @@ const BlogPost = () => {
       setLoading(true);
       setError(null);
 
-      // Use centralized API with proper error handling
+      console.log(`🔄 Fetching post: ${slug}`);
       const result = await blogAPI.posts.getBySlug(slug);
       const postData = result.post;
 
@@ -50,6 +56,8 @@ const BlogPost = () => {
       setTimeout(() => {
         processContentImages(postData);
         enhanceContentLinks(postData);
+        generateTableOfContents();
+        initializeReadingProgress();
       }, 100);
 
       // Track page view after meta tags are set
@@ -58,9 +66,25 @@ const BlogPost = () => {
         trackPostViewHandler(postData);
       }, 500);
 
+      // Track successful post load
+      trackCustomEvent('post_loaded', {
+        medium: 'content',
+        campaign: 'blog_post',
+        content: 'post_loaded',
+        metadata: {
+          postId: postData._id,
+          postSlug: postData.slug,
+          postTitle: postData.title,
+          category: postData.category,
+          readTime: postData.readTime,
+          timestamp: new Date().toISOString()
+        }
+      });
+
     } catch (err) {
-      console.error('Error fetching post:', err);
-      setError(err.message || 'Failed to load blog post');
+      console.error('❌ Error fetching post:', err);
+      const errorMessage = err.message || 'Failed to load blog post. Please try again later.';
+      setError(errorMessage);
       
       // Track the error
       trackCustomEvent('post_load_error', {
@@ -69,7 +93,7 @@ const BlogPost = () => {
         content: 'fetch_error',
         metadata: {
           slug: slug,
-          error: err.message,
+          error: errorMessage,
           url: window.location.href,
           timestamp: new Date().toISOString()
         }
@@ -116,6 +140,118 @@ const BlogPost = () => {
       // Even if tracking fails, mark as tracked to avoid multiple attempts
       setViewTracked(true);
     }
+  };
+
+  // Generate table of contents from headings
+  const generateTableOfContents = () => {
+    const contentElement = document.querySelector('.post-content');
+    if (!contentElement) return;
+
+    const headings = contentElement.querySelectorAll('h2, h3');
+    const toc = [];
+
+    headings.forEach((heading, index) => {
+      const id = `section-${index + 1}`;
+      heading.id = id;
+      
+      toc.push({
+        id: id,
+        text: heading.textContent,
+        level: heading.tagName.toLowerCase(),
+        element: heading
+      });
+    });
+
+    setTableOfContents(toc);
+  };
+
+  // Initialize reading progress tracking
+  const initializeReadingProgress = () => {
+    const handleScroll = () => {
+      const contentElement = document.querySelector('.post-content');
+      if (!contentElement) return;
+
+      const contentHeight = contentElement.offsetHeight;
+      const contentTop = contentElement.offsetTop;
+      const scrollPosition = window.scrollY;
+      const windowHeight = window.innerHeight;
+
+      // Calculate reading progress
+      const progress = Math.min(100, Math.max(0, 
+        ((scrollPosition + windowHeight - contentTop) / contentHeight) * 100
+      ));
+      setReadingProgress(progress);
+
+      // Show/hide scroll to top button
+      setShowScrollTop(scrollPosition > 500);
+
+      // Update active heading in table of contents
+      updateActiveHeading();
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  };
+
+  // Update active heading in table of contents
+  const updateActiveHeading = () => {
+    const headings = tableOfContents.map(item => item.element);
+    const scrollPosition = window.scrollY + 100;
+
+    let currentActive = '';
+    
+    for (let i = headings.length - 1; i >= 0; i--) {
+      if (headings[i].offsetTop <= scrollPosition) {
+        currentActive = headings[i].id;
+        break;
+      }
+    }
+
+    setActiveHeading(currentActive);
+  };
+
+  // Scroll to section
+  const scrollToSection = (sectionId) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      const offset = 100; // Account for fixed header
+      const elementPosition = element.offsetTop - offset;
+      
+      window.scrollTo({
+        top: elementPosition,
+        behavior: 'smooth'
+      });
+
+      trackCustomEvent('toc_click', {
+        medium: 'content',
+        campaign: 'blog_post',
+        content: 'toc_navigation',
+        metadata: {
+          postId: post?._id,
+          sectionId: sectionId,
+          sectionText: tableOfContents.find(item => item.id === sectionId)?.text,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
+  };
+
+  // Scroll to top
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+
+    trackCustomEvent('scroll_to_top', {
+      medium: 'content',
+      campaign: 'blog_post',
+      content: 'scroll_top',
+      metadata: {
+        postId: post?._id,
+        timestamp: new Date().toISOString()
+      }
+    });
   };
 
   // Enhanced meta tags update
@@ -381,6 +517,9 @@ const BlogPost = () => {
       case 'facebook':
         shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${postUrl}`;
         break;
+      case 'reddit':
+        shareUrl = `https://reddit.com/submit?url=${postUrl}&title=${postTitle}`;
+        break;
       default:
         return;
     }
@@ -401,6 +540,51 @@ const BlogPost = () => {
     window.open(shareUrl, '_blank', 'width=600,height=400');
   };
 
+  // Copy URL to clipboard
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      
+      // Show feedback
+      const button = document.querySelector('.share-button.copy');
+      if (button) {
+        const originalText = button.innerHTML;
+        button.innerHTML = '✅ Copied!';
+        setTimeout(() => {
+          button.innerHTML = originalText;
+        }, 2000);
+      }
+
+      trackCustomEvent('url_copied', {
+        medium: 'content',
+        campaign: 'blog_post',
+        content: 'url_copied',
+        metadata: {
+          postId: post?._id,
+          url: window.location.href,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  // Print article
+  const printArticle = () => {
+    window.print();
+    
+    trackCustomEvent('print_article', {
+      medium: 'content',
+      campaign: 'blog_post',
+      content: 'print',
+      metadata: {
+        postId: post?._id,
+        timestamp: new Date().toISOString()
+      }
+    });
+  };
+
   // Main useEffect for component lifecycle
   useEffect(() => {
     // Initialize UTM tracking
@@ -408,6 +592,9 @@ const BlogPost = () => {
 
     // Fetch post data
     fetchPost();
+
+    // Set up scroll listeners
+    const cleanupScroll = initializeReadingProgress();
 
     // Cleanup function
     return () => {
@@ -420,34 +607,74 @@ const BlogPost = () => {
       if (existingScript) {
         existingScript.remove();
       }
+      
+      // Cleanup scroll listeners
+      if (cleanupScroll) cleanupScroll();
     };
   }, [fetchPost]);
 
-  // Loading state with enhanced skeleton UI
+  // Update active heading when table of contents changes
+  useEffect(() => {
+    updateActiveHeading();
+  }, [tableOfContents]);
+
+  // Enhanced loading state with skeleton UI
   if (loading) {
     return (
       <Layout>
-        <div className="loading-container">
-          <div className="loading-spinner"></div>
-          <p>Loading blog post...</p>
+        <div className="blog-post-container">
+          {/* Reading Progress Skeleton */}
+          <div className="reading-progress-skeleton"></div>
+          
+          {/* Featured Image Skeleton */}
+          <div className="featured-image-skeleton skeleton"></div>
+          
+          {/* Header Skeleton */}
+          <div className="post-header-skeleton">
+            <div className="skeleton skeleton-title"></div>
+            <div className="skeleton skeleton-meta"></div>
+            <div className="skeleton skeleton-tags"></div>
+          </div>
+
+          {/* Content Skeleton */}
+          <div className="post-content-skeleton">
+            {[...Array(8)].map((_, index) => (
+              <div key={index} className="skeleton skeleton-line"></div>
+            ))}
+          </div>
         </div>
       </Layout>
     );
   }
 
-  // Error state
+  // Enhanced error state
   if (error) {
     return (
       <Layout>
         <div className="error-container">
+          <div className="error-icon">⚠️</div>
           <h2>Unable to Load Article</h2>
           <p>{error}</p>
-          <button
-            onClick={() => navigate('/')}
-            className="retry-button"
-          >
-            ← Back to Home
-          </button>
+          <div className="error-actions">
+            <button
+              onClick={() => navigate('/')}
+              className="retry-button primary"
+            >
+              🏠 Back to Home
+            </button>
+            <button
+              onClick={() => navigate('/blog')}
+              className="retry-button secondary"
+            >
+              📚 Browse All Articles
+            </button>
+            <button
+              onClick={fetchPost}
+              className="retry-button tertiary"
+            >
+              🔄 Try Again
+            </button>
+          </div>
         </div>
       </Layout>
     );
@@ -458,16 +685,25 @@ const BlogPost = () => {
     return (
       <Layout>
         <div className="error-container">
+          <div className="error-icon">🔍</div>
           <h2>Article Not Found</h2>
           <p>
             The blog post you're looking for doesn't exist or may have been moved.
           </p>
-          <button
-            onClick={() => navigate('/blog')}
-            className="retry-button"
-          >
-            Browse All Articles
-          </button>
+          <div className="error-actions">
+            <button
+              onClick={() => navigate('/blog')}
+              className="retry-button primary"
+            >
+              📚 Browse All Articles
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="retry-button secondary"
+            >
+              🏠 Go Home
+            </button>
+          </div>
         </div>
       </Layout>
     );
@@ -480,6 +716,25 @@ const BlogPost = () => {
       description={post.metaDescription || post.excerpt}
     >
       <div className="blog-post-container">
+        {/* READING PROGRESS BAR */}
+        <div className="reading-progress">
+          <div 
+            className="reading-progress-bar" 
+            style={{ width: `${readingProgress}%` }}
+          ></div>
+        </div>
+
+        {/* SCROLL TO TOP BUTTON */}
+        {showScrollTop && (
+          <button 
+            className="scroll-to-top"
+            onClick={scrollToTop}
+            aria-label="Scroll to top"
+          >
+            ↑
+          </button>
+        )}
+
         {/* FEATURED IMAGE with LazyLoadImage */}
         {post.featuredImage && (
           <div className="featured-image-container">
@@ -496,22 +751,36 @@ const BlogPost = () => {
           </div>
         )}
 
+        {/* AD AFTER FEATURED IMAGE */}
+        <AdSense 
+          slot={AdUnits.IN_ARTICLE}
+          format="autorelaxed"
+          responsive={false}
+          className="ad-in-article"
+        />
+
         {/* POST HEADER */}
         <header className="post-header">
+          <div className="breadcrumb">
+            <Link to="/blog" className="breadcrumb-link">
+              ← Back to All Articles
+            </Link>
+          </div>
+
           <h1 className="post-title">
             {post.title}
           </h1>
 
           <div className="post-meta">
             <span className="post-meta-item">
-              <span>👤</span>
+              <span className="meta-icon">👤</span>
               By {post.author || 'Wilson Muita'}
             </span>
             {post.publishedAt && (
               <>
-                <span>•</span>
+                <span className="meta-separator">•</span>
                 <span className="post-meta-item">
-                  <span>📅</span>
+                  <span className="meta-icon">📅</span>
                   {new Date(post.publishedAt).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -520,16 +789,16 @@ const BlogPost = () => {
                 </span>
               </>
             )}
-            <span>•</span>
+            <span className="meta-separator">•</span>
             <span className="post-meta-item">
-              <span>⏱️</span>
+              <span className="meta-icon">⏱️</span>
               {post.readTime || 5} min read
             </span>
             {post.views !== undefined && (
               <>
-                <span>•</span>
+                <span className="meta-separator">•</span>
                 <span className="post-meta-item">
-                  <span>👁️</span>
+                  <span className="meta-icon">👁️</span>
                   {post.views.toLocaleString()} views
                 </span>
               </>
@@ -555,35 +824,127 @@ const BlogPost = () => {
 
           {/* SOCIAL SHARING */}
           <div className="social-sharing">
+            <span className="share-label">Share this article:</span>
             <button
               onClick={() => handleSocialShare('twitter')}
               className="social-button twitter"
+              aria-label="Share on Twitter"
             >
-              <span>🐦</span>
+              <span className="social-icon">🐦</span>
               Twitter
             </button>
             <button
               onClick={() => handleSocialShare('linkedin')}
               className="social-button linkedin"
+              aria-label="Share on LinkedIn"
             >
-              <span>💼</span>
+              <span className="social-icon">💼</span>
               LinkedIn
             </button>
             <button
               onClick={() => handleSocialShare('facebook')}
               className="social-button facebook"
+              aria-label="Share on Facebook"
             >
-              <span>📘</span>
+              <span className="social-icon">📘</span>
               Facebook
+            </button>
+            <button
+              onClick={() => handleSocialShare('reddit')}
+              className="social-button reddit"
+              aria-label="Share on Reddit"
+            >
+              <span className="social-icon">🤖</span>
+              Reddit
+            </button>
+            <button
+              onClick={copyToClipboard}
+              className="social-button copy"
+              aria-label="Copy URL to clipboard"
+            >
+              <span className="social-icon">📋</span>
+              Copy URL
+            </button>
+            <button
+              onClick={printArticle}
+              className="social-button print"
+              aria-label="Print article"
+            >
+              <span className="social-icon">🖨️</span>
+              Print
             </button>
           </div>
         </header>
 
-        {/* POST CONTENT with enhanced responsive styles */}
+        {/* TABLE OF CONTENTS */}
+        {tableOfContents.length > 0 && (
+          <aside className="table-of-contents">
+            <h3 className="toc-title">📑 Table of Contents</h3>
+            <nav className="toc-nav">
+              {tableOfContents.map((item) => (
+                <a
+                  key={item.id}
+                  href={`#${item.id}`}
+                  className={`toc-link ${item.level} ${activeHeading === item.id ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection(item.id);
+                  }}
+                >
+                  {item.text}
+                </a>
+              ))}
+            </nav>
+          </aside>
+        )}
+
+        {/* AD BEFORE CONTENT */}
+        <AdSense 
+          slot={AdUnits.HEADER}
+          format="fluid"
+          layout="in-article"
+          className="ad-before-content"
+        />
+
+        {/* POST CONTENT */}
         <section 
+          ref={contentRef}
           className="post-content"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
+
+        {/* AD AFTER CONTENT */}
+        <AdSense 
+          slot={AdUnits.FOOTER}
+          format="auto"
+          responsive={true}
+          className="ad-after-content"
+        />
+
+        {/* AUTHOR BIO */}
+        <section className="author-bio">
+          <div className="author-avatar">
+            <img 
+              src="/default-og-image.jpg" 
+              alt="Wilson Muita"
+              onError={(e) => {
+                e.target.src = '/default-og-image.jpg';
+              }}
+            />
+          </div>
+          <div className="author-info">
+            <h3>About Wilson Muita</h3>
+            <p>
+              Technology enthusiast and web developer passionate about creating amazing digital experiences. 
+              I write about React, Node.js, JavaScript, and modern web development practices.
+            </p>
+            <div className="author-links">
+              <Link to="/about" className="author-link">
+                Learn More About Me →
+              </Link>
+            </div>
+          </div>
+        </section>
 
         {/* NEWSLETTER SIGNUP SECTION */}
         <section className="newsletter-section">
@@ -596,6 +957,14 @@ const BlogPost = () => {
           </div>
           <NewsletterSignup source="blog_post" location="post_bottom" />
         </section>
+
+        {/* AD BEFORE RELATED POSTS */}
+        <AdSense 
+          slot={AdUnits.BETWEEN_POSTS}
+          format="auto"
+          responsive={true}
+          className="ad-between-sections"
+        />
 
         {/* RELATED POSTS */}
         {post && (
