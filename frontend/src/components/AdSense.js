@@ -15,6 +15,11 @@ const AdSense = ({
   const [retryCount, setRetryCount] = useState(0);
   const maxRetries = 3;
 
+  // Check if we're in production - FIXED: Proper environment detection
+  const isProduction = process.env.NODE_ENV === 'production' || 
+                      window.location.hostname === 'wilsonmuita.com' ||
+                      window.location.hostname === 'www.wilsonmuita.com';
+
   useEffect(() => {
     const loadAd = () => {
       try {
@@ -32,7 +37,7 @@ const AdSense = ({
                 (window.adsbygoogle = window.adsbygoogle || []).push({});
                 setAdLoaded(true);
               }
-            }, 1000 * (retryCount + 1)); // Exponential backoff
+            }, 1000 * (retryCount + 1));
           } else {
             setAdError(true);
             console.error('❌ Failed to load AdSense after multiple retries');
@@ -55,8 +60,8 @@ const AdSense = ({
     return () => clearTimeout(timer);
   }, [slot, format, responsive, retryCount]);
 
-  // Enhanced development placeholder with better styling
-  if (process.env.NODE_ENV !== 'production' && adError) {
+  // Show placeholder only in development mode - FIXED: Use isProduction check
+  if (!isProduction && adError) {
     return (
       <div className={`ad-container ad-placeholder ${className}`}>
         <div style={{ 
@@ -107,8 +112,8 @@ const AdSense = ({
     );
   }
 
-  // Show loading state in development
-  if (process.env.NODE_ENV !== 'production' && !adLoaded && !adError) {
+  // Show loading state in development only
+  if (!isProduction && !adLoaded && !adError) {
     return (
       <div className={`ad-container ad-loading ${className}`}>
         <div style={{ 
@@ -134,6 +139,7 @@ const AdSense = ({
     );
   }
 
+  // In production, only show the actual ad or nothing
   return (
     <div className={`ad-container ${className}`}>
       <ins
@@ -209,23 +215,6 @@ export const AdUnits = {
   
   // Between posts ad - Your new between-posts ad slot
   BETWEEN_POSTS: '6583059564'
-};
-
-// Helper function to get ad unit names for debugging
-export const getAdUnitName = (slotId) => {
-  const entries = Object.entries(AdUnits);
-  const entry = entries.find(([key, value]) => value === slotId);
-  return entry ? entry[0] : 'Unknown';
-};
-
-// Default props for better IDE support and documentation
-AdSense.defaultProps = {
-  format: 'auto',
-  responsive: true,
-  className: '',
-  layout: '',
-  layoutKey: '',
-  adStyle: {}
 };
 
 export default AdSense;
