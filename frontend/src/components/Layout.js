@@ -204,9 +204,7 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
               <p className="footer-text">
                 &copy; 2025 Wilson Muita. All rights reserved.
               </p>
-              <p className="footer-subtext">
-                Technology, Programming & Web Development Insights
-              </p>
+              
             </div>
           </div>
         </footer>
