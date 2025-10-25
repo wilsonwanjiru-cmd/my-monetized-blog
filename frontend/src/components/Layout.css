@@ -517,7 +517,7 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* ===== RESPONSIVE DESIGN ===== */
+/* ===== ENHANCED RESPONSIVE DESIGN ===== */
 
 /* Large Tablets and Small Desktops (1024px and below) */
 @media (max-width: 1024px) {
@@ -530,8 +530,9 @@ body {
   .sidebar {
     width: 100%;
     position: static;
-    order: -1;
+    order: -1; /* Move sidebar above content on mobile */
     max-height: none;
+    margin-bottom: var(--space-xl);
   }
   
   .sidebar-sticky {
@@ -542,10 +543,20 @@ body {
   
   .main-content {
     padding: var(--space-xl);
+    width: 100%;
   }
   
   .sidebar-widget {
     margin-bottom: 0;
+  }
+
+  /* Ensure ads are properly responsive */
+  .sidebar-ad,
+  .sidebar-ad-secondary {
+    width: 100%;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 
@@ -591,6 +602,15 @@ body {
   .footer-link {
     font-size: var(--font-size-sm);
   }
+
+  /* Optimize sidebar widget layout for tablets */
+  .sidebar-widget h3 {
+    font-size: var(--font-size-base);
+  }
+  
+  .sidebar-widget p {
+    font-size: var(--font-size-sm);
+  }
 }
 
 /* Mobile Devices (480px and below) */
@@ -608,6 +628,11 @@ body {
   .main-content {
     padding: var(--space-md);
     border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+  }
+  
+  .main-content::before {
+    height: 3px;
   }
   
   .ad-container {
@@ -625,14 +650,26 @@ body {
   .footer-links {
     flex-direction: column;
     gap: var(--space-md);
+    align-items: center;
   }
   
   .footer-link {
     padding: var(--space-xs) 0;
+    font-size: var(--font-size-sm);
   }
   
   .sidebar-tags {
     justify-content: center;
+  }
+
+  /* Optimize for small mobile screens */
+  .sidebar-sticky {
+    gap: var(--space-sm);
+  }
+  
+  .sidebar-link {
+    padding: var(--space-sm) var(--space-md);
+    font-size: var(--font-size-xs);
   }
 }
 
@@ -660,6 +697,16 @@ body {
   
   .footer-section p {
     font-size: var(--font-size-sm);
+  }
+
+  .footer-text,
+  .footer-subtext {
+    font-size: var(--font-size-sm);
+  }
+
+  /* Ensure very small screens still look good */
+  .sidebar-sticky {
+    gap: var(--space-xs);
   }
 }
 
@@ -771,6 +818,13 @@ body {
   .ad-container {
     background: var(--background-card);
   }
+
+  /* Dark mode specific adjustments for mobile */
+  @media (max-width: 768px) {
+    .main-content {
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+  }
 }
 
 /* ===== PRINT STYLES ===== */
@@ -786,16 +840,24 @@ body {
     border: none;
     padding: 0;
     margin: 0;
+    background: white;
+    color: black;
   }
   
   .layout-container {
     flex-direction: column;
     padding: 0;
     margin: 0;
+    max-width: none;
   }
   
   .layout {
     background: white;
+  }
+
+  /* Ensure good print readability */
+  .main-content::before {
+    display: none;
   }
 }
 
@@ -907,3 +969,37 @@ body {
 .sidebar-sticky > *:nth-child(3) { animation-delay: 0.3s; }
 .sidebar-sticky > *:nth-child(4) { animation-delay: 0.4s; }
 .sidebar-sticky > *:nth-child(5) { animation-delay: 0.5s; }
+
+/* ===== MOBILE-SPECIFIC ENHANCEMENTS ===== */
+@media (max-width: 768px) {
+  /* Improve touch targets for mobile */
+  .sidebar-link,
+  .sidebar-tag,
+  .footer-link {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Prevent horizontal scrolling */
+  .layout {
+    overflow-x: hidden;
+  }
+  
+  /* Better spacing for mobile content */
+  .main-content {
+    line-height: 1.6;
+  }
+}
+
+/* ===== LARGE DESKTOP ENHANCEMENTS ===== */
+@media (min-width: 1440px) {
+  .layout-container {
+    max-width: 1400px;
+  }
+  
+  .sidebar {
+    width: 380px;
+  }
+}

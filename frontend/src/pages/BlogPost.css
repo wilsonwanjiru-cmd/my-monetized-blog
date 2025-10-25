@@ -52,9 +52,10 @@
 
 /* ===== BASE STYLES ===== */
 .blog-post-container {
-  max-width: 800px; /* Reduced from 1200px for better readability */
-  margin: 0 auto;
-  padding: var(--space-xl);
+  /* REMOVED fixed max-width to work with Layout component */
+  width: 100%;
+  margin: 0;
+  padding: 0;
   min-height: 80vh;
   background: var(--background-white);
   line-height: 1.7;
@@ -118,7 +119,7 @@
 .featured-image {
   width: 100%;
   height: auto;
-  max-height: 400px; /* Reduced for better proportion */
+  max-height: 400px;
   object-fit: cover;
   display: block;
 }
@@ -335,6 +336,18 @@
   font-size: var(--font-size-lg);
   line-height: 1.8;
   margin: var(--space-2xl) 0;
+  width: 100%;
+}
+
+/* Ensure images in post content are responsive */
+.post-content img {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+  margin: var(--space-xl) auto;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
 }
 
 /* Headings */
@@ -373,17 +386,6 @@
   color: var(--text-gray);
   background: var(--background-light);
   border-radius: 0 8px 8px 0;
-}
-
-/* Images */
-.post-content img {
-  max-width: 100% !important;
-  height: auto !important;
-  display: block;
-  margin: var(--space-xl) auto;
-  border-radius: 12px;
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--border-light);
 }
 
 /* Code blocks */
@@ -633,8 +635,8 @@
 
 /* ===== RESPONSIVE DESIGN ===== */
 
-/* Tablets */
-@media (max-width: 768px) {
+/* Tablets and below (1024px and below) - Align with Layout.css */
+@media (max-width: 1024px) {
   .blog-post-container {
     padding: var(--space-lg);
   }
@@ -689,8 +691,8 @@
   }
 }
 
-/* Mobile Devices */
-@media (max-width: 480px) {
+/* Mobile Devices (768px and below) */
+@media (max-width: 768px) {
   .blog-post-container {
     padding: var(--space-md);
   }
@@ -754,8 +756,12 @@
   }
 }
 
-/* Small Mobile Devices */
-@media (max-width: 360px) {
+/* Small Mobile Devices (480px and below) */
+@media (max-width: 480px) {
+  .blog-post-container {
+    padding: var(--space-sm);
+  }
+  
   .post-title {
     font-size: var(--font-size-lg);
   }
@@ -778,6 +784,15 @@
   
   .social-sharing {
     gap: var(--space-xs);
+  }
+  
+  .author-bio {
+    padding: var(--space-md);
+  }
+  
+  .author-avatar {
+    width: 50px;
+    height: 50px;
   }
 }
 
