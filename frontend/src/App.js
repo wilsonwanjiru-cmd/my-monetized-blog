@@ -10,6 +10,7 @@ import BlogListPage from './pages/BlogListPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import Disclaimer from './pages/Disclaimer'; // NEW: Import Disclaimer page
 
 // Import tracking utilities
 import utmTracker from './utils/utmTracker';
@@ -273,10 +274,11 @@ function App() {
             <Route path="/blog" element={<BlogListPage />} />
             <Route path="/blog/:slug" element={<BlogPost />} />
             
-            {/* Other Routes */}
+            {/* Essential Pages for AdSense Compliance */}
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/disclaimer" element={<Disclaimer />} /> {/* NEW: Disclaimer route */}
             
             {/* 404 fallback - Now with proper Layout wrapper */}
             <Route path="*" element={
@@ -311,6 +313,17 @@ function App() {
                 <footer className="bg-white border-t py-6">
                   <div className="container mx-auto px-4 text-center text-gray-600">
                     <p>&copy; 2025 Wilson Muita. All rights reserved.</p>
+                    <div className="mt-2 space-x-4">
+                      <a href="/privacy-policy" className="text-blue-600 hover:text-blue-800 text-sm">
+                        Privacy Policy
+                      </a>
+                      <a href="/disclaimer" className="text-blue-600 hover:text-blue-800 text-sm">
+                        Disclaimer
+                      </a>
+                      <a href="/contact" className="text-blue-600 hover:text-blue-800 text-sm">
+                        Contact
+                      </a>
+                    </div>
                   </div>
                 </footer>
               </div>

@@ -1,11 +1,18 @@
 // frontend/src/components/Layout.js
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
+import { useLocation } from 'react-router-dom'; // NEW: Import useLocation for route detection
 import Navbar from './Navbar';
 import AdSense, { AdUnits } from './AdSense'; // UPDATED IMPORT - now importing AdUnits
 import './Layout.css';
 
 const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blog", description = "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more." }) => {
+  const location = useLocation(); // NEW: Get current route
+  
+  // NEW: Define routes where we don't want to show ads (AdSense policy compliance)
+  const noAdRoutes = ['/privacy-policy', '/disclaimer'];
+  const shouldShowAds = !noAdRoutes.includes(location.pathname);
+
   return (
     <>
       <Helmet>
@@ -108,86 +115,94 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
             {children}
           </main>
           
-          {/* SIDEBAR WITH ADSENSE ADS */}
-          <aside className="sidebar">
-            <div className="sidebar-sticky">
-              {/* Primary Sidebar Ad - Using your actual sidebar ad slot */}
-              <AdSense 
-                slot={AdUnits.SIDEBAR}
-                format="auto"
-                responsive={true}
-                className="sidebar-ad"
-                adStyle={{ 
-                  width: '300px',
-                  height: '600px',
-                  margin: '0 auto'
-                }}
-              />
-              
-              {/* About Me Widget */}
-              <div className="sidebar-widget">
-                <h3>👨‍💻 About Me</h3>
-                <p>Welcome to my technology blog! I'm Wilson Muita, a passionate web developer sharing insights on programming, modern web technologies, and software development best practices.</p>
-                <a href="/about" className="sidebar-link">
-                  Learn More →
-                </a>
-              </div>
-              
-              {/* Popular Topics Widget */}
-              <div className="sidebar-widget">
-                <h3>🚀 Popular Topics</h3>
-                <div className="sidebar-tags">
-                  <span className="sidebar-tag">React</span>
-                  <span className="sidebar-tag">Node.js</span>
-                  <span className="sidebar-tag">JavaScript</span>
-                  <span className="sidebar-tag">Web Development</span>
-                  <span className="sidebar-tag">Programming</span>
-                  <span className="sidebar-tag">Technology</span>
-                </div>
-              </div>
-              
-              {/* Secondary Sidebar Ad */}
-              <div className="sidebar-widget">
+          {/* SIDEBAR WITH ADSENSE ADS - Conditionally rendered */}
+          {shouldShowAds && (
+            <aside className="sidebar">
+              <div className="sidebar-sticky">
+                {/* Primary Sidebar Ad - Using your actual sidebar ad slot */}
                 <AdSense 
                   slot={AdUnits.SIDEBAR}
                   format="auto"
                   responsive={true}
-                  className="sidebar-ad-secondary"
+                  className="sidebar-ad"
                   adStyle={{ 
                     width: '300px',
-                    height: '250px',
+                    height: '600px',
                     margin: '0 auto'
                   }}
                 />
+                
+                {/* About Me Widget */}
+                <div className="sidebar-widget">
+                  <h3>👨‍💻 About Me</h3>
+                  <p>Welcome to my technology blog! I'm Wilson Muita, a passionate web developer sharing insights on programming, modern web technologies, and software development best practices.</p>
+                  <a href="/about" className="sidebar-link">
+                    Learn More →
+                  </a>
+                </div>
+                
+                {/* Popular Topics Widget */}
+                <div className="sidebar-widget">
+                  <h3>🚀 Popular Topics</h3>
+                  <div className="sidebar-tags">
+                    <span className="sidebar-tag">React</span>
+                    <span className="sidebar-tag">Node.js</span>
+                    <span className="sidebar-tag">JavaScript</span>
+                    <span className="sidebar-tag">Web Development</span>
+                    <span className="sidebar-tag">Programming</span>
+                    <span className="sidebar-tag">Technology</span>
+                  </div>
+                </div>
+                
+                {/* Secondary Sidebar Ad */}
+                <div className="sidebar-widget">
+                  <AdSense 
+                    slot={AdUnits.SIDEBAR}
+                    format="auto"
+                    responsive={true}
+                    className="sidebar-ad-secondary"
+                    adStyle={{ 
+                      width: '300px',
+                      height: '250px',
+                      margin: '0 auto'
+                    }}
+                  />
+                </div>
+                
+                {/* Newsletter Widget */}
+                <div className="sidebar-widget">
+                  <h3>📧 Newsletter</h3>
+                  <p>Get the latest programming tutorials and tech insights delivered to your inbox. No spam, unsubscribe anytime.</p>
+                  <a href="/contact" className="sidebar-link">
+                    Subscribe Now →
+                  </a>
+                </div>
               </div>
-              
-              {/* Newsletter Widget */}
-              <div className="sidebar-widget">
-                <h3>📧 Newsletter</h3>
-                <p>Get the latest programming tutorials and tech insights delivered to your inbox. No spam, unsubscribe anytime.</p>
-                <a href="/contact" className="sidebar-link">
-                  Subscribe Now →
-                </a>
-              </div>
-            </div>
-          </aside>
+            </aside>
+          )}
         </div>
         
-        {/* FOOTER WITH ADSENSE AD */}
+        {/* FOOTER WITH ADSENSE AD - Conditionally rendered */}
         <footer className="footer">
-          {/* Footer Ad - Using your actual footer ad slot */}
-          <AdSense 
-            slot={AdUnits.FOOTER}
-            format="auto"
-            responsive={true}
-            className="footer-ad"
-          />
+          {/* Footer Ad - Conditionally shown */}
+          {shouldShowAds && (
+            <AdSense 
+              slot={AdUnits.FOOTER}
+              format="auto"
+              responsive={true}
+              className="footer-ad"
+            />
+          )}
           
           <div className="footer-content">
             <div className="footer-section">
               <div className="footer-links">
+                {/* UPDATED: Added Disclaimer link */}
                 <a href="/privacy-policy" className="footer-link">
                   Privacy Policy
+                </a>
+                <a href="/disclaimer" className="footer-link">
+                  Disclaimer
                 </a>
                 <a href="/contact" className="footer-link">
                   Contact
