@@ -10,11 +10,14 @@ import BlogListPage from './pages/BlogListPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import Disclaimer from './pages/Disclaimer'; // NEW: Import Disclaimer page
+import Disclaimer from './pages/Disclaimer';
 
 // Import tracking utilities
 import utmTracker from './utils/utmTracker';
 import { initHeatmapTracking } from './utils/heatmapTracker';
+
+// NEW: Import ConsentManager helper for global consent management
+import { consentHelper } from './components/AdSense';
 
 // Component to handle page view tracking
 const PageViewTracker = () => {
@@ -31,7 +34,10 @@ const PageViewTracker = () => {
         metadata: {
           title: document.title,
           referrer: document.referrer,
-          previousPath: sessionStorage.getItem('previous_path') || ''
+          previousPath: sessionStorage.getItem('previous_path') || '',
+          // NEW: Add consent status to page views
+          consentStatus: consentHelper.getConsent() || 'not_set',
+          isEEAUser: consentHelper.isEEAUser()
         }
       };
 
@@ -100,7 +106,9 @@ const trackEvent = async (eventType, metadata = {}) => {
     userAgent: navigator.userAgent,
     screenResolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
     viewport: `${window.innerWidth}x${window.innerHeight}`,
-    language: navigator.language
+    language: navigator.language,
+    // NEW: Include consent status in all events
+    consentStatus: consentHelper.getConsent() || 'not_set'
   };
 
   // Always log events in development for debugging
@@ -162,6 +170,14 @@ const handleGlobalClick = (event) => {
       id: target.id
     });
   }
+
+  // NEW: Track consent-related interactions
+  if (target.closest('.consent-btn') || target.closest('.manage-consent-btn')) {
+    trackEvent('consent_interaction', {
+      element: target.className || target.textContent,
+      action: 'consent_click'
+    });
+  }
   
   // Track external link clicks
   if (target.tagName === 'A' && target.href) {
@@ -220,6 +236,23 @@ const setupErrorTracking = () => {
   }
 };
 
+// NEW: Initialize Google CMP if available
+const initializeGoogleCMP = () => {
+  // Check if Google Funding Choices is available
+  if (window.googlefc && window.googlefc.controlled) {
+    console.log('✅ Google Funding Choices CMP detected');
+    
+    // Listen for consent changes from Google CMP
+    window.googlefc.controlled.push(() => {
+      const granted = window.googlefc.controlled.getConsent();
+      consentHelper.setConsent(granted);
+      console.log('🔄 Google CMP consent updated:', granted);
+    });
+  } else {
+    console.log('ℹ️ Using custom consent manager');
+  }
+};
+
 function App() {
   useEffect(() => {
     // Initialize all tracking systems
@@ -237,6 +270,9 @@ function App() {
       });
     }
     
+    // NEW: Initialize Google CMP
+    initializeGoogleCMP();
+    
     // Setup error and performance tracking
     setupErrorTracking();
     
@@ -244,7 +280,10 @@ function App() {
     trackEvent('app_loaded', {
       environment: process.env.NODE_ENV,
       reactVersion: React.version,
-      userAgent: navigator.userAgent
+      userAgent: navigator.userAgent,
+      // NEW: Include CMP status
+      cmpAvailable: !!(window.googlefc && window.googlefc.controlled),
+      initialConsent: consentHelper.getConsent() || 'not_set'
     });
 
     // Add global click listener
@@ -264,8 +303,6 @@ function App() {
         
         {/* Global click handler for automatic link tracking */}
         <div className="App" style={{ minHeight: '100vh' }}>
-          {/* ✅ REMOVED: Layout wrapper from here to prevent duplicates */}
-          {/* Each page component now handles its own Layout wrapper */}
           <Routes>
             {/* Home Route */}
             <Route path="/" element={<HomePage />} />
@@ -278,7 +315,7 @@ function App() {
             <Route path="/about" element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-            <Route path="/disclaimer" element={<Disclaimer />} /> {/* NEW: Disclaimer route */}
+            <Route path="/disclaimer" element={<Disclaimer />} />
             
             {/* 404 fallback - Now with proper Layout wrapper */}
             <Route path="*" element={

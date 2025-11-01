@@ -1,0 +1,500 @@
+/* Consent Manager - Modern & Responsive Design */
+.consent-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9998;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.consent-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  z-index: 9999;
+  animation: slideUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.consent-content {
+  padding: 24px;
+  color: #2d3748;
+}
+
+/* Header */
+.consent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+}
+
+.consent-icon {
+  font-size: 24px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.consent-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a202c;
+  flex: 1;
+}
+
+.consent-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #718096;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.consent-close:hover {
+  background: #f7fafc;
+  color: #2d3748;
+}
+
+/* Body */
+.consent-body {
+  margin-bottom: 24px;
+}
+
+.consent-body p {
+  margin: 0 0 20px 0;
+  line-height: 1.6;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.consent-body a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.consent-body a:hover {
+  text-decoration: underline;
+}
+
+/* Features Grid */
+.consent-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.feature-icon {
+  font-size: 16px;
+}
+
+/* Settings */
+.consent-settings {
+  space-y: 16px;
+}
+
+.setting-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.setting-item:hover {
+  background: #edf2f7;
+}
+
+.setting-item.setting-required {
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+}
+
+.setting-info {
+  flex: 1;
+}
+
+.setting-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.setting-info p {
+  margin: 0;
+  font-size: 13px;
+  color: #718096;
+  line-height: 1.5;
+}
+
+/* Toggle Switch */
+.setting-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.setting-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #cbd5e0;
+  border-radius: 24px;
+  transition: all 0.3s ease;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+input:checked + .toggle-slider {
+  background: #667eea;
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(20px);
+}
+
+input:disabled + .toggle-slider {
+  background: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Buttons */
+.consent-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.consent-actions.detailed-actions {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.action-group {
+  display: flex;
+  gap: 12px;
+}
+
+.consent-btn {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  justify-content: center;
+  min-width: 120px;
+}
+
+.consent-btn-primary {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.3);
+}
+
+.consent-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+}
+
+.consent-btn-secondary {
+  background: #718096;
+  color: white;
+}
+
+.consent-btn-secondary:hover {
+  background: #4a5568;
+}
+
+.consent-btn-tertiary {
+  background: transparent;
+  color: #667eea;
+  border: 1px solid #cbd5e0;
+}
+
+.consent-btn-tertiary:hover {
+  background: #f7fafc;
+  border-color: #667eea;
+}
+
+.consent-btn-outline {
+  background: transparent;
+  color: #718096;
+  border: 1px solid #cbd5e0;
+}
+
+.consent-btn-outline:hover {
+  background: #f7fafc;
+  color: #4a5568;
+}
+
+.btn-icon {
+  font-size: 16px;
+}
+
+/* Footer */
+.consent-footer {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 16px;
+}
+
+.consent-footer a {
+  color: #718096;
+  text-decoration: none;
+  font-size: 12px;
+  transition: color 0.2s ease;
+}
+
+.consent-footer a:hover {
+  color: #667eea;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .consent-banner {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: none;
+    border-radius: 16px 16px 0 0;
+    transform: none;
+    animation: slideUpMobile 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .consent-content {
+    padding: 20px;
+  }
+
+  .consent-actions {
+    flex-direction: column;
+  }
+
+  .consent-actions.detailed-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .action-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .consent-btn {
+    flex: 1;
+    min-width: auto;
+  }
+
+  .consent-features {
+    grid-template-columns: 1fr;
+  }
+
+  .setting-item {
+    flex-direction: column;
+    gap: 12px;
+    text-align: left;
+  }
+
+  .setting-toggle {
+    align-self: flex-start;
+  }
+
+  .consent-footer {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .consent-content {
+    padding: 16px;
+  }
+
+  .consent-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .consent-header h3 {
+    text-align: center;
+  }
+
+  .consent-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+  }
+}
+
+@keyframes slideUpMobile {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .consent-banner {
+    background: #2d3748;
+    color: #e2e8f0;
+  }
+
+  .consent-header h3 {
+    color: #f7fafc;
+  }
+
+  .consent-body p {
+    color: #cbd5e0;
+  }
+
+  .feature-item {
+    background: #4a5568;
+    color: #e2e8f0;
+  }
+
+  .setting-item {
+    background: #4a5568;
+  }
+
+  .setting-item:hover {
+    background: #718096;
+  }
+
+  .setting-item.setting-required {
+    background: #22543d;
+    border-color: #38a169;
+  }
+
+  .setting-info h4 {
+    color: #f7fafc;
+  }
+
+  .consent-btn-tertiary,
+  .consent-btn-outline {
+    background: transparent;
+    color: #cbd5e0;
+    border-color: #4a5568;
+  }
+
+  .consent-btn-tertiary:hover,
+  .consent-btn-outline:hover {
+    background: #4a5568;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .consent-banner,
+  .consent-backdrop {
+    animation: none;
+  }
+  
+  .consent-btn,
+  .toggle-slider,
+  .setting-item {
+    transition: none;
+  }
+}

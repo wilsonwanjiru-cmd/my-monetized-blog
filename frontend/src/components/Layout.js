@@ -1,17 +1,26 @@
 // frontend/src/components/Layout.js
 import React from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useLocation } from 'react-router-dom'; // NEW: Import useLocation for route detection
+import { useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
-import AdSense, { AdUnits } from './AdSense'; // UPDATED IMPORT - now importing AdUnits
+import AdSense, { AdUnits } from './AdSense';
+import ConsentManager from './ConsentManager'; // NEW: Import ConsentManager
 import './Layout.css';
 
-const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blog", description = "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more." }) => {
-  const location = useLocation(); // NEW: Get current route
+const Layout = ({ 
+  children, 
+  title = "Wilson Muita - Technology & Programming Blog", 
+  description = "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more.",
+  noSidebar = false // NEW: Optional prop to hide sidebar
+}) => {
+  const location = useLocation();
   
-  // NEW: Define routes where we don't want to show ads (AdSense policy compliance)
+  // Define routes where we don't want to show ads (AdSense policy compliance)
   const noAdRoutes = ['/privacy-policy', '/disclaimer'];
   const shouldShowAds = !noAdRoutes.includes(location.pathname);
+
+  // NEW: Check if current page is blog post for better ad placement
+  const isBlogPost = location.pathname.startsWith('/blog/') && location.pathname !== '/blog';
 
   return (
     <>
@@ -56,6 +65,10 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
         <meta name="author" content="Wilson Muita" />
         <meta name="keywords" content="technology, programming, web development, react, node.js, javascript, tutorials, software engineering, coding" />
         
+        {/* NEW: GDPR Compliance Meta Tags */}
+        <meta name="gdpr-notice" content="This site uses cookies for analytics and personalized ads. Manage your preferences in our consent manager." />
+        <meta name="consent-management" content="google-cmp" />
+        
         {/* Structured Data */}
         <script type="application/ld+json">
           {JSON.stringify({
@@ -97,6 +110,11 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
         <link rel="preconnect" href="https://www.google-analytics.com" />
         <link rel="preconnect" href="https://www.googletagmanager.com" />
         
+        {/* NEW: Preconnect for AdSense and CMP */}
+        <link rel="preconnect" href="https://pagead2.googlesyndication.com" />
+        <link rel="preconnect" href="https://googleads.g.doubleclick.net" />
+        <link rel="preconnect" href="https://fundingchoicesmessages.google.com" />
+        
         {/* Theme Color for Mobile */}
         <meta name="theme-color" content="#667eea" />
         
@@ -109,14 +127,30 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
       <div className="layout">
         <Navbar />
         
+        {/* NEW: Header Ad with consent-aware rendering */}
+        {shouldShowAds && !isBlogPost && (
+          <div className="header-ad-container">
+            <AdSense 
+              slot={AdUnits.HEADER}
+              format="auto"
+              responsive={true}
+              className="header-ad"
+              adStyle={{ 
+                margin: '10px auto',
+                maxWidth: '728px'
+              }}
+            />
+          </div>
+        )}
+        
         {/* MAIN CONTENT WITH SIDEBAR LAYOUT */}
-        <div className="layout-container">
+        <div className={`layout-container ${noSidebar ? 'no-sidebar' : ''}`}>
           <main className="main-content">
             {children}
           </main>
           
           {/* SIDEBAR WITH ADSENSE ADS - Conditionally rendered */}
-          {shouldShowAds && (
+          {shouldShowAds && !noSidebar && (
             <aside className="sidebar">
               <div className="sidebar-sticky">
                 {/* Primary Sidebar Ad - Using your actual sidebar ad slot */}
@@ -169,18 +203,29 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
                   />
                 </div>
                 
-                {/* Newsletter Widget */}
-                <div className="sidebar-widget">
-                  <h3>📧 Newsletter</h3>
-                  <p>Get the latest programming tutorials and tech insights delivered to your inbox. No spam, unsubscribe anytime.</p>
-                  <a href="/contact" className="sidebar-link">
-                    Subscribe Now →
-                  </a>
+                {/* NEW: Privacy & Consent Widget */}
+                <div className="sidebar-widget privacy-widget">
+                  <h3>🔒 Privacy First</h3>
+                  <p>We respect your privacy and comply with GDPR. You can manage your cookie preferences at any time.</p>
+                  <button 
+                    className="sidebar-link manage-consent-btn"
+                    onClick={() => {
+                      // Trigger consent manager to show
+                      localStorage.removeItem('adsense_consent');
+                      window.dispatchEvent(new Event('consentChanged'));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  >
+                    Manage Privacy Settings →
+                  </button>
                 </div>
               </div>
             </aside>
           )}
         </div>
+        
+        {/* NEW: Consent Manager Component */}
+        <ConsentManager />
         
         {/* FOOTER WITH ADSENSE AD - Conditionally rendered */}
         <footer className="footer">
@@ -197,7 +242,6 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
           <div className="footer-content">
             <div className="footer-section">
               <div className="footer-links">
-                {/* UPDATED: Added Disclaimer link */}
                 <a href="/privacy-policy" className="footer-link">
                   Privacy Policy
                 </a>
@@ -213,13 +257,33 @@ const Layout = ({ children, title = "Wilson Muita - Technology & Programming Blo
                 <a href="/blog" className="footer-link">
                   Blog
                 </a>
+                {/* NEW: Consent Management Link */}
+                <button 
+                  className="footer-link manage-consent-footer"
+                  onClick={() => {
+                    localStorage.removeItem('adsense_consent');
+                    window.dispatchEvent(new Event('consentChanged'));
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  Cookie Preferences
+                </button>
               </div>
             </div>
             <div className="footer-section">
               <p className="footer-text">
                 &copy; 2025 Wilson Muita. All rights reserved.
               </p>
-              
+              <p className="footer-text-small">
+                {/* NEW: GDPR compliance notice */}
+                This site is GDPR compliant and uses Google CMP for consent management.
+              </p>
             </div>
           </div>
         </footer>
