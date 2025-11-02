@@ -290,12 +290,12 @@ const ConsentManager = () => {
             <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
               Privacy Policy
             </a>
-            <a href="/cookie-policy" target="_blank" rel="noopener noreferrer">
+            {/* <a href="/cookie-policy" target="_blank" rel="noopener noreferrer">
               Cookie Policy
             </a>
             <a href="/terms" target="_blank" rel="noopener noreferrer">
               Terms of Service
-            </a>
+            </a> */}
           </div>
         </div>
       </div>
