@@ -272,7 +272,7 @@ const Layout = ({
                     textDecoration: 'underline'
                   }}
                 >
-                  Cookie Preferences
+                  
                 </button>
               </div>
             </div>
