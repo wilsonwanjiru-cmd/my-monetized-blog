@@ -204,7 +204,7 @@ const Layout = ({
                 </div>
                 
                 {/* NEW: Privacy & Consent Widget */}
-                {/* <div className="sidebar-widget privacy-widget">
+                <div className="sidebar-widget privacy-widget">
                   <h3>🔒 Privacy First</h3>
                   <p>We respect your privacy and comply with GDPR. You can manage your cookie preferences at any time.</p>
                   <button 
@@ -218,7 +218,7 @@ const Layout = ({
                   >
                     Manage Privacy Settings →
                   </button>
-                </div> */}
+                </div>
               </div>
             </aside>
           )}
@@ -272,7 +272,7 @@ const Layout = ({
                     textDecoration: 'underline'
                   }}
                 >
-                  {/* Cookie Preferences */}
+                  Cookie Preferences
                 </button>
               </div>
             </div>

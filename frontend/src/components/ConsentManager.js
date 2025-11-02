@@ -1,5 +1,4 @@
 // frontend/src/components/ConsentManager.js
-// frontend/src/components/ConsentManager.js
 import React, { useEffect, useState } from 'react';
 import './ConsentManager.css';
 
@@ -23,6 +22,24 @@ const ConsentManager = () => {
       // Small delay for better UX
       setTimeout(() => setShowConsent(true), 1000);
     }
+  }, []);
+
+  // NEW: Listen for show consent events from Layout buttons
+  useEffect(() => {
+    const handleShowConsent = () => {
+      console.log('🎯 Consent manager triggered via button click');
+      setShowConsent(true);
+      setShowDetailed(false);
+    };
+
+    // Listen for both event types that might be dispatched
+    window.addEventListener('consentChanged', handleShowConsent);
+    window.addEventListener('showConsentManager', handleShowConsent);
+
+    return () => {
+      window.removeEventListener('consentChanged', handleShowConsent);
+      window.removeEventListener('showConsentManager', handleShowConsent);
+    };
   }, []);
 
   const checkIfNeedsConsent = () => {
@@ -90,7 +107,7 @@ const ConsentManager = () => {
     }));
   };
 
-  // Don't show if user has already made a choice
+  // Don't show if user has already made a choice and no button was clicked
   if (!showConsent) return null;
 
   return (
