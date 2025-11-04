@@ -1,69 +1,102 @@
 // backend/routes/analytics.js
+// backend/routes/analytics.js
 const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 
-// ✅ ADDED: Test endpoint to verify analytics routes are working
+// ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Analytics routes are working correctly!',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      pageview: 'POST /api/analytics/pageview',
-      track: 'POST /api/analytics/track',
-      postview: 'POST /api/analytics/postview',
-      stats: 'GET /api/analytics/stats',
-      dashboard: 'GET /api/analytics/dashboard',
-      health: 'GET /api/analytics/health'
-    }
-  });
+  try {
+    res.json({
+      success: true,
+      message: 'Analytics routes are working correctly!',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      endpoints: {
+        pageview: 'POST /api/analytics/pageview',
+        event: 'POST /api/analytics/event',
+        stats: 'GET /api/analytics/stats',
+        dashboard: 'GET /api/analytics/dashboard',
+        health: 'GET /api/analytics/health',
+        status: 'GET /api/analytics/status'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Test endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Test endpoint failed',
+      error: error.message
+    });
+  }
 });
 
-// ✅ FIXED: Track pageview events with consistent parameter naming
+// ✅ ENHANCED: Track pageview events with comprehensive error handling
 router.post('/pageview', async (req, res) => {
   try {
     console.log('📊 Pageview request received:', {
-      url: req.body.url,
-      sessionId: req.body.sessionId,
-      utm_source: req.body.utm_source
+      page: req.body.page,
+      sessionId: req.body.sessionId?.substring(0, 20) + '...', // Log partial session ID
+      timestamp: req.body.timestamp
     });
 
     const {
-      eventType = 'pageview',
-      url,
+      type = 'pageview',
       sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      metadata
+      page,
+      title,
+      referrer,
+      userAgent,
+      timestamp,
+      screenResolution,
+      language,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmContent,
+      utmTerm
     } = req.body;
 
     // Validate required fields
-    if (!url || !sessionId) {
+    if (!sessionId || !page) {
+      console.warn('⚠️ Pageview validation failed: Missing sessionId or page');
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: url and sessionId are required'
+        message: 'Missing required fields: sessionId and page are required',
+        required: ['sessionId', 'page'],
+        received: Object.keys(req.body)
       });
     }
 
+    // Validate sessionId format
+    if (!sessionId.startsWith('session_')) {
+      console.warn('⚠️ Invalid session ID format:', sessionId);
+    }
+
     const event = new AnalyticsEvent({
-      eventType,
-      url,
+      type,
       sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
+      page,
+      title,
+      referrer: referrer || '',
+      userAgent: userAgent || req.get('User-Agent'),
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      screenResolution,
+      language,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmContent,
+      utmTerm,
       metadata: {
-        ...metadata,
+        ip: getClientIP(req),
+        source: 'analytics-pageview',
         userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        timestamp: new Date(),
-        source: 'analytics-route'
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin'),
+          host: req.get('Host')
+        }
       }
     });
 
@@ -71,103 +104,111 @@ router.post('/pageview', async (req, res) => {
 
     console.log('✅ Pageview tracked successfully:', event._id);
 
+    // Always return valid JSON response
     res.status(201).json({
       success: true,
       message: 'Page view tracked successfully',
-      eventId: event._id
+      eventId: event._id,
+      timestamp: event.timestamp
     });
+
   } catch (error) {
     console.error('❌ Error tracking page view:', error);
+    
+    // Return proper JSON even on error
     res.status(500).json({
       success: false,
       message: 'Failed to track page view',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ UPDATED: Track general analytics events with proper JSON responses
-router.post('/track', async (req, res) => {
+// ✅ ENHANCED: Track general analytics events with robust error handling
+router.post('/event', async (req, res) => {
   try {
-    console.log('📊 Track event request received:', {
-      eventType: req.body.eventType,
-      sessionId: req.body.sessionId,
-      url: req.body.url
+    console.log('📊 Event request received:', {
+      eventName: req.body.eventName,
+      sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      page: req.body.page
     });
 
     const {
-      eventType,
-      url,
+      type = 'event',
       sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      metadata,
-      postId,
-      elementId,
-      scrollDepth,
-      viewportSize,
-      coordinates
+      page,
+      eventName,
+      eventData,
+      userAgent,
+      timestamp,
+      utmSource,
+      utmMedium,
+      utmCampaign
     } = req.body;
 
     // Validate required fields
-    if (!eventType || !sessionId) {
+    if (!sessionId || !eventName) {
+      console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: eventType and sessionId are required'
+        message: 'Missing required fields: sessionId and eventName are required',
+        required: ['sessionId', 'eventName'],
+        received: Object.keys(req.body)
       });
     }
 
-    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
-    const result = await AnalyticsEvent.create({
-      eventType,
-      url,
+    const event = new AnalyticsEvent({
+      type,
       sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      postId,
-      elementId,
-      scrollDepth,
-      viewportSize,
-      coordinates,
+      page: page || req.get('Referer') || 'unknown',
+      eventName,
+      eventData: eventData || {},
+      userAgent: userAgent || req.get('User-Agent'),
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      utmSource,
+      utmMedium,
+      utmCampaign,
       metadata: {
-        ...metadata,
+        ip: getClientIP(req),
+        source: 'analytics-event',
         userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        timestamp: new Date(),
-        source: 'analytics-route'
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin')
+        }
       }
     });
 
-    console.log('✅ Event tracked successfully:', result._id, eventType);
+    await event.save();
 
-    // ✅ UPDATED: Return proper JSON response
-    res.status(200).json({ 
-      success: true, 
+    console.log('✅ Event tracked successfully:', eventName, event._id);
+
+    // Always return valid JSON
+    res.json({
+      success: true,
       message: 'Event tracked successfully',
-      eventId: result._id 
+      eventId: event._id,
+      eventName: eventName,
+      timestamp: event.timestamp
     });
+
   } catch (error) {
-    console.error('❌ Analytics tracking error:', error);
-    res.status(500).json({ 
-      success: false, 
+    console.error('❌ Analytics event tracking error:', error);
+    
+    res.status(500).json({
+      success: false,
       message: 'Failed to track event',
-      error: error.message 
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ FIXED: Track post-specific views
+// ✅ ENHANCED: Track post-specific views with improved validation
 router.post('/postview', async (req, res) => {
   try {
     console.log('📊 Postview request received:', {
       postId: req.body.postId,
-      title: req.body.title
+      title: req.body.title?.substring(0, 50) + '...'
     });
 
     const {
@@ -178,7 +219,8 @@ router.post('/postview', async (req, res) => {
       readTime,
       url,
       referrer,
-      timestamp
+      timestamp,
+      sessionId
     } = req.body;
 
     if (!postId) {
@@ -188,84 +230,113 @@ router.post('/postview', async (req, res) => {
       });
     }
 
-    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
-    const result = await AnalyticsEvent.create({
-      eventType: 'post_view',
-      postId,
-      url: url || req.get('Referer') || 'direct',
-      sessionId: `post_${postId}_${Date.now()}`,
-      metadata: {
-        postTitle: title,
-        postSlug: slug,
+    const event = new AnalyticsEvent({
+      type: 'post_view',
+      sessionId: sessionId || `post_${postId}_${Date.now()}`,
+      page: url || req.get('Referer') || 'direct',
+      eventName: 'post_view',
+      eventData: {
+        postId,
+        title,
+        slug,
         category,
         readTime,
-        referrer: referrer || 'direct',
+        referrer: referrer || 'direct'
+      },
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      metadata: {
+        ip: getClientIP(req),
+        source: 'analytics-postview',
         userAgent: req.get('User-Agent'),
-        ip: req.ip || req.connection.remoteAddress,
-        timestamp: timestamp || new Date(),
-        source: 'analytics-route'
+        postId: postId
       }
     });
 
+    await event.save();
+
     console.log('✅ Post view tracked successfully:', postId);
 
-    res.status(200).json({
+    res.json({
       success: true,
       message: 'Post view tracked successfully',
-      eventId: result._id
+      eventId: event._id,
+      postId: postId
     });
+
   } catch (error) {
     console.error('❌ Error tracking post view:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to track post view',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ FIXED: Get basic analytics stats
+// ✅ ENHANCED: Get basic analytics stats with error handling
 router.get('/stats', async (req, res) => {
   try {
-    const { days = 30 } = req.query;
+    const { days = 30, type } = req.query;
+    const daysInt = parseInt(days);
     
+    if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid days parameter. Must be between 1 and 365.'
+      });
+    }
+
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(days));
+    startDate.setDate(startDate.getDate() - daysInt);
+    startDate.setHours(0, 0, 0, 0);
 
     console.log('📊 Fetching analytics stats for last', days, 'days');
 
-    // Total events
-    const totalEvents = await AnalyticsEvent.countDocuments({
+    // Build match query
+    const matchQuery = {
       timestamp: { $gte: startDate }
-    });
+    };
+
+    if (type) {
+      matchQuery.type = type;
+    }
+
+    // Total events
+    const totalEvents = await AnalyticsEvent.countDocuments(matchQuery);
 
     // Events by type
     const eventsByType = await AnalyticsEvent.aggregate([
-      {
-        $match: {
-          timestamp: { $gte: startDate }
-        }
-      },
+      { $match: matchQuery },
       {
         $group: {
-          _id: '$eventType',
-          count: { $sum: 1 }
+          _id: '$type',
+          count: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
         }
       },
       {
-        $sort: { count: -1 }
-      }
+        $project: {
+          count: 1,
+          uniqueSessions: { $size: '$uniqueSessions' }
+        }
+      },
+      { $sort: { count: -1 } }
     ]);
 
     // Unique sessions
-    const uniqueSessions = await AnalyticsEvent.distinct('sessionId', {
-      timestamp: { $gte: startDate }
-    }).then(sessions => sessions.length);
+    const uniqueSessions = await AnalyticsEvent.distinct('sessionId', matchQuery);
+    const uniqueSessionsCount = uniqueSessions.length;
 
-    // Page views (specific event type)
+    // Page views (specific type)
     const pageViews = await AnalyticsEvent.countDocuments({
-      eventType: 'pageview',
-      timestamp: { $gte: startDate }
+      ...matchQuery,
+      type: 'pageview'
+    });
+
+    // Recent activity (last 24 hours)
+    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentActivity = await AnalyticsEvent.countDocuments({
+      timestamp: { $gte: last24Hours }
     });
 
     console.log('✅ Analytics stats fetched successfully');
@@ -275,32 +346,44 @@ router.get('/stats', async (req, res) => {
       data: {
         totalEvents,
         pageViews,
-        uniqueSessions,
+        uniqueSessions: uniqueSessionsCount,
         eventsByType,
+        recentActivity24h: recentActivity,
         period: `${days} days`,
         dateRange: {
           start: startDate,
           end: new Date()
         }
-      }
+      },
+      timestamp: new Date().toISOString()
     });
+
   } catch (error) {
     console.error('❌ Error fetching analytics stats:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics stats',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ FIXED: Get comprehensive analytics for dashboard
+// ✅ ENHANCED: Get comprehensive analytics for dashboard
 router.get('/dashboard', async (req, res) => {
   try {
     const { days = 30 } = req.query;
+    const daysInt = parseInt(days);
     
+    if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid days parameter. Must be between 1 and 365.'
+      });
+    }
+
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(days));
+    startDate.setDate(startDate.getDate() - daysInt);
+    startDate.setHours(0, 0, 0, 0);
 
     console.log('📊 Fetching dashboard analytics for last', days, 'days');
 
@@ -313,56 +396,74 @@ router.get('/dashboard', async (req, res) => {
       },
       {
         $group: {
-          _id: '$eventType',
+          _id: '$type',
           count: { $sum: 1 },
           uniqueSessions: { $addToSet: '$sessionId' }
         }
       },
       {
         $project: {
+          eventType: '$_id',
           count: 1,
-          uniqueSessionCount: { $size: '$uniqueSessions' }
+          uniqueSessions: { $size: '$uniqueSessions' }
         }
-      }
+      },
+      { $sort: { count: -1 } }
     ]);
 
-    // Top posts by engagement
-    const topPosts = await AnalyticsEvent.aggregate([
+    // Daily trend
+    const dailyTrend = await AnalyticsEvent.aggregate([
       {
         $match: {
-          eventType: { $in: ['click', 'scroll', 'conversion', 'post_view'] },
-          postId: { $exists: true, $ne: null },
           timestamp: { $gte: startDate }
         }
       },
       {
         $group: {
-          _id: '$postId',
-          totalEngagements: { $sum: 1 },
-          clickCount: {
-            $sum: { $cond: [{ $eq: ['$eventType', 'click'] }, 1, 0] }
+          _id: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: '$timestamp'
+            }
           },
-          scrollCount: {
-            $sum: { $cond: [{ $eq: ['$eventType', 'scroll'] }, 1, 0] }
-          },
-          conversionCount: {
-            $sum: { $cond: [{ $eq: ['$eventType', 'conversion'] }, 1, 0] }
-          },
-          viewCount: {
-            $sum: { $cond: [{ $eq: ['$eventType', 'post_view'] }, 1, 0] }
-          }
+          count: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
         }
       },
-      { $sort: { totalEngagements: -1 } },
-      { $limit: 10 },
       {
-        $lookup: {
-          from: 'posts',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'post'
+        $project: {
+          date: '$_id',
+          count: 1,
+          uniqueSessions: { $size: '$uniqueSessions' }
         }
-      }
+      },
+      { $sort: { date: 1 } }
+    ]);
+
+    // Top pages
+    const topPages = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          type: 'pageview',
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$page',
+          count: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
+        }
+      },
+      {
+        $project: {
+          page: '$_id',
+          views: '$count',
+          uniqueVisitors: { $size: '$uniqueSessions' }
+        }
+      },
+      { $sort: { views: -1 } },
+      { $limit: 10 }
     ]);
 
     // UTM campaign performance
@@ -370,38 +471,35 @@ router.get('/dashboard', async (req, res) => {
       {
         $match: {
           timestamp: { $gte: startDate },
-          utm_source: { $exists: true, $ne: null }
+          utmSource: { $exists: true, $ne: null }
         }
       },
       {
         $group: {
           _id: {
-            source: '$utm_source',
-            medium: '$utm_medium',
-            campaign: '$utm_campaign'
+            source: '$utmSource',
+            medium: '$utmMedium',
+            campaign: '$utmCampaign'
           },
           totalEvents: { $sum: 1 },
-          uniqueUsers: { $addToSet: '$sessionId' },
-          conversions: {
-            $sum: { $cond: [{ $eq: ['$eventType', 'conversion'] }, 1, 0] }
+          uniqueSessions: { $addToSet: '$sessionId' },
+          pageViews: {
+            $sum: { $cond: [{ $eq: ['$type', 'pageview'] }, 1, 0] }
           }
         }
       },
       {
         $project: {
+          source: '$_id.source',
+          medium: '$_id.medium',
+          campaign: '$_id.campaign',
           totalEvents: 1,
-          uniqueUsers: { $size: '$uniqueUsers' },
-          conversions: 1,
-          conversionRate: {
-            $cond: [
-              { $eq: [{ $size: '$uniqueUsers' }, 0] },
-              0,
-              { $divide: ['$conversions', { $size: '$uniqueUsers' }] }
-            ]
-          }
+          uniqueSessions: { $size: '$uniqueSessions' },
+          pageViews: 1
         }
       },
-      { $sort: { totalEvents: -1 } }
+      { $sort: { totalEvents: -1 } },
+      { $limit: 20 }
     ]);
 
     console.log('✅ Dashboard analytics fetched successfully');
@@ -409,40 +507,57 @@ router.get('/dashboard', async (req, res) => {
     res.json({
       success: true,
       period: `${days} days`,
-      eventSummary,
-      topPosts,
-      campaignPerformance,
       summary: {
         totalEvents: eventSummary.reduce((sum, item) => sum + item.count, 0),
-        totalCampaigns: campaignPerformance.length,
-        totalPosts: topPosts.length
-      }
+        totalUniqueSessions: [...new Set(eventSummary.flatMap(item => item.uniqueSessions))].length,
+        topPagesCount: topPages.length,
+        campaignsTracked: campaignPerformance.length
+      },
+      eventSummary,
+      dailyTrend,
+      topPages,
+      campaignPerformance,
+      timestamp: new Date().toISOString()
     });
+
   } catch (error) {
     console.error('❌ Dashboard analytics error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard analytics',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ FIXED: Get UTM parameters report
+// ✅ ENHANCED: Get UTM parameters report
 router.get('/utm-report', async (req, res) => {
   try {
     const { source, medium, campaign, days = 30 } = req.query;
+    const daysInt = parseInt(days);
     
+    if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid days parameter. Must be between 1 and 365.'
+      });
+    }
+
+    const startDate = new Date(Date.now() - (daysInt * 24 * 60 * 60 * 1000));
+
     let matchQuery = {
-      timestamp: { 
-        $gte: new Date(Date.now() - (parseInt(days) * 24 * 60 * 60 * 1000))
-      }
+      timestamp: { $gte: startDate },
+      $or: [
+        { utmSource: { $exists: true, $ne: null } },
+        { utmMedium: { $exists: true, $ne: null } },
+        { utmCampaign: { $exists: true, $ne: null } }
+      ]
     };
 
     // Add filters if provided
-    if (source) matchQuery.utm_source = source;
-    if (medium) matchQuery.utm_medium = medium;
-    if (campaign) matchQuery.utm_campaign = campaign;
+    if (source) matchQuery.utmSource = source;
+    if (medium) matchQuery.utmMedium = medium;
+    if (campaign) matchQuery.utmCampaign = campaign;
 
     console.log('📊 Fetching UTM report with filters:', { source, medium, campaign, days });
 
@@ -451,30 +566,37 @@ router.get('/utm-report', async (req, res) => {
       {
         $group: {
           _id: {
-            source: '$utm_source',
-            medium: '$utm_medium', 
-            campaign: '$utm_campaign',
-            content: '$utm_content',
-            term: '$utm_term'
+            source: '$utmSource',
+            medium: '$utmMedium',
+            campaign: '$utmCampaign',
+            content: '$utmContent',
+            term: '$utmTerm'
           },
           firstSeen: { $min: '$timestamp' },
           lastSeen: { $max: '$timestamp' },
           totalEvents: { $sum: 1 },
           uniqueSessions: { $addToSet: '$sessionId' },
-          eventTypes: { $addToSet: '$eventType' }
+          pageViews: {
+            $sum: { $cond: [{ $eq: ['$type', 'pageview'] }, 1, 0] }
+          }
         }
       },
       {
         $project: {
-          _id: 1,
+          source: '$_id.source',
+          medium: '$_id.medium',
+          campaign: '$_id.campaign',
+          content: '$_id.content',
+          term: '$_id.term',
           firstSeen: 1,
           lastSeen: 1,
           totalEvents: 1,
           uniqueSessions: { $size: '$uniqueSessions' },
-          eventTypes: 1
+          pageViews: 1
         }
       },
-      { $sort: { totalEvents: -1 } }
+      { $sort: { totalEvents: -1 } },
+      { $limit: 100 }
     ]);
 
     console.log('✅ UTM report fetched successfully');
@@ -482,54 +604,74 @@ router.get('/utm-report', async (req, res) => {
     res.json({
       success: true,
       report: utmReport,
-      filters: { source, medium, campaign, days }
+      filters: { source, medium, campaign, days },
+      totalResults: utmReport.length,
+      timestamp: new Date().toISOString()
     });
+
   } catch (error) {
     console.error('❌ UTM report error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch UTM report',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ FIXED: Health check for analytics API
+// ✅ ENHANCED: Health check for analytics API
 router.get('/health', async (req, res) => {
   try {
+    // Test database connection
     const eventCount = await AnalyticsEvent.countDocuments();
     const recentEvents = await AnalyticsEvent.countDocuments({
       timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     });
     
+    // Test database write capability
+    const testEvent = new AnalyticsEvent({
+      type: 'health_check',
+      sessionId: 'health_check_' + Date.now(),
+      page: '/api/analytics/health',
+      eventName: 'health_check',
+      timestamp: new Date(),
+      metadata: {
+        source: 'health-check',
+        ip: getClientIP(req)
+      }
+    });
+    
+    await testEvent.save();
+    await AnalyticsEvent.deleteOne({ _id: testEvent._id });
+
     res.json({
       success: true,
-      status: 'OK',
-      message: 'Analytics API is running',
-      eventCount,
-      recentEvents24h: recentEvents,
+      status: 'healthy',
+      message: 'Analytics API is running correctly',
+      database: {
+        connected: true,
+        totalEvents: eventCount,
+        recentEvents24h: recentEvents
+      },
       timestamp: new Date().toISOString(),
-      endpoints: [
-        'POST /api/analytics/pageview',
-        'POST /api/analytics/track',
-        'POST /api/analytics/postview',
-        'GET /api/analytics/stats',
-        'GET /api/analytics/dashboard',
-        'GET /api/analytics/utm-report'
-      ]
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: '1.0.0'
     });
+
   } catch (error) {
     console.error('❌ Analytics health check error:', error);
     res.status(500).json({
       success: false,
-      status: 'ERROR',
+      status: 'unhealthy',
       message: 'Analytics API health check failed',
-      error: error.message
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });
 
-// ✅ ADDED: Bulk events endpoint for offline sync
+// ✅ ENHANCED: Bulk events endpoint for offline sync
 router.post('/bulk', async (req, res) => {
   try {
     const { events } = req.body;
@@ -541,42 +683,160 @@ router.post('/bulk', async (req, res) => {
       });
     }
 
+    if (events.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Too many events in bulk request. Maximum 1000 events allowed.'
+      });
+    }
+
     console.log(`📊 Processing bulk events: ${events.length} events`);
 
-    // ✅ UPDATED: Use AnalyticsEvent.create for consistency
-    const savedEvents = await AnalyticsEvent.insertMany(events);
+    // Validate each event
+    const validEvents = [];
+    const errors = [];
 
-    res.status(200).json({
+    events.forEach((event, index) => {
+      if (!event.sessionId || (!event.page && !event.eventName)) {
+        errors.push(`Event ${index}: Missing required fields`);
+      } else {
+        // Add timestamp if not provided
+        if (!event.timestamp) {
+          event.timestamp = new Date();
+        }
+        // Add metadata
+        event.metadata = {
+          ...event.metadata,
+          source: 'bulk-upload',
+          ip: getClientIP(req),
+          bulkIndex: index
+        };
+        validEvents.push(event);
+      }
+    });
+
+    if (errors.length > 0 && validEvents.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'All events failed validation',
+        errors: errors
+      });
+    }
+
+    const savedEvents = await AnalyticsEvent.insertMany(validEvents, { ordered: false });
+
+    res.json({
       success: true,
       message: `Successfully processed ${savedEvents.length} events`,
-      savedCount: savedEvents.length
+      savedCount: savedEvents.length,
+      failedCount: events.length - savedEvents.length,
+      errors: errors.length > 0 ? errors : undefined
     });
+
   } catch (error) {
     console.error('❌ Bulk events error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to process bulk events',
-      error: error.message
+      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
 });
 
-// ✅ ADDED: Endpoint to check if analytics is working
-router.get('/status', (req, res) => {
-  res.json({
-    success: true,
-    status: 'operational',
-    timestamp: new Date().toISOString(),
-    features: {
-      pageview_tracking: true,
-      event_tracking: true,
-      post_analytics: true,
-      utm_tracking: true,
-      dashboard: true,
-      bulk_operations: true
-    },
-    database: 'connected' // Assuming MongoDB is connected via mongoose
-  });
+// ✅ ENHANCED: Endpoint to check if analytics is working
+router.get('/status', async (req, res) => {
+  try {
+    const eventCount = await AnalyticsEvent.countDocuments();
+    const lastEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
+    
+    res.json({
+      success: true,
+      status: 'operational',
+      timestamp: new Date().toISOString(),
+      database: {
+        connected: true,
+        totalEvents: eventCount,
+        lastEvent: lastEvent ? lastEvent.timestamp : null
+      },
+      features: {
+        pageview_tracking: true,
+        event_tracking: true,
+        post_analytics: true,
+        utm_tracking: true,
+        dashboard: true,
+        bulk_operations: true,
+        health_checks: true
+      },
+      system: {
+        nodeVersion: process.version,
+        environment: process.env.NODE_ENV || 'development',
+        uptime: process.uptime()
+      }
+    });
+  } catch (error) {
+    console.error('❌ Status endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      status: 'degraded',
+      message: 'Analytics service status check failed',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// ✅ ADDED: Utility function to get client IP
+function getClientIP(req) {
+  try {
+    return req.ip || 
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+           'unknown';
+  } catch (error) {
+    return 'unknown';
+  }
+}
+
+// ✅ ADDED: Cleanup old events endpoint (admin only)
+router.delete('/cleanup', async (req, res) => {
+  try {
+    // Simple authentication check (you might want to enhance this)
+    const { authorization } = req.headers;
+    if (!authorization || authorization !== `Bearer ${process.env.ADMIN_TOKEN}`) {
+      return res.status(401).json({
+        success: false,
+        message: 'Unauthorized: Admin token required'
+      });
+    }
+
+    const { days = 365 } = req.query; // Default keep 1 year
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - parseInt(days));
+
+    console.log(`🧹 Cleaning up events older than ${days} days (before ${cutoffDate})`);
+
+    const result = await AnalyticsEvent.deleteMany({
+      timestamp: { $lt: cutoffDate }
+    });
+
+    console.log(`✅ Cleanup completed: Deleted ${result.deletedCount} events`);
+
+    res.json({
+      success: true,
+      message: `Successfully deleted ${result.deletedCount} events older than ${days} days`,
+      deletedCount: result.deletedCount,
+      cutoffDate: cutoffDate
+    });
+
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to cleanup old events',
+      error: error.message
+    });
+  }
 });
 
 module.exports = router;

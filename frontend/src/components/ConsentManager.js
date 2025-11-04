@@ -1,11 +1,10 @@
 // frontend/src/components/ConsentManager.js
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './ConsentManager.css';
 
 const ConsentManager = () => {
-  const [showConsent, setShowConsent] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
   const [showDetailed, setShowDetailed] = useState(false);
-  const [consentGiven, setConsentGiven] = useState(null);
   const [consentSettings, setConsentSettings] = useState({
     necessary: true, // Always required
     analytics: false,
@@ -14,34 +13,37 @@ const ConsentManager = () => {
   });
 
   useEffect(() => {
-    // Check if user needs consent (from EEA/UK)
+    // Check if user has already given consent
+    const consent = localStorage.getItem('cookieConsent');
     const needsConsent = checkIfNeedsConsent();
-    const hasConsent = localStorage.getItem('adsense_consent');
     
-    if (needsConsent && !hasConsent) {
+    console.log('🔍 Consent check:', { consent, needsConsent });
+    
+    // Show banner if no consent decision and user needs consent
+    if (!consent && needsConsent) {
       // Small delay for better UX
-      setTimeout(() => setShowConsent(true), 1000);
+      setTimeout(() => {
+        setShowBanner(true);
+        console.log('🍪 Showing consent banner');
+      }, 1500);
     }
   }, []);
 
-  // NEW: Listen for show consent events from Layout buttons
+  // Listen for show consent events from other components
   useEffect(() => {
     const handleShowConsent = () => {
       console.log('🎯 Consent manager triggered via button click');
-      setShowConsent(true);
+      setShowBanner(true);
       setShowDetailed(false);
     };
 
-    // Listen for both event types that might be dispatched
-    window.addEventListener('consentChanged', handleShowConsent);
     window.addEventListener('showConsentManager', handleShowConsent);
-
     return () => {
-      window.removeEventListener('consentChanged', handleShowConsent);
       window.removeEventListener('showConsentManager', handleShowConsent);
     };
   }, []);
 
+  // Check if user needs consent (EEA/UK users)
   const checkIfNeedsConsent = () => {
     try {
       // Method 1: Check timezone
@@ -69,84 +71,186 @@ const ConsentManager = () => {
     }
   };
 
-  const handleConsent = (choice) => {
-    localStorage.setItem('adsense_consent', choice);
+  // Handle accept all cookies
+  const acceptCookies = () => {
+    console.log('✅ Accepting all cookies');
+    
+    localStorage.setItem('cookieConsent', 'true');
+    localStorage.setItem('adsense_consent', 'granted');
     localStorage.setItem('is_eea_user', 'true');
-    setConsentGiven(choice);
-    setShowConsent(false);
+    
+    // Set all consent settings to true
+    setConsentSettings({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      personalization: true
+    });
+
+    setShowBanner(false);
     setShowDetailed(false);
     
-    // Update all AdSense components
-    window.dispatchEvent(new Event('consentChanged'));
+    // Update all components that depend on consent
+    window.dispatchEvent(new CustomEvent('consentChanged', { 
+      detail: { granted: true, source: 'accept-all' }
+    }));
     
     // Update Google CMP if available
     if (window.googlefc && window.googlefc.call) {
-      window.googlefc.call(choice === 'granted');
+      window.googlefc.call(true);
     }
 
     // Track consent decision
-    if (window.trackEvent) {
-      window.trackEvent('consent_decision', {
-        choice: choice,
+    trackConsentEvent('accepted_all');
+
+    // Reload to apply changes to ads and analytics
+    console.log('🔄 Reloading page to apply consent changes...');
+    window.location.reload();
+  };
+
+  // Handle reject non-essential cookies
+  const rejectCookies = () => {
+    console.log('❌ Rejecting non-essential cookies');
+    
+    localStorage.setItem('cookieConsent', 'false');
+    localStorage.setItem('adsense_consent', 'denied');
+    localStorage.setItem('is_eea_user', 'true');
+    
+    // Set only necessary cookies
+    setConsentSettings({
+      necessary: true,
+      analytics: false,
+      marketing: false,
+      personalization: false
+    });
+
+    setShowBanner(false);
+    setShowDetailed(false);
+    
+    // Clear any existing tracking data
+    localStorage.removeItem('analytics_session_id');
+    localStorage.removeItem('analytics_session_timestamp');
+    
+    // Update all components that depend on consent
+    window.dispatchEvent(new CustomEvent('consentChanged', { 
+      detail: { granted: false, source: 'reject-non-essential' }
+    }));
+    
+    // Update Google CMP if available
+    if (window.googlefc && window.googlefc.call) {
+      window.googlefc.call(false);
+    }
+
+    // Track consent decision
+    trackConsentEvent('rejected_non_essential');
+
+    // Reload to apply changes to ads and analytics
+    console.log('🔄 Reloading page to apply consent changes...');
+    window.location.reload();
+  };
+
+  // Handle custom settings save
+  const handleCustomSave = () => {
+    console.log('⚙️ Saving custom consent settings:', consentSettings);
+    
+    // For custom settings, consent is granted if marketing is enabled (for ads)
+    const hasMarketingConsent = consentSettings.marketing;
+    
+    localStorage.setItem('cookieConsent', hasMarketingConsent ? 'true' : 'false');
+    localStorage.setItem('adsense_consent', hasMarketingConsent ? 'granted' : 'denied');
+    localStorage.setItem('is_eea_user', 'true');
+    localStorage.setItem('consent_settings', JSON.stringify(consentSettings));
+
+    setShowBanner(false);
+    setShowDetailed(false);
+    
+    // Update all components that depend on consent
+    window.dispatchEvent(new CustomEvent('consentChanged', { 
+      detail: { 
+        granted: hasMarketingConsent, 
         settings: consentSettings,
-        source: showDetailed ? 'detailed' : 'simple'
+        source: 'custom-settings'
+      }
+    }));
+    
+    // Update Google CMP if available
+    if (window.googlefc && window.googlefc.call) {
+      window.googlefc.call(hasMarketingConsent);
+    }
+
+    // Track consent decision
+    trackConsentEvent('custom_settings', consentSettings);
+
+    // Reload to apply changes to ads and analytics
+    console.log('🔄 Reloading page to apply consent changes...');
+    window.location.reload();
+  };
+
+  // Track consent events for analytics
+  const trackConsentEvent = (action, data = {}) => {
+    if (window.trackEvent) {
+      window.trackEvent({
+        eventName: 'consent_decision',
+        eventData: {
+          action,
+          ...data,
+          userAgent: navigator.userAgent,
+          timestamp: new Date().toISOString()
+        }
       });
     }
   };
 
-  const handleDetailedSave = () => {
-    // For detailed settings, consent is granted if marketing is enabled
-    const consentChoice = consentSettings.marketing ? 'granted' : 'denied';
-    handleConsent(consentChoice);
-  };
-
+  // Toggle individual consent settings
   const toggleSetting = (setting) => {
+    if (setting === 'necessary') return; // Cannot toggle necessary cookies
+    
     setConsentSettings(prev => ({
       ...prev,
       [setting]: !prev[setting]
     }));
   };
 
-  // Don't show if user has already made a choice and no button was clicked
-  if (!showConsent) return null;
+  // Don't show if user has already made a decision
+  if (!showBanner) return null;
 
   return (
     <>
       {/* Backdrop overlay */}
-      <div className="consent-backdrop" onClick={() => setShowConsent(false)}></div>
+      <div 
+        className="consent-backdrop" 
+        onClick={() => setShowBanner(false)}
+      ></div>
       
       <div className="consent-banner">
         <div className="consent-content">
-          {/* Header */}
-          <div className="consent-header">
-            <div className="consent-icon">🍪</div>
-            <h3>Your Privacy Choices</h3>
-            <button 
-              className="consent-close"
-              onClick={() => setShowConsent(false)}
-              aria-label="Close consent banner"
-            >
-              ×
-            </button>
-          </div>
-
+          
+          {/* Simple View */}
           {!showDetailed ? (
-            /* Simple View */
             <>
+              <div className="consent-header">
+                <div className="consent-icon">🍪</div>
+                <h3>Cookie Consent</h3>
+                <button 
+                  className="consent-close"
+                  onClick={() => setShowBanner(false)}
+                  aria-label="Close consent banner"
+                >
+                  ×
+                </button>
+              </div>
+
               <div className="consent-body">
                 <p>
-                  We use cookies and similar technologies to help personalize content, 
-                  tailor and measure ads, and provide a better experience. By clicking 
-                  accept, you agree to this use as outlined in our{' '}
-                  <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
-                    Privacy Policy
-                  </a>.
+                  We use cookies to personalize content and ads, to provide social media features 
+                  and to analyze our traffic. We also share information about your use of our site 
+                  with our social media, advertising and analytics partners.
                 </p>
                 
                 <div className="consent-features">
                   <div className="feature-item">
                     <span className="feature-icon">🔒</span>
-                    <span>Secure browsing</span>
+                    <span>Essential for site function</span>
                   </div>
                   <div className="feature-item">
                     <span className="feature-icon">📊</span>
@@ -154,47 +258,69 @@ const ConsentManager = () => {
                   </div>
                   <div className="feature-item">
                     <span className="feature-icon">🎯</span>
-                    <span>Personalized content</span>
+                    <span>Personalized ads & content</span>
                   </div>
                 </div>
               </div>
 
               <div className="consent-actions">
                 <button 
+                  onClick={acceptCookies} 
                   className="consent-btn consent-btn-primary"
-                  onClick={() => handleConsent('granted')}
                 >
                   <span className="btn-icon">✅</span>
                   Accept All
                 </button>
                 
                 <button 
+                  onClick={rejectCookies} 
                   className="consent-btn consent-btn-secondary"
-                  onClick={() => handleConsent('denied')}
                 >
                   <span className="btn-icon">❌</span>
-                  Reject All
+                  Reject Non-Essential
                 </button>
                 
                 <button 
-                  className="consent-btn consent-btn-tertiary"
                   onClick={() => setShowDetailed(true)}
+                  className="consent-btn consent-btn-tertiary"
                 >
                   <span className="btn-icon">⚙️</span>
                   Customize Settings
                 </button>
               </div>
+
+              <div className="consent-footer">
+                <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>
+                <a href="/disclaimer" target="_blank" rel="noopener noreferrer">
+                  Disclaimer
+                </a>
+              </div>
             </>
           ) : (
-            /* Detailed View */
+            /* Detailed Settings View */
             <>
+              <div className="consent-header">
+                <div className="consent-icon">⚙️</div>
+                <h3>Cookie Settings</h3>
+                <button 
+                  className="consent-close"
+                  onClick={() => setShowBanner(false)}
+                  aria-label="Close consent banner"
+                >
+                  ×
+                </button>
+              </div>
+
               <div className="consent-body">
                 <p>
                   Choose how we use cookies and similar technologies to enhance your 
-                  experience. You can change these settings at any time.
+                  experience. You can change these settings at any time from our privacy policy page.
                 </p>
 
                 <div className="consent-settings">
+                  {/* Necessary Cookies - Always enabled */}
                   <div className="setting-item setting-required">
                     <div className="setting-info">
                       <h4>Essential Cookies</h4>
@@ -211,6 +337,7 @@ const ConsentManager = () => {
                     </label>
                   </div>
 
+                  {/* Analytics Cookies */}
                   <div className="setting-item">
                     <div className="setting-info">
                       <h4>Analytics Cookies</h4>
@@ -226,10 +353,11 @@ const ConsentManager = () => {
                     </label>
                   </div>
 
+                  {/* Marketing Cookies */}
                   <div className="setting-item">
                     <div className="setting-info">
                       <h4>Marketing Cookies</h4>
-                      <p>Used to deliver relevant ads and measure ad performance.</p>
+                      <p>Used to deliver relevant ads and measure ad performance. Required for AdSense.</p>
                     </div>
                     <label className="setting-toggle">
                       <input 
@@ -241,6 +369,7 @@ const ConsentManager = () => {
                     </label>
                   </div>
 
+                  {/* Personalization Cookies */}
                   <div className="setting-item">
                     <div className="setting-info">
                       <h4>Personalization Cookies</h4>
@@ -263,44 +392,95 @@ const ConsentManager = () => {
                   className="consent-btn consent-btn-secondary"
                   onClick={() => setShowDetailed(false)}
                 >
-                  ← Back
+                  ← Back to Simple View
                 </button>
                 
                 <div className="action-group">
                   <button 
                     className="consent-btn consent-btn-outline"
-                    onClick={() => handleConsent('denied')}
+                    onClick={rejectCookies}
                   >
                     Reject All
                   </button>
                   
                   <button 
                     className="consent-btn consent-btn-primary"
-                    onClick={handleDetailedSave}
+                    onClick={handleCustomSave}
                   >
                     Save Preferences
                   </button>
                 </div>
               </div>
+
+              <div className="consent-footer">
+                <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>
+                <a href="/disclaimer" target="_blank" rel="noopener noreferrer">
+                  Disclaimer
+                </a>
+              </div>
             </>
           )}
-
-          {/* Footer Links */}
-          <div className="consent-footer">
-            <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
-              Privacy Policy
-            </a>
-            {/* <a href="/cookie-policy" target="_blank" rel="noopener noreferrer">
-              Cookie Policy
-            </a>
-            <a href="/terms" target="_blank" rel="noopener noreferrer">
-              Terms of Service
-            </a> */}
-          </div>
         </div>
       </div>
     </>
   );
+};
+
+// Export helper functions for use in other components
+export const consentHelper = {
+  // Check current consent status
+  getConsent: () => {
+    return localStorage.getItem('cookieConsent') === 'true';
+  },
+
+  // Check if user needs to give consent
+  needsConsent: () => {
+    const consent = localStorage.getItem('cookieConsent');
+    return consent === null;
+  },
+
+  // Show consent manager programmatically
+  showConsentManager: () => {
+    window.dispatchEvent(new Event('showConsentManager'));
+  },
+
+  // Reset consent (for testing or user preference change)
+  resetConsent: () => {
+    localStorage.removeItem('cookieConsent');
+    localStorage.removeItem('adsense_consent');
+    localStorage.removeItem('is_eea_user');
+    localStorage.removeItem('consent_settings');
+    localStorage.removeItem('analytics_session_id');
+    localStorage.removeItem('analytics_session_timestamp');
+    
+    window.dispatchEvent(new CustomEvent('consentChanged', { 
+      detail: { granted: false, source: 'reset' }
+    }));
+    
+    console.log('🔄 Consent reset successfully');
+  },
+
+  // Get detailed consent settings
+  getConsentSettings: () => {
+    try {
+      const settings = localStorage.getItem('consent_settings');
+      return settings ? JSON.parse(settings) : {
+        necessary: true,
+        analytics: false,
+        marketing: false,
+        personalization: false
+      };
+    } catch (error) {
+      return {
+        necessary: true,
+        analytics: false,
+        marketing: false,
+        personalization: false
+      };
+    }
+  }
 };
 
 export default ConsentManager;

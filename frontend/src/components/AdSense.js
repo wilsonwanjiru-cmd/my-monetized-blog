@@ -1,5 +1,5 @@
 // frontend/src/components/AdSense.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 
 const AdSense = ({ 
   slot, 
@@ -8,66 +8,73 @@ const AdSense = ({
   className = '',
   layout = '',
   layoutKey = '',
-  adStyle = {}
+  adStyle = {},
+  fallbackContent = null
 }) => {
   const [adLoaded, setAdLoaded] = useState(false);
   const [adError, setAdError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [hasConsent, setHasConsent] = useState(null);
   const [isEEAUser, setIsEEAUser] = useState(false);
-  const maxRetries = 3;
+  const [adStatus, setAdStatus] = useState('idle'); // 'idle', 'loading', 'loaded', 'error'
+  const maxRetries = 2;
 
-  // Check if we're in production - FIXED: Proper environment detection
+  // Enhanced environment detection
   const isProduction = process.env.NODE_ENV === 'production' || 
                       window.location.hostname === 'wilsonmuita.com' ||
                       window.location.hostname === 'www.wilsonmuita.com';
 
-  // Check if user is from EEA/UK (requires consent)
-  const checkIfEEAUser = () => {
+  // Enhanced EEA user detection with multiple fallbacks
+  const checkIfEEAUser = useCallback(() => {
     try {
-      // Method 1: Check timezone (basic detection)
+      // Method 1: Check timezone
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const eeaTimezones = [
         'Europe/', 'GB', 'UK', 'London', 'Berlin', 'Paris', 'Rome', 'Madrid',
-        'Amsterdam', 'Brussels', 'Vienna', 'Zurich', 'Stockholm', 'Oslo'
+        'Amsterdam', 'Brussels', 'Vienna', 'Zurich', 'Stockholm', 'Oslo',
+        'Copenhagen', 'Helsinki', 'Dublin', 'Lisbon', 'Warsaw', 'Prague'
       ];
       
-      const isEEA = eeaTimezones.some(tz => timezone.includes(tz));
+      const isEEATimezone = eeaTimezones.some(tz => timezone.includes(tz));
       
       // Method 2: Check browser language
-      const browserLang = navigator.language || navigator.userLanguage;
-      const eeaLanguages = ['de', 'fr', 'it', 'es', 'nl', 'pl', 'sv', 'no', 'da', 'fi'];
+      const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
+      const eeaLanguages = ['de', 'fr', 'it', 'es', 'nl', 'pl', 'sv', 'no', 'da', 'fi', 'pt', 'cs', 'hu', 'ro'];
       
-      const isEEALang = eeaLanguages.some(lang => browserLang.startsWith(lang));
+      const isEEALanguage = eeaLanguages.some(lang => browserLang.startsWith(lang));
       
-      // Method 3: Check if consent was previously stored (most reliable)
-      const storedConsent = localStorage.getItem('adsense_consent');
+      // Method 3: Check stored consent preference (most reliable)
+      const storedConsent = localStorage.getItem('cookieConsent');
       const wasEEAUser = localStorage.getItem('is_eea_user') === 'true';
       
-      return isEEA || isEEALang || wasEEAUser || storedConsent !== null;
+      // Method 4: Check GDPR consent string if available
+      const hasGDPRConsent = localStorage.getItem('gdpr_consent') !== null;
+      
+      return isEEATimezone || isEEALanguage || wasEEAUser || storedConsent !== null || hasGDPRConsent;
     } catch (error) {
       console.warn('Error detecting user location:', error);
       return false;
     }
-  };
+  }, []);
 
-  // Check consent status
-  const checkConsentStatus = () => {
-    const consent = localStorage.getItem('adsense_consent');
+  // Enhanced consent status checking
+  const checkConsentStatus = useCallback(() => {
+    const consent = localStorage.getItem('cookieConsent');
     const userIsEEA = checkIfEEAUser();
     
     setIsEEAUser(userIsEEA);
     
     if (!userIsEEA) {
-      // Non-EEA users don't need consent
+      // Non-EEA users don't need explicit consent for basic ads
       setHasConsent(true);
       return true;
     }
     
-    if (consent === 'granted') {
+    // EEA users require explicit consent
+    if (consent === 'true' || consent === 'granted') {
       setHasConsent(true);
       return true;
-    } else if (consent === 'denied') {
+    } else if (consent === 'false' || consent === 'denied') {
       setHasConsent(false);
       return false;
     } else {
@@ -75,14 +82,87 @@ const AdSense = ({
       setHasConsent(null);
       return null;
     }
-  };
+  }, [checkIfEEAUser]);
 
+  // Load AdSense ad with proper error handling
+  const loadAd = useCallback(() => {
+    if (!slot) {
+      console.warn('AdSense: No slot ID provided');
+      setAdError(true);
+      return;
+    }
+
+    // Check if ads should be loaded based on consent and environment
+    if (isEEAUser && hasConsent !== true) {
+      console.log('AdSense: Skipping ad load - no consent for EEA user');
+      return;
+    }
+
+    // Don't load ads on excluded pages
+    const excludedPaths = ['/privacy', '/disclaimer', '/about'];
+    if (excludedPaths.includes(window.location.pathname)) {
+      console.log('AdSense: Skipping ad load - excluded page');
+      return;
+    }
+
+    setAdStatus('loading');
+
+    try {
+      if (window.adsbygoogle) {
+        console.log(`AdSense: Loading ad for slot ${slot}`);
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        
+        // Set a timeout to check if ad loaded successfully
+        setTimeout(() => {
+          if (!adLoaded && !adError) {
+            console.warn(`AdSense: Ad for slot ${slot} may not have loaded`);
+            if (retryCount < maxRetries) {
+              setRetryCount(prev => prev + 1);
+            } else {
+              setAdError(true);
+              setAdStatus('error');
+            }
+          }
+        }, 3000);
+        
+      } else {
+        throw new Error('AdSense script not loaded');
+      }
+    } catch (error) {
+      console.error('AdSense: Error loading ad:', error);
+      setAdError(true);
+      setAdStatus('error');
+    }
+  }, [slot, isEEAUser, hasConsent, adLoaded, adError, retryCount]);
+
+  // Handle ad loaded event
+  const handleAdLoad = useCallback(() => {
+    console.log(`AdSense: Ad loaded successfully for slot ${slot}`);
+    setAdLoaded(true);
+    setAdStatus('loaded');
+    setAdError(false);
+  }, [slot]);
+
+  // Handle ad error event
+  const handleAdError = useCallback(() => {
+    console.error(`AdSense: Ad failed to load for slot ${slot}`);
+    setAdError(true);
+    setAdStatus('error');
+    
+    if (retryCount < maxRetries) {
+      setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+      }, 2000 * (retryCount + 1));
+    }
+  }, [slot, retryCount]);
+
+  // Effect for consent management
   useEffect(() => {
-    // Check consent status on component mount
-    checkConsentStatus();
+    const consentStatus = checkConsentStatus();
     
     // Listen for consent changes from ConsentManager
     const handleConsentChange = () => {
+      console.log('AdSense: Consent change detected');
       checkConsentStatus();
     };
     
@@ -91,53 +171,39 @@ const AdSense = ({
     return () => {
       window.removeEventListener('consentChanged', handleConsentChange);
     };
-  }, []);
+  }, [checkConsentStatus]);
 
+  // Effect for ad loading
   useEffect(() => {
-    const loadAd = () => {
-      // Don't load ads if consent is denied or not given for EEA users
-      if ((isEEAUser && hasConsent === false) || (isEEAUser && hasConsent === null)) {
-        console.log('Ad loading skipped due to consent status:', { isEEAUser, hasConsent });
-        return;
-      }
-
-      try {
-        if (window.adsbygoogle) {
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
-          setAdLoaded(true);
-          console.log(`✅ AdSense ad loaded for slot: ${slot}`);
-        } else {
-          console.warn('AdSense script not loaded yet, retrying...');
-          
-          if (retryCount < maxRetries) {
-            setTimeout(() => {
-              setRetryCount(prev => prev + 1);
-              if (window.adsbygoogle) {
-                (window.adsbygoogle = window.adsbygoogle || []).push({});
-                setAdLoaded(true);
-              }
-            }, 1000 * (retryCount + 1));
-          } else {
-            setAdError(true);
-            console.error('❌ Failed to load AdSense after multiple retries');
-          }
-        }
-      } catch (err) {
-        console.error('AdSense error:', err);
-        setAdError(true);
-      }
-    };
-
     // Reset states when slot changes
     setAdLoaded(false);
     setAdError(false);
     setRetryCount(0);
+    setAdStatus('idle');
 
-    // Load ad after component mounts (if consent allows)
-    const timer = setTimeout(loadAd, 100);
+    // Load ad after a short delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      loadAd();
+    }, 500);
     
     return () => clearTimeout(timer);
-  }, [slot, format, responsive, retryCount, hasConsent, isEEAUser]);
+  }, [slot, loadAd]);
+
+  // Add event listeners for ad callbacks
+  useEffect(() => {
+    const adElement = document.querySelector(`[data-ad-slot="${slot}"]`);
+    if (adElement) {
+      adElement.addEventListener('load', handleAdLoad);
+      adElement.addEventListener('error', handleAdError);
+    }
+
+    return () => {
+      if (adElement) {
+        adElement.removeEventListener('load', handleAdLoad);
+        adElement.removeEventListener('error', handleAdError);
+      }
+    };
+  }, [slot, handleAdLoad, handleAdError]);
 
   // =======================================================================
   // RENDER LOGIC WITH CONSENT MANAGEMENT
@@ -146,8 +212,8 @@ const AdSense = ({
   // Show consent required message for EEA users without consent decision
   if (isEEAUser && hasConsent === null) {
     return (
-      <div className={`ad-container consent-required ${className}`}>
-        <div style={{ 
+      <div className={`ad-container consent-required ${className}`} data-ad-status="consent-required">
+        <div className="consent-message" style={{ 
           background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)', 
           border: '2px solid #ffc107',
           borderRadius: '12px',
@@ -155,7 +221,8 @@ const AdSense = ({
           textAlign: 'center',
           color: '#856404',
           fontSize: '14px',
-          fontFamily: 'Arial, sans-serif'
+          fontFamily: 'Arial, sans-serif',
+          margin: '10px 0'
         }}>
           <div style={{ 
             fontSize: '32px', 
@@ -174,7 +241,8 @@ const AdSense = ({
           </p>
           <p style={{ 
             marginBottom: '12px',
-            lineHeight: '1.4'
+            lineHeight: '1.4',
+            fontSize: '14px'
           }}>
             We need your consent to show personalized ads in your region.
             Please check the consent banner at the bottom of the page.
@@ -188,7 +256,15 @@ const AdSense = ({
             This message appears for visitors from the European Economic Area
           </p>
         </div>
-        <div className="ad-label">Advertisement</div>
+        <div className="ad-label" style={{ 
+          textAlign: 'center', 
+          fontSize: '11px', 
+          color: '#666',
+          marginTop: '8px',
+          fontWeight: 'bold'
+        }}>
+          Advertisement
+        </div>
       </div>
     );
   }
@@ -196,8 +272,8 @@ const AdSense = ({
   // Show consent denied message for EEA users who refused consent
   if (isEEAUser && hasConsent === false) {
     return (
-      <div className={`ad-container consent-denied ${className}`}>
-        <div style={{ 
+      <div className={`ad-container consent-denied ${className}`} data-ad-status="consent-denied">
+        <div className="consent-denied-message" style={{ 
           background: 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)', 
           border: '2px solid #dc3545',
           borderRadius: '12px',
@@ -205,7 +281,8 @@ const AdSense = ({
           textAlign: 'center',
           color: '#721c24',
           fontSize: '14px',
-          fontFamily: 'Arial, sans-serif'
+          fontFamily: 'Arial, sans-serif',
+          margin: '10px 0'
         }}>
           <div style={{ 
             fontSize: '32px', 
@@ -224,7 +301,8 @@ const AdSense = ({
           </p>
           <p style={{ 
             marginBottom: '12px',
-            lineHeight: '1.4'
+            lineHeight: '1.4',
+            fontSize: '14px'
           }}>
             You've chosen not to consent to personalized advertising.
             Thank you for your privacy preference.
@@ -238,107 +316,132 @@ const AdSense = ({
             You can change your consent in our privacy settings
           </p>
         </div>
-        <div className="ad-label">Advertisement</div>
+        <div className="ad-label" style={{ 
+          textAlign: 'center', 
+          fontSize: '11px', 
+          color: '#666',
+          marginTop: '8px',
+          fontWeight: 'bold'
+        }}>
+          Advertisement
+        </div>
       </div>
     );
   }
 
-  // Show placeholder only in development mode - FIXED: Use isProduction check
-  if (!isProduction && adError) {
+  // Show development placeholder or fallback for errors
+  if (!isProduction || adError) {
+    if (fallbackContent) {
+      return (
+        <div className={`ad-container fallback-content ${className}`}>
+          {fallbackContent}
+        </div>
+      );
+    }
+
     return (
-      <div className={`ad-container ad-placeholder ${className}`}>
+      <div className={`ad-container ${adError ? 'ad-error' : 'ad-placeholder'} ${className}`} data-ad-status={adError ? 'error' : 'placeholder'}>
         <div style={{ 
-          background: 'linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%)', 
-          border: '2px dashed #ccc',
+          background: adError ? 
+            'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)' : 
+            'linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%)', 
+          border: adError ? '2px solid #dc3545' : '2px dashed #ccc',
           borderRadius: '12px',
           padding: '30px 20px',
           textAlign: 'center',
-          color: '#555',
+          color: adError ? '#721c24' : '#555',
           fontSize: '14px',
-          fontFamily: 'Arial, sans-serif'
+          fontFamily: 'Arial, sans-serif',
+          margin: '10px 0'
         }}>
           <div style={{ 
             fontSize: '48px', 
             marginBottom: '10px',
             opacity: 0.7
           }}>
-            🎯
+            {adError ? '❌' : '🎯'}
           </div>
           <p style={{ 
             fontWeight: 'bold', 
             marginBottom: '8px',
             fontSize: '16px',
-            color: '#333'
+            color: adError ? '#721c24' : '#333'
           }}>
-            AdSense Advertisement
+            {adError ? 'Ad Failed to Load' : 'AdSense Advertisement'}
           </p>
-          <p style={{ marginBottom: '4px' }}>
-            <strong>Slot:</strong> {slot}
+          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
+            <strong>Slot:</strong> {slot || 'Not provided'}
           </p>
-          <p style={{ marginBottom: '4px' }}>
+          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
             <strong>Format:</strong> {format}
           </p>
-          <p style={{ marginBottom: '4px' }}>
-            <strong>Responsive:</strong> {responsive ? 'Yes' : 'No'}
+          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
+            <strong>Status:</strong> 
+            <span style={{ 
+              color: adError ? '#dc3545' : '#28a745',
+              fontWeight: 'bold',
+              marginLeft: '5px'
+            }}>
+              {adError ? 'Error' : 'Placeholder'}
+            </span>
           </p>
-          <p style={{ marginBottom: '4px' }}>
-            <strong>Consent:</strong> {hasConsent === true ? 'Granted' : hasConsent === false ? 'Denied' : 'Not Required'}
+          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
+            <strong>Consent:</strong> 
+            <span style={{ 
+              color: hasConsent === true ? '#28a745' : hasConsent === false ? '#dc3545' : '#6c757d',
+              fontWeight: 'bold',
+              marginLeft: '5px'
+            }}>
+              {hasConsent === true ? 'Granted' : hasConsent === false ? 'Denied' : 'Not Required'}
+            </span>
           </p>
-          <p style={{ marginBottom: '4px' }}>
-            <strong>Region:</strong> {isEEAUser ? 'EEA/UK' : 'Non-EEA'}
+          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
+            <strong>Region:</strong> 
+            <span style={{ 
+              color: isEEAUser ? '#dc3545' : '#28a745',
+              fontWeight: 'bold',
+              marginLeft: '5px'
+            }}>
+              {isEEAUser ? 'EEA/UK' : 'Non-EEA'}
+            </span>
           </p>
+          {adError && retryCount > 0 && (
+            <p style={{ marginBottom: '4px', fontSize: '14px' }}>
+              <strong>Retries:</strong> {retryCount}/{maxRetries}
+            </p>
+          )}
           <p style={{ 
             marginTop: '12px', 
             fontSize: '12px', 
-            color: '#888',
+            color: adError ? '#8c2531' : '#888',
             fontStyle: 'italic'
           }}>
-            This ad would be displayed in production
+            {adError ? 
+              'Ad failed to load. This might be due to network issues or ad blocker.' : 
+              'This ad would be displayed in production'}
           </p>
         </div>
-        <div className="ad-label">Advertisement</div>
-      </div>
-    );
-  }
-
-  // Show loading state in development only
-  if (!isProduction && !adLoaded && !adError) {
-    return (
-      <div className={`ad-container ad-loading ${className}`}>
-        <div style={{ 
-          background: '#f8f9fa', 
-          border: '1px solid #e9ecef',
-          borderRadius: '8px',
-          padding: '20px',
-          textAlign: 'center',
-          color: '#6c757d'
+        <div className="ad-label" style={{ 
+          textAlign: 'center', 
+          fontSize: '11px', 
+          color: '#666',
+          marginTop: '8px',
+          fontWeight: 'bold'
         }}>
-          <div style={{ 
-            width: '20px', 
-            height: '20px', 
-            border: '2px solid #f3f3f3',
-            borderTop: '2px solid #667eea',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 10px'
-          }}></div>
-          <p>Loading Ad...</p>
-          <p style={{ fontSize: '12px', marginTop: '8px', color: '#999' }}>
-            Consent: {hasConsent === true ? '✅ Granted' : hasConsent === false ? '❌ Denied' : '🌍 Not Required'}
-          </p>
+          Advertisement
         </div>
       </div>
     );
   }
 
-  // Don't render actual ad in production if there's no consent for EEA users
-  if (isProduction && isEEAUser && hasConsent !== true) {
+  // Don't render anything in production if conditions aren't met
+  if (isProduction && (!slot || (isEEAUser && hasConsent !== true))) {
     return null;
   }
 
-  // In production with consent, only show the actual ad or nothing
+  // Render actual AdSense ad
   return (
-    <div className={`ad-container ${className}`}>
+    <div className={`ad-container ${className}`} data-ad-slot={slot} data-ad-status={adStatus}>
       <ins
         className="adsbygoogle"
         style={{ 
@@ -354,10 +457,20 @@ const AdSense = ({
         data-full-width-responsive={responsive ? 'true' : 'false'}
         data-ad-layout={layout}
         data-ad-layout-key={layoutKey}
+        data-ad-status={adStatus}
       />
-      <div className="ad-label">Advertisement</div>
       
-      {/* Enhanced fallback for ad blockers */}
+      <div className="ad-label" style={{ 
+        textAlign: 'center', 
+        fontSize: '11px', 
+        color: '#666',
+        marginTop: '8px',
+        fontWeight: 'bold'
+      }}>
+        Advertisement
+      </div>
+      
+      {/* Enhanced fallback for ad blockers and noscript */}
       <noscript>
         <div style={{ 
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
@@ -374,14 +487,14 @@ const AdSense = ({
             marginBottom: '8px',
             fontSize: '16px'
           }}>
-            Ad Blocker Detected
+            JavaScript Required for Ads
           </p>
           <p style={{ 
             marginBottom: '12px',
             fontSize: '14px',
             opacity: 0.9
           }}>
-            Please consider disabling your ad blocker to support our blog
+            Please enable JavaScript to view advertisements and support our blog
           </p>
           <p style={{ 
             fontSize: '12px',
@@ -414,35 +527,110 @@ export const AdUnits = {
   BETWEEN_POSTS: '6583059564'
 };
 
-// Export helper functions for use in ConsentManager
+// Enhanced consent helper functions
 export const consentHelper = {
   setConsent: (granted) => {
-    localStorage.setItem('adsense_consent', granted ? 'granted' : 'denied');
+    localStorage.setItem('cookieConsent', granted ? 'true' : 'false');
     localStorage.setItem('is_eea_user', 'true'); // Mark as EEA user once they make a choice
     
     // Dispatch event to notify all AdSense components
-    window.dispatchEvent(new Event('consentChanged'));
+    const consentEvent = new CustomEvent('consentChanged', {
+      detail: { granted }
+    });
+    window.dispatchEvent(consentEvent);
+    
+    console.log(`AdSense: Consent ${granted ? 'granted' : 'denied'}`);
     
     // Update Google CMP if available
     if (window.googlefc && window.googlefc.call) {
       window.googlefc.call(granted);
     }
+    
+    // Reload ads if consent was granted
+    if (granted) {
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
   },
   
   clearConsent: () => {
-    localStorage.removeItem('adsense_consent');
+    localStorage.removeItem('cookieConsent');
+    localStorage.removeItem('is_eea_user');
     window.dispatchEvent(new Event('consentChanged'));
+    console.log('AdSense: Consent cleared');
   },
   
   getConsent: () => {
-    return localStorage.getItem('adsense_consent');
+    return localStorage.getItem('cookieConsent');
   },
   
   isEEAUser: () => {
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const eeaTimezones = ['Europe/', 'GB', 'UK', 'London'];
-    return eeaTimezones.some(tz => timezone.includes(tz));
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const eeaTimezones = ['Europe/', 'GB', 'UK', 'London'];
+      return eeaTimezones.some(tz => timezone.includes(tz));
+    } catch (error) {
+      return false;
+    }
+  },
+  
+  // Initialize AdSense consent management
+  initialize: () => {
+    const consent = localStorage.getItem('cookieConsent');
+    const isEEA = consentHelper.isEEAUser();
+    
+    console.log(`AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
+    
+    return {
+      isEEA,
+      hasConsent: consent === 'true',
+      needsConsent: isEEA && !consent
+    };
   }
 };
+
+// Add CSS for loading animation
+const adStyles = `
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.ad-container {
+  margin: 15px 0;
+  position: relative;
+}
+
+.ad-label {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 8px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ad-loading .adsbygoogle {
+  opacity: 0.5;
+}
+
+.consent-required, .consent-denied {
+  opacity: 0.9;
+  transition: opacity 0.3s ease;
+}
+
+.consent-required:hover, .consent-denied:hover {
+  opacity: 1;
+}
+`;
+
+// Inject styles
+if (typeof document !== 'undefined') {
+  const styleSheet = document.createElement('style');
+  styleSheet.textContent = adStyles;
+  document.head.appendChild(styleSheet);
+}
 
 export default AdSense;

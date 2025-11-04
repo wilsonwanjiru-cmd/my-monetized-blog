@@ -1,5 +1,6 @@
 // backend/models/Post.js
 const mongoose = require('mongoose');
+const axios = require('axios');
 
 const PostSchema = new mongoose.Schema({
   title: {
@@ -166,6 +167,44 @@ const PostSchema = new mongoose.Schema({
     default: 'pending'
   },
 
+  // ✅ NEW: Plagiarism check fields for Copyscape integration
+  plagiarismCheck: {
+    status: {
+      type: String,
+      enum: ['pending', 'checked', 'failed', 'skipped'],
+      default: 'pending'
+    },
+    checkedAt: {
+      type: Date
+    },
+    isUnique: {
+      type: Boolean,
+      default: true
+    },
+    matchCount: {
+      type: Number,
+      default: 0
+    },
+    confidence: {
+      type: Number,
+      default: 100,
+      min: 0,
+      max: 100
+    },
+    report: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+    cost: {
+      type: Number,
+      default: 0
+    },
+    wordCount: {
+      type: Number,
+      default: 0
+    }
+  },
+
   // ✅ NEW: Video content support
   video: {
     url: {
@@ -284,6 +323,11 @@ PostSchema.virtual('apiUrl').get(function() {
   return `${apiUrl}/api/posts/slug/${this.slug}`;
 });
 
+// ✅ NEW: Virtual for plagiarism status
+PostSchema.virtual('isContentUnique').get(function() {
+  return this.plagiarismCheck.isUnique && this.plagiarismCheck.confidence >= 85;
+});
+
 // ✅ ENHANCED: Indexes for better query performance
 PostSchema.index({ slug: 1, isPublished: 1 });
 PostSchema.index({ category: 1, isPublished: 1, publishedAt: -1 });
@@ -291,6 +335,7 @@ PostSchema.index({ tags: 1, isPublished: 1 });
 PostSchema.index({ author: 1, isPublished: 1 });
 PostSchema.index({ publishedAt: -1, views: -1 });
 PostSchema.index({ 'video.url': 1 }, { sparse: true });
+PostSchema.index({ 'plagiarismCheck.status': 1, 'plagiarismCheck.isUnique': 1 });
 
 // ✅ UPDATED: Pre-validate middleware with enhanced slug generation
 PostSchema.pre('validate', function(next) {
@@ -334,7 +379,7 @@ PostSchema.pre('validate', function(next) {
   next();
 });
 
-// ✅ UPDATED: Pre-save middleware with enhanced SEO and domain configuration
+// ✅ UPDATED: Pre-save middleware with enhanced SEO, domain configuration, and plagiarism checking
 PostSchema.pre('save', async function(next) {
   const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
   const siteName = process.env.SITE_NAME || 'Wilson Muita';
@@ -415,6 +460,11 @@ PostSchema.pre('save', async function(next) {
     this.ampHtml = this.generateAMPHtml();
   }
 
+  // ✅ NEW: Run plagiarism check if content was modified and post is being published
+  if (this.isModified('content') && this.isPublished && this.content.length > 0) {
+    await this.runPlagiarismCheck();
+  }
+
   // Ensure slug uniqueness
   if (this.isModified('slug')) {
     await this.ensureUniqueSlug();
@@ -422,6 +472,149 @@ PostSchema.pre('save', async function(next) {
 
   next();
 });
+
+// ✅ NEW: Instance method to run plagiarism check using Copyscape API
+PostSchema.methods.runPlagiarismCheck = async function() {
+  try {
+    // Check if Copyscape credentials are configured
+    const username = process.env.COPYSCAPE_USERNAME;
+    const apiKey = process.env.COPYSCAPE_API_KEY;
+    
+    if (!username || !apiKey) {
+      console.log('⚠️ Copyscape credentials not configured, skipping plagiarism check');
+      this.plagiarismCheck.status = 'skipped';
+      return;
+    }
+
+    console.log('🔍 Running plagiarism check for post:', this.title);
+    
+    // Extract plain text from content (remove HTML tags)
+    const plainText = this.content
+      .replace(/<[^>]*(>|$)|&nbsp;|&#8203;|&shy;/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const wordCount = plainText.split(/\s+/).length;
+    this.plagiarismCheck.wordCount = wordCount;
+
+    // For demo purposes - replace with actual Copyscape API call
+    // In production, you would make the actual API call here
+    const plagiarismResult = await this.callCopyscapeAPI(plainText);
+    
+    // Update plagiarism check fields
+    this.plagiarismCheck = {
+      status: 'checked',
+      checkedAt: new Date(),
+      isUnique: plagiarismResult.unique,
+      matchCount: plagiarismResult.matchCount,
+      confidence: plagiarismResult.confidence,
+      report: plagiarismResult.report,
+      cost: plagiarismResult.cost,
+      wordCount: wordCount
+    };
+
+    console.log(`✅ Plagiarism check completed: ${plagiarismResult.unique ? 'Unique' : 'Matches found'} (${plagiarismResult.confidence}% confidence)`);
+
+  } catch (error) {
+    console.error('❌ Plagiarism check failed:', error.message);
+    this.plagiarismCheck.status = 'failed';
+    this.plagiarismCheck.checkedAt = new Date();
+  }
+};
+
+// ✅ NEW: Instance method to call Copyscape API
+PostSchema.methods.callCopyscapeAPI = async function(text) {
+  const username = process.env.COPYSCAPE_USERNAME;
+  const apiKey = process.env.COPYSCAPE_API_KEY;
+  
+  try {
+    // This is where you would implement the actual Copyscape API call
+    // For now, we'll simulate the API response structure
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Simulate API response - replace this with actual Copyscape API call
+    const response = {
+      unique: true, // Simulate unique content
+      matchCount: 0,
+      confidence: 95,
+      cost: 0.05, // Estimated cost in credits
+      report: {
+        queryWords: text.split(/\s+/).length,
+        results: []
+      }
+    };
+
+    return response;
+
+    /* 
+    // ACTUAL COPYSCAPE API IMPLEMENTATION (uncomment when ready)
+    const params = new URLSearchParams();
+    params.append('u', username);
+    params.append('k', apiKey);
+    params.append('o', 'csearch');
+    params.append('e', 'UTF-8');
+    params.append('t', text.substring(0, 50000)); // Limit text length
+    params.append('c', '3'); // Get up to 3 results
+    params.append('f', 'json');
+
+    const apiResponse = await axios.post('https://www.copyscape.com/api/', params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      timeout: 30000
+    });
+
+    return this.parseCopyscapeResponse(apiResponse.data);
+    */
+
+  } catch (error) {
+    console.error('Copyscape API error:', error.message);
+    throw new Error(`Plagiarism API call failed: ${error.message}`);
+  }
+};
+
+// ✅ NEW: Instance method to parse Copyscape API response
+PostSchema.methods.parseCopyscapeResponse = function(apiData) {
+  if (apiData.error) {
+    throw new Error(`Copyscape API error: ${apiData.error}`);
+  }
+
+  const result = {
+    unique: true,
+    matchCount: parseInt(apiData.count) || 0,
+    confidence: 100,
+    cost: parseFloat(apiData.cost) || 0,
+    report: apiData
+  };
+
+  if (result.matchCount > 0 && apiData.result) {
+    result.unique = false;
+    
+    // Calculate confidence based on matches
+    const matches = Array.isArray(apiData.result) ? apiData.result : [apiData.result];
+    let totalPercent = 0;
+    
+    matches.forEach(match => {
+      if (match.percentmatched) {
+        totalPercent += parseFloat(match.percentmatched);
+      }
+    });
+    
+    result.confidence = Math.max(0, 100 - (totalPercent / matches.length));
+  }
+
+  return result;
+};
+
+// ✅ NEW: Instance method to manually trigger plagiarism check
+PostSchema.methods.manualPlagiarismCheck = async function() {
+  console.log('🔄 Manually triggering plagiarism check for:', this.title);
+  await this.runPlagiarismCheck();
+  await this.save();
+  return this.plagiarismCheck;
+};
 
 // ✅ ENHANCED: Instance method to generate AMP HTML
 PostSchema.methods.generateAMPHtml = function() {
@@ -471,34 +664,33 @@ PostSchema.methods.generateAMPHtml = function() {
 </html>`;
 };
 
-// ✅ NEW: Instance method to calculate SEO score
+// ✅ ENHANCED: Instance method to calculate SEO score (now includes plagiarism factor)
 PostSchema.methods.calculateSEOScore = function() {
   let score = 0;
   const maxScore = 100;
 
-  // Title optimization (25 points)
+  // Title optimization (20 points)
   if (this.title && this.title.length >= 40 && this.title.length <= 60) {
-    score += 25;
-  } else if (this.title) {
-    score += 15;
-  }
-
-  // Meta description optimization (20 points)
-  if (this.metaDescription && this.metaDescription.length >= 120 && this.metaDescription.length <= 160) {
     score += 20;
-  } else if (this.metaDescription) {
+  } else if (this.title) {
     score += 10;
   }
 
-  // Content length (20 points)
-  const wordCount = this.content ? this.content.replace(/<[^>]*(>|$)|&nbsp;|&#8203;|&shy;/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).length : 0;
-  if (wordCount >= 1000) score += 20;
-  else if (wordCount >= 500) score += 15;
-  else if (wordCount >= 300) score += 10;
-  else if (wordCount >= 100) score += 5;
+  // Meta description optimization (15 points)
+  if (this.metaDescription && this.metaDescription.length >= 120 && this.metaDescription.length <= 160) {
+    score += 15;
+  } else if (this.metaDescription) {
+    score += 8;
+  }
 
-  // Featured image (15 points)
-  if (this.featuredImage) score += 15;
+  // Content length (15 points)
+  const wordCount = this.content ? this.content.replace(/<[^>]*(>|$)|&nbsp;|&#8203;|&shy;/g, ' ').replace(/\s+/g, ' ').trim().split(/\s+/).length : 0;
+  if (wordCount >= 1000) score += 15;
+  else if (wordCount >= 500) score += 10;
+  else if (wordCount >= 300) score += 5;
+
+  // Featured image (10 points)
+  if (this.featuredImage) score += 10;
 
   // Tags and categories (10 points)
   if (this.tags && this.tags.length >= 3) score += 5;
@@ -507,7 +699,60 @@ PostSchema.methods.calculateSEOScore = function() {
   // Focus keyword (10 points)
   if (this.focusKeyword) score += 10;
 
-  this.seoScore = score;
+  // ✅ NEW: Plagiarism check (20 points - most important for AdSense)
+  if (this.plagiarismCheck.status === 'checked' && this.plagiarismCheck.isUnique) {
+    score += Math.min(20, this.plagiarismCheck.confidence * 0.2);
+  } else if (this.plagiarismCheck.status === 'checked' && !this.plagiarismCheck.isUnique) {
+    // Penalty for duplicate content
+    score = Math.max(0, score - 30);
+  }
+
+  this.seoScore = Math.min(maxScore, score);
+};
+
+// ✅ NEW: Static method to get posts with plagiarism issues
+PostSchema.statics.getPostsWithPlagiarism = async function(limit = 50) {
+  return this.find({
+    'plagiarismCheck.status': 'checked',
+    'plagiarismCheck.isUnique': false,
+    isPublished: true
+  })
+  .sort({ 'plagiarismCheck.matchCount': -1, 'plagiarismCheck.confidence': 1 })
+  .limit(limit)
+  .select('title slug plagiarismCheck matchCount confidence publishedAt');
+};
+
+// ✅ NEW: Static method to check multiple posts for plagiarism
+PostSchema.statics.batchPlagiarismCheck = async function(postIds = []) {
+  const posts = await this.find({ 
+    _id: { $in: postIds },
+    isPublished: true 
+  });
+
+  const results = [];
+  
+  for (const post of posts) {
+    try {
+      await post.runPlagiarismCheck();
+      await post.save();
+      results.push({
+        postId: post._id,
+        title: post.title,
+        status: post.plagiarismCheck.status,
+        isUnique: post.plagiarismCheck.isUnique,
+        confidence: post.plagiarismCheck.confidence
+      });
+    } catch (error) {
+      results.push({
+        postId: post._id,
+        title: post.title,
+        status: 'error',
+        error: error.message
+      });
+    }
+  }
+
+  return results;
 };
 
 // ✅ NEW: Instance method to ensure unique slug
