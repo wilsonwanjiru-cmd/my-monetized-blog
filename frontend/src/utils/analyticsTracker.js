@@ -1,7 +1,5 @@
 // frontend/src/utils/analyticsTracker.js
 
-// frontend/src/utils/analyticsTracker.js
-
 // Get API base URL from config
 const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || 'https://api.wilsonmuita.com';
 
@@ -233,7 +231,8 @@ const sendAnalyticsData = async (endpoint, data) => {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
       } else {
-        console.error('❌ Analytics API error:', responseStatus, responseData);
+        // FIXED: Use response.status instead of undefined responseStatus variable
+        console.error('❌ Analytics API error:', response.status, responseData);
         return {
           success: false,
           message: responseData.message || 'Analytics API error',
