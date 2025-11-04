@@ -1,5 +1,7 @@
 // frontend/src/utils/analyticsTracker.js
 
+// frontend/src/utils/analyticsTracker.js
+
 // Get API base URL from config
 const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || 'https://api.wilsonmuita.com';
 
@@ -24,7 +26,7 @@ export const initAnalyticsTracking = () => {
       return;
     }
 
-    // Initialize session
+    // Initialize session first - CRITICAL FIX
     currentSessionId = getSessionId();
     
     // Set up page visibility tracking
@@ -33,8 +35,10 @@ export const initAnalyticsTracking = () => {
     // Set up performance tracking
     setupPerformanceTracking();
     
-    // Track initial page view
-    trackPageView();
+    // Track initial page view after ensuring session is set
+    setTimeout(() => {
+      trackPageView();
+    }, 500);
 
     // Process any pending events
     processPendingEvents();
@@ -88,11 +92,20 @@ const getSessionId = () => {
   }
 };
 
-// Enhanced page view tracking
+// FIXED: Enhanced page view tracking with proper field validation
 export const trackPageView = async (additionalData = {}) => {
   try {
     if (!getConsentStatus()) {
       console.log('🔕 Page view tracking skipped: No consent');
+      return;
+    }
+
+    // CRITICAL FIX: Ensure we have sessionId and page before sending
+    const sessionId = currentSessionId || getSessionId();
+    const page = window.location.pathname;
+
+    if (!sessionId || !page) {
+      console.warn('⚠️ Page view tracking skipped: Missing sessionId or page', { sessionId, page });
       return;
     }
 
@@ -102,8 +115,8 @@ export const trackPageView = async (additionalData = {}) => {
 
     const pageData = {
       type: 'pageview',
-      sessionId: currentSessionId || getSessionId(),
-      page: window.location.pathname,
+      sessionId: sessionId,
+      page: page,
       title: document.title,
       referrer: document.referrer || '',
       userAgent: navigator.userAgent,
@@ -160,9 +173,31 @@ export const trackEvent = async (eventData) => {
   }
 };
 
-// Core function to send analytics data with robust error handling
+// FIXED: Core function to send analytics data with robust error handling
 const sendAnalyticsData = async (endpoint, data) => {
   try {
+    // CRITICAL FIX: Validate required fields before sending
+    if (endpoint === '/api/analytics/pageview') {
+      if (!data.sessionId || !data.page) {
+        console.error('❌ Analytics validation failed: Missing sessionId or page for pageview', data);
+        return { 
+          success: false, 
+          message: 'Missing required fields: sessionId and page are required' 
+        };
+      }
+    }
+
+    // Validate required fields for event tracking
+    if (endpoint === '/api/analytics/event') {
+      if (!data.sessionId || !data.eventName) {
+        console.error('❌ Analytics validation failed: Missing sessionId or eventName for event', data);
+        return { 
+          success: false, 
+          message: 'Missing required fields: sessionId and eventName are required' 
+        };
+      }
+    }
+
     // Queue event if analytics not initialized yet
     if (!isInitialized && endpoint !== '/api/analytics/pageview') {
       pendingEvents.push({ endpoint, data });
@@ -198,11 +233,12 @@ const sendAnalyticsData = async (endpoint, data) => {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
       } else {
-        console.error('❌ Analytics API error:', responseData);
+        console.error('❌ Analytics API error:', responseStatus, responseData);
         return {
           success: false,
           message: responseData.message || 'Analytics API error',
-          error: responseData.error
+          error: responseData.error,
+          status: response.status
         };
       }
     } catch (parseError) {
@@ -496,6 +532,31 @@ export const getAnalyticsStatus = () => {
     pendingEvents: pendingEvents.length
   };
 };
+
+// Enhanced initialization with automatic retry
+let initializationAttempts = 0;
+const maxInitializationAttempts = 3;
+
+const initializeWithRetry = () => {
+  try {
+    initAnalyticsTracking();
+  } catch (error) {
+    initializationAttempts++;
+    if (initializationAttempts < maxInitializationAttempts) {
+      console.log(`🔄 Retrying analytics initialization (attempt ${initializationAttempts + 1})`);
+      setTimeout(initializeWithRetry, 1000 * initializationAttempts);
+    } else {
+      console.error('❌ Analytics initialization failed after multiple attempts');
+    }
+  }
+};
+
+// Auto-initialize when imported (with delay to ensure DOM is ready)
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    initializeWithRetry();
+  }, 1000);
+}
 
 // Export default object for backward compatibility
 export default {

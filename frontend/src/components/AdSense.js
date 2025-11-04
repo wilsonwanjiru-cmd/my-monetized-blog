@@ -57,38 +57,48 @@ const AdSense = ({
     }
   }, []);
 
-  // Enhanced consent status checking
+  // FIXED: Enhanced consent status checking with simplified logic
   const checkConsentStatus = useCallback(() => {
     const consent = localStorage.getItem('cookieConsent');
+    const adsenseConsent = localStorage.getItem('adsense_consent');
     const userIsEEA = checkIfEEAUser();
     
     setIsEEAUser(userIsEEA);
     
-    if (!userIsEEA) {
-      // Non-EEA users don't need explicit consent for basic ads
+    // CRITICAL FIX: If user has explicitly denied consent, don't load ads
+    if (consent === 'false' || adsenseConsent === 'denied') {
+      setHasConsent(false);
+      return false;
+    }
+    
+    // If user has given consent or doesn't need consent, load ads
+    if (consent === 'true' || adsenseConsent === 'granted') {
       setHasConsent(true);
       return true;
     }
     
-    // EEA users require explicit consent
-    if (consent === 'true' || consent === 'granted') {
+    // Non-EEA users don't need explicit consent
+    if (!userIsEEA) {
       setHasConsent(true);
       return true;
-    } else if (consent === 'false' || consent === 'denied') {
-      setHasConsent(false);
-      return false;
-    } else {
-      // Consent not yet given - wait for user decision
-      setHasConsent(null);
-      return null;
     }
+    
+    // EEA users without consent decision - wait for user decision
+    setHasConsent(null);
+    return null;
   }, [checkIfEEAUser]);
 
-  // Load AdSense ad with proper error handling
+  // FIXED: Load AdSense ad with proper consent validation
   const loadAd = useCallback(() => {
     if (!slot) {
       console.warn('AdSense: No slot ID provided');
       setAdError(true);
+      return;
+    }
+
+    // CRITICAL FIX: Don't load ads if consent is explicitly denied
+    if (hasConsent === false) {
+      console.log('AdSense: Skipping ad load - consent denied');
       return;
     }
 
@@ -156,7 +166,7 @@ const AdSense = ({
     }
   }, [slot, retryCount]);
 
-  // Effect for consent management
+  // FIXED: Effect for consent management with better initialization
   useEffect(() => {
     const consentStatus = checkConsentStatus();
     
@@ -173,7 +183,7 @@ const AdSense = ({
     };
   }, [checkConsentStatus]);
 
-  // Effect for ad loading
+  // FIXED: Effect for ad loading with better consent validation
   useEffect(() => {
     // Reset states when slot changes
     setAdLoaded(false);
@@ -181,13 +191,19 @@ const AdSense = ({
     setRetryCount(0);
     setAdStatus('idle');
 
+    // CRITICAL FIX: Only load ads if we have consent or user doesn't need consent
+    if (hasConsent === false) {
+      console.log('AdSense: Not loading ad - consent denied');
+      return;
+    }
+
     // Load ad after a short delay to ensure DOM is ready
     const timer = setTimeout(() => {
       loadAd();
     }, 500);
     
     return () => clearTimeout(timer);
-  }, [slot, loadAd]);
+  }, [slot, loadAd, hasConsent]);
 
   // Add event listeners for ad callbacks
   useEffect(() => {
@@ -434,6 +450,12 @@ const AdSense = ({
     );
   }
 
+  // CRITICAL FIX: Don't render anything in production if consent is denied
+  if (isProduction && hasConsent === false) {
+    console.log('AdSense: Not rendering ad - consent denied in production');
+    return null;
+  }
+
   // Don't render anything in production if conditions aren't met
   if (isProduction && (!slot || (isEEAUser && hasConsent !== true))) {
     return null;
@@ -531,6 +553,7 @@ export const AdUnits = {
 export const consentHelper = {
   setConsent: (granted) => {
     localStorage.setItem('cookieConsent', granted ? 'true' : 'false');
+    localStorage.setItem('adsense_consent', granted ? 'granted' : 'denied');
     localStorage.setItem('is_eea_user', 'true'); // Mark as EEA user once they make a choice
     
     // Dispatch event to notify all AdSense components
@@ -556,6 +579,7 @@ export const consentHelper = {
   
   clearConsent: () => {
     localStorage.removeItem('cookieConsent');
+    localStorage.removeItem('adsense_consent');
     localStorage.removeItem('is_eea_user');
     window.dispatchEvent(new Event('consentChanged'));
     console.log('AdSense: Consent cleared');
