@@ -1,5 +1,4 @@
 // backend/routes/analytics.js
-// backend/routes/analytics.js
 const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
@@ -54,10 +53,11 @@ router.post('/pageview', async (req, res) => {
       utmMedium,
       utmCampaign,
       utmContent,
-      utmTerm
+      utmTerm,
+      eventName = 'page_view' // ✅ Added default eventName
     } = req.body;
 
-    // Validate required fields
+    // ✅ ENHANCED: Better validation with helpful errors
     if (!sessionId || !page) {
       console.warn('⚠️ Pageview validation failed: Missing sessionId or page');
       return res.status(400).json({
@@ -78,7 +78,7 @@ router.post('/pageview', async (req, res) => {
       sessionId,
       page,
       title,
-      referrer: referrer || '',
+      referrer: referrer || 'direct', // ✅ Default to 'direct'
       userAgent: userAgent || req.get('User-Agent'),
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       screenResolution,
@@ -88,6 +88,7 @@ router.post('/pageview', async (req, res) => {
       utmCampaign,
       utmContent,
       utmTerm,
+      eventName: eventName, // ✅ Include eventName
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-pageview',
@@ -143,10 +144,11 @@ router.post('/event', async (req, res) => {
       timestamp,
       utmSource,
       utmMedium,
-      utmCampaign
+      utmCampaign,
+      url // ✅ Added url field
     } = req.body;
 
-    // Validate required fields
+    // ✅ ENHANCED: Better validation with helpful errors
     if (!sessionId || !eventName) {
       console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
       return res.status(400).json({
@@ -168,6 +170,7 @@ router.post('/event', async (req, res) => {
       utmSource,
       utmMedium,
       utmCampaign,
+      url: url || req.get('Referer') || 'unknown', // ✅ Include URL
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-event',

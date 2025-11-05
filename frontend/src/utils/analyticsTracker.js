@@ -60,7 +60,7 @@ const getConsentStatus = () => {
   }
 };
 
-// Improved session management
+// FIXED: Improved session management with proper sessionId generation
 const getSessionId = () => {
   try {
     let sessionId = localStorage.getItem('analytics_session_id');
@@ -91,7 +91,7 @@ const getSessionId = () => {
 };
 
 // FIXED: Enhanced page view tracking with proper field validation
-export const trackPageView = async (additionalData = {}) => {
+export const trackPageView = async (page) => {
   try {
     if (!getConsentStatus()) {
       console.log('🔕 Page view tracking skipped: No consent');
@@ -100,10 +100,10 @@ export const trackPageView = async (additionalData = {}) => {
 
     // CRITICAL FIX: Ensure we have sessionId and page before sending
     const sessionId = currentSessionId || getSessionId();
-    const page = window.location.pathname;
+    const pagePath = page || window.location.pathname;
 
-    if (!sessionId || !page) {
-      console.warn('⚠️ Page view tracking skipped: Missing sessionId or page', { sessionId, page });
+    if (!sessionId || !pagePath) {
+      console.warn('⚠️ Page view tracking skipped: Missing sessionId or page', { sessionId, page: pagePath });
       return;
     }
 
@@ -111,27 +111,42 @@ export const trackPageView = async (additionalData = {}) => {
     const screenResolution = window.screen ? 
       `${window.screen.width}x${window.screen.height}` : 'unknown';
 
-    const pageData = {
+    const payload = {
       type: 'pageview',
+      eventName: 'page_view', // ✅ Added missing eventName
       sessionId: sessionId,
-      page: page,
+      page: pagePath,
       title: document.title,
-      referrer: document.referrer || '',
+      url: window.location.href, // ✅ Added missing url
+      referrer: document.referrer || 'direct',
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
       screenResolution: screenResolution,
-      language: navigator.language,
-      ...additionalData
+      language: navigator.language
     };
 
-    console.log('📊 Tracking page view:', pageData.page);
+    console.log('📊 Tracking page view:', payload.page);
     
-    const result = await sendAnalyticsData('/api/analytics/pageview', pageData);
-    return result;
+    const response = await fetch(`${API_BASE_URL}/api/analytics/pageview`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const responseData = await response.json();
+    console.log('✅ Page view tracked successfully:', responseData);
+    return responseData;
     
   } catch (error) {
     console.error('❌ Page view tracking failed:', error);
-    // Don't throw to avoid breaking user experience
+    // Store for retry later
+    storeOfflineEvent(payload);
   }
 };
 
@@ -154,6 +169,7 @@ export const trackEvent = async (eventData) => {
       type: 'event',
       sessionId: currentSessionId || getSessionId(),
       page: window.location.pathname,
+      url: window.location.href, // ✅ Added missing url
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
       ...eventData
@@ -176,11 +192,15 @@ const sendAnalyticsData = async (endpoint, data) => {
   try {
     // CRITICAL FIX: Validate required fields before sending
     if (endpoint === '/api/analytics/pageview') {
-      if (!data.sessionId || !data.page) {
-        console.error('❌ Analytics validation failed: Missing sessionId or page for pageview', data);
+      if (!data.sessionId || !data.page || !data.eventName) {
+        console.error('❌ Analytics validation failed: Missing required fields for pageview', {
+          sessionId: data.sessionId,
+          page: data.page,
+          eventName: data.eventName
+        });
         return { 
           success: false, 
-          message: 'Missing required fields: sessionId and page are required' 
+          message: 'Missing required fields: sessionId, page, and eventName are required' 
         };
       }
     }
@@ -231,7 +251,6 @@ const sendAnalyticsData = async (endpoint, data) => {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
       } else {
-        // FIXED: Use response.status instead of undefined responseStatus variable
         console.error('❌ Analytics API error:', response.status, responseData);
         return {
           success: false,
@@ -261,6 +280,30 @@ const sendAnalyticsData = async (endpoint, data) => {
       message: 'Network error',
       error: error.message
     };
+  }
+};
+
+// FIXED: Store offline events for retry
+const storeOfflineEvent = (eventData) => {
+  try {
+    const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
+    
+    // Add timestamp and limit to 50 events to prevent storage issues
+    offlineEvents.push({
+      ...eventData,
+      offlineTimestamp: new Date().toISOString()
+    });
+    
+    // Keep only the last 50 events
+    if (offlineEvents.length > 50) {
+      offlineEvents.splice(0, offlineEvents.length - 50);
+    }
+    
+    localStorage.setItem('analytics_offline_events', JSON.stringify(offlineEvents));
+    console.log('💾 Event stored offline for retry. Total offline events:', offlineEvents.length);
+    
+  } catch (error) {
+    console.warn('⚠️ Could not store event offline:', error);
   }
 };
 

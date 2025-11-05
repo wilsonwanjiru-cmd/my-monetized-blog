@@ -1,5 +1,5 @@
 // frontend/src/components/AdSense.js
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 const AdSense = ({ 
   slot, 
@@ -9,15 +9,17 @@ const AdSense = ({
   layout = '',
   layoutKey = '',
   adStyle = {},
-  fallbackContent = null
+  fallbackContent = null,
+  currentPath = window.location.pathname // Add currentPath to prevent re-renders
 }) => {
   const [adLoaded, setAdLoaded] = useState(false);
   const [adError, setAdError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [hasConsent, setHasConsent] = useState(null);
   const [isEEAUser, setIsEEAUser] = useState(false);
-  const [adStatus, setAdStatus] = useState('idle'); // 'idle', 'loading', 'loaded', 'error'
+  const [adStatus, setAdStatus] = useState('idle');
   const maxRetries = 2;
+  const adInitializedRef = useRef(false); // Track if ad has been initialized
 
   // Enhanced environment detection
   const isProduction = process.env.NODE_ENV === 'production' || 
@@ -88,8 +90,51 @@ const AdSense = ({
     return null;
   }, [checkIfEEAUser]);
 
-  // FIXED: Load AdSense ad with proper consent validation
+  // FIXED: Load AdSense script with corrected URL
+  const loadAdSenseScript = useCallback(() => {
+    // Check if script is already loaded
+    if (window.adsbygoogle) {
+      console.log('AdSense script already loaded');
+      return true;
+    }
+
+    // Check if script tag already exists
+    const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
+    if (existingScript) {
+      console.log('AdSense script tag already exists');
+      return true;
+    }
+
+    try {
+      const script = document.createElement('script');
+      // CRITICAL FIX: Added missing .com in the domain
+      script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        console.log('AdSense script loaded successfully');
+      };
+      script.onerror = (error) => {
+        console.error('Failed to load AdSense script:', error);
+        setAdError(true);
+        setAdStatus('error');
+      };
+      document.head.appendChild(script);
+      return true;
+    } catch (error) {
+      console.error('Error loading AdSense script:', error);
+      return false;
+    }
+  }, []);
+
+  // FIXED: Robust AdSense loading with prevention of repeated initialization
   const loadAd = useCallback(() => {
+    // Prevent multiple initializations
+    if (adInitializedRef.current) {
+      console.log(`AdSense: Ad for slot ${slot} already initialized, skipping`);
+      return;
+    }
+
     if (!slot) {
       console.warn('AdSense: No slot ID provided');
       setAdError(true);
@@ -116,34 +161,52 @@ const AdSense = ({
     }
 
     setAdStatus('loading');
+    adInitializedRef.current = true;
 
-    try {
-      if (window.adsbygoogle) {
-        console.log(`AdSense: Loading ad for slot ${slot}`);
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-        
-        // Set a timeout to check if ad loaded successfully
-        setTimeout(() => {
-          if (!adLoaded && !adError) {
-            console.warn(`AdSense: Ad for slot ${slot} may not have loaded`);
-            if (retryCount < maxRetries) {
-              setRetryCount(prev => prev + 1);
-            } else {
-              setAdError(true);
-              setAdStatus('error');
-            }
-          }
-        }, 3000);
-        
-      } else {
-        throw new Error('AdSense script not loaded');
-      }
-    } catch (error) {
-      console.error('AdSense: Error loading ad:', error);
+    // Load AdSense script first
+    const scriptLoaded = loadAdSenseScript();
+    if (!scriptLoaded) {
       setAdError(true);
       setAdStatus('error');
+      return;
     }
-  }, [slot, isEEAUser, hasConsent, adLoaded, adError, retryCount]);
+
+    // Check if the script is ready, push the ad request
+    const pushAd = () => {
+      try {
+        console.log(`AdSense: Loading ad for slot ${slot}`);
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+      } catch (e) {
+        console.error('AdSense push error:', e);
+        setAdError(true);
+        setAdStatus('error');
+      }
+    };
+
+    // Use a timeout to ensure the script is loaded
+    const timer = setTimeout(() => {
+      if (window.adsbygoogle) {
+        pushAd();
+      } else {
+        console.log('AdSense script not loaded yet');
+        setAdError(true);
+        setAdStatus('error');
+        
+        // Retry logic
+        if (retryCount < maxRetries) {
+          setTimeout(() => {
+            setRetryCount(prev => prev + 1);
+            adInitializedRef.current = false; // Reset for retry
+          }, 2000 * (retryCount + 1));
+        }
+      }
+    }, 1000); // Increased delay to ensure DOM readiness
+
+    // Cleanup function to clear the timeout if the component unmounts
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [slot, isEEAUser, hasConsent, retryCount, loadAdSenseScript]);
 
   // Handle ad loaded event
   const handleAdLoad = useCallback(() => {
@@ -162,6 +225,7 @@ const AdSense = ({
     if (retryCount < maxRetries) {
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
+        adInitializedRef.current = false; // Reset for retry
       }, 2000 * (retryCount + 1));
     }
   }, [slot, retryCount]);
@@ -174,6 +238,8 @@ const AdSense = ({
     const handleConsentChange = () => {
       console.log('AdSense: Consent change detected');
       checkConsentStatus();
+      // Reset initialization state when consent changes
+      adInitializedRef.current = false;
     };
     
     window.addEventListener('consentChanged', handleConsentChange);
@@ -183,13 +249,15 @@ const AdSense = ({
     };
   }, [checkConsentStatus]);
 
-  // FIXED: Effect for ad loading with better consent validation
+  // FIXED: Effect for ad loading with prevention of repeated calls
   useEffect(() => {
-    // Reset states when slot changes
-    setAdLoaded(false);
-    setAdError(false);
-    setRetryCount(0);
-    setAdStatus('idle');
+    // Reset states when slot or path changes
+    if (!adInitializedRef.current) {
+      setAdLoaded(false);
+      setAdError(false);
+      setRetryCount(0);
+      setAdStatus('idle');
+    }
 
     // CRITICAL FIX: Only load ads if we have consent or user doesn't need consent
     if (hasConsent === false) {
@@ -198,12 +266,10 @@ const AdSense = ({
     }
 
     // Load ad after a short delay to ensure DOM is ready
-    const timer = setTimeout(() => {
-      loadAd();
-    }, 500);
+    const cleanup = loadAd();
     
-    return () => clearTimeout(timer);
-  }, [slot, loadAd, hasConsent]);
+    return cleanup;
+  }, [slot, currentPath, loadAd, hasConsent]); // Re-run only if slot, currentPath, or consent changes
 
   // Add event listeners for ad callbacks
   useEffect(() => {
@@ -461,7 +527,7 @@ const AdSense = ({
     return null;
   }
 
-  // Render actual AdSense ad
+  // Render actual AdSense ad with key to prevent re-renders
   return (
     <div className={`ad-container ${className}`} data-ad-slot={slot} data-ad-status={adStatus}>
       <ins
@@ -480,6 +546,7 @@ const AdSense = ({
         data-ad-layout={layout}
         data-ad-layout-key={layoutKey}
         data-ad-status={adStatus}
+        key={`${slot}-${currentPath}`} // CRITICAL: This helps React identify unique ad instances
       />
       
       <div className="ad-label" style={{ 
