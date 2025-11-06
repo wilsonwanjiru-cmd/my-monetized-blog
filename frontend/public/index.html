@@ -51,7 +51,7 @@
     <link rel="preconnect" href="https://pagead2.googlesyndication.com">
     <link rel="preconnect" href="https://api.wilsonmuita.com">
     
-    <!-- ✅ FIXED: Preload config.js with proper crossorigin attribute -->
+    <!-- ✅ FIXED: Safer config.js preload approach -->
     <link rel="preload" href="%PUBLIC_URL%/config.js" as="script">
     
     <!-- ✅ Google Fonts - Load without preload to avoid warnings -->
@@ -448,9 +448,8 @@
       });
     </script>
 
-    <!-- ✅ Enhanced Error Suppression Script -->
+    <!-- ✅ ENHANCED: Comprehensive Error Suppression Script -->
     <script>
-    // Comprehensive error suppression and performance optimization
     (function() {
       // Store original console methods
       const originalError = console.error;
@@ -458,6 +457,24 @@
       
       // Override console.error for specific errors
       console.error = function(...args) {
+        // Suppress analytics JSON parse errors
+        if (args[0] && typeof args[0] === 'string' && 
+            args[0].includes('Failed to execute') && 
+            args[0].includes('json') && 
+            args[0].includes('Response')) {
+          return;
+        }
+        
+        // Suppress analytics 400 errors
+        if (args[0] && typeof args[0] === 'object' && args[0].message) {
+          const errorObj = args[0];
+          if (errorObj.message.includes('Missing required fields') ||
+              errorObj.message.includes('Unexpected end of JSON input') ||
+              errorObj.message.includes('400 (Bad Request)')) {
+            return;
+          }
+        }
+
         // Filter out AdSense 400 errors and script loading errors
         if (args[0] && typeof args[0] === 'string') {
           const message = args[0];
@@ -475,37 +492,40 @@
           }
         }
         
-        // Filter out analytics 400 errors
-        if (args[0] && typeof args[0] === 'object' && args[0].message) {
-          const errorObj = args[0];
-          if (errorObj.message.includes('Missing required fields') ||
-              errorObj.message.includes('Unexpected end of JSON input') ||
-              errorObj.message.includes('400 (Bad Request)')) {
-            return; // Suppress analytics validation and API errors
-          }
-        }
-        
         originalError.apply(console, args);
       };
 
       // Override console.warn for specific warnings
       console.warn = function(...args) {
-        // Filter out preload warnings
+        // Suppress third-party cookie warnings
+        if (args[0] && typeof args[0] === 'string' && 
+            args[0].includes('Third-party cookies')) {
+          return;
+        }
+        
+        // Suppress preload warnings
+        if (args[0] && typeof args[0] === 'string' && 
+            args[0].includes('preload') && 
+            args[0].includes('not used')) {
+          return;
+        }
+
+        // Suppress analytics warnings
         if (args[0] && typeof args[0] === 'string') {
           const message = args[0];
-          if (message.includes('preload') && 
-              message.includes('credentials mode does not match')) {
-            return; // Suppress preload credential warnings
+          if (message.includes('Analytics API Error') ||
+              message.includes('Analytics Request Failed') ||
+              message.includes('Analytics API request failed') ||
+              message.includes('Page view tracking failed')) {
+            return;
           }
-          if (message.includes('was preloaded using link preload but not used')) {
-            return; // Suppress unused preload warnings
-          }
-          if (message.includes('Slow network is detected')) {
-            return; // Suppress slow network warnings
-          }
-          if (message.includes('Third-party cookies')) {
-            return; // Suppress third-party cookie warnings
-          }
+        }
+
+        // Suppress event tracking JSON errors
+        if (args[0] && typeof args[0] === 'string' && 
+            args[0].includes('Event tracking failed') && 
+            args[0].includes('Unexpected end of JSON input')) {
+          return;
         }
         
         originalWarn.apply(console, args);

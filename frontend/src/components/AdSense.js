@@ -1,6 +1,9 @@
 // frontend/src/components/AdSense.js
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
+// Add global flag to track script loading
+window._adSenseScriptLoaded = false;
+
 const AdSense = ({ 
   slot, 
   format = 'auto', 
@@ -90,17 +93,25 @@ const AdSense = ({
     return null;
   }, [checkIfEEAUser]);
 
-  // FIXED: Load AdSense script with corrected URL
+  // FIXED: Load AdSense script with global flag to prevent multiple loading
   const loadAdSenseScript = useCallback(() => {
+    // Check if script is already loaded globally
+    if (window._adSenseScriptLoaded) {
+      console.log('AdSense script already loaded (global check)');
+      return true;
+    }
+
     // Check if script is already loaded
     if (window.adsbygoogle) {
-      console.log('AdSense script already loaded');
+      window._adSenseScriptLoaded = true;
+      console.log('AdSense script already loaded (window.adsbygoogle check)');
       return true;
     }
 
     // Check if script tag already exists
     const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
     if (existingScript) {
+      window._adSenseScriptLoaded = true;
       console.log('AdSense script tag already exists');
       return true;
     }
@@ -112,6 +123,7 @@ const AdSense = ({
       script.async = true;
       script.crossOrigin = 'anonymous';
       script.onload = () => {
+        window._adSenseScriptLoaded = true;
         console.log('AdSense script loaded successfully');
       };
       script.onerror = (error) => {

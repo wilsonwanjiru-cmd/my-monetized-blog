@@ -30,69 +30,68 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Track pageview events with comprehensive error handling
+// ✅ FIXED: Enhanced pageview tracking with comprehensive error handling
 router.post('/pageview', async (req, res) => {
   try {
     console.log('📊 Pageview request received:', {
-      page: req.body.page,
-      sessionId: req.body.sessionId?.substring(0, 20) + '...', // Log partial session ID
-      timestamp: req.body.timestamp
+      body: req.body,
+      headers: req.headers
     });
 
-    const {
-      type = 'pageview',
-      sessionId,
-      page,
-      title,
-      referrer,
+    // ✅ FIXED: Extract fields with proper fallbacks
+    const { 
+      sessionId, 
+      page, 
+      url, 
+      title, 
+      referrer, 
+      timestamp, 
       userAgent,
-      timestamp,
-      screenResolution,
-      language,
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      utmContent,
-      utmTerm,
-      eventName = 'page_view' // ✅ Added default eventName
+      eventName = 'page_view', // ✅ Default eventName
+      type = 'pageview' 
     } = req.body;
 
-    // ✅ ENHANCED: Better validation with helpful errors
+    // ✅ CRITICAL FIX: Better validation with detailed logging
     if (!sessionId || !page) {
-      console.warn('⚠️ Pageview validation failed: Missing sessionId or page');
+      console.warn('⚠️ Pageview validation failed:', {
+        missingSessionId: !sessionId,
+        missingPage: !page,
+        receivedFields: Object.keys(req.body),
+        sessionId: sessionId,
+        page: page
+      });
+      
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: sessionId and page are required',
-        required: ['sessionId', 'page'],
-        received: Object.keys(req.body)
+        status: 400,
+        data: { 
+          received: req.body,
+          required: ['sessionId', 'page'],
+          missing: {
+            sessionId: !sessionId,
+            page: !page
+          }
+        }
       });
     }
 
-    // Validate sessionId format
-    if (!sessionId.startsWith('session_')) {
-      console.warn('⚠️ Invalid session ID format:', sessionId);
-    }
-
-    const event = new AnalyticsEvent({
-      type,
-      sessionId,
-      page,
-      title,
-      referrer: referrer || 'direct', // ✅ Default to 'direct'
-      userAgent: userAgent || req.get('User-Agent'),
+    // ✅ FIXED: Create event with proper field mapping
+    const analyticsEvent = new AnalyticsEvent({
+      sessionId: sessionId.trim(), // ✅ Trim any whitespace
+      page: page.trim(), // ✅ Trim any whitespace
+      url: url || req.body.url || 'unknown',
+      title: title || req.body.title || 'Unknown Page',
+      referrer: referrer || req.body.referrer || 'direct',
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      screenResolution,
-      language,
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      utmContent,
-      utmTerm,
-      eventName: eventName, // ✅ Include eventName
+      userAgent: userAgent || req.headers['user-agent'],
+      ip: getClientIP(req),
+      type: type,
+      eventName: eventName, // ✅ Ensure eventName is included
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-pageview',
-        userAgent: req.get('User-Agent'),
+        userAgent: req.headers['user-agent'],
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin'),
@@ -101,25 +100,29 @@ router.post('/pageview', async (req, res) => {
       }
     });
 
-    await event.save();
+    await analyticsEvent.save();
+    
+    console.log('✅ Pageview tracked successfully:', {
+      eventId: analyticsEvent._id,
+      sessionId: sessionId.substring(0, 20) + '...',
+      page: page
+    });
 
-    console.log('✅ Pageview tracked successfully:', event._id);
-
-    // Always return valid JSON response
-    res.status(201).json({
+    // ✅ FIXED: Always return valid JSON response
+    res.status(200).json({ 
       success: true,
-      message: 'Page view tracked successfully',
-      eventId: event._id,
-      timestamp: event.timestamp
+      message: 'Pageview tracked successfully',
+      eventId: analyticsEvent._id,
+      timestamp: analyticsEvent.timestamp
     });
 
   } catch (error) {
-    console.error('❌ Error tracking page view:', error);
+    console.error('❌ Analytics error:', error);
     
-    // Return proper JSON even on error
-    res.status(500).json({
+    // ✅ FIXED: Return proper JSON even on error
+    res.status(500).json({ 
       success: false,
-      message: 'Failed to track page view',
+      message: 'Internal server error',
       error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
     });
   }
