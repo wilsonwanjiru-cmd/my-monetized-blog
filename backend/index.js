@@ -23,23 +23,56 @@ const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
-// CORS Configuration for production domains
+// ✅ ENHANCED: CORS Configuration with better preflight handling
 const corsOptions = {
-  origin: [
-    'https://wilsonmuita.com',
-    'https://www.wilsonmuita.com',
-    'https://api.wilsonmuita.com',
-    'https://my-monetized-blog-2.onrender.com',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://wilsonmuita.com',
+      'https://www.wilsonmuita.com',
+      'https://api.wilsonmuita.com',
+      'https://my-monetized-blog-2.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:5173' // Added for Vite dev server
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn('⚠️ CORS Blocked Origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: [
+    'Content-Length',
+    'Content-Type',
+    'Authorization',
+    'ETag'
+  ],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+  maxAge: 86400 // 24 hours
 };
 
-// Use CORS middleware globally
+// ✅ CRITICAL: Use CORS middleware globally FIRST
 app.use(cors(corsOptions));
+
+// ✅ FIXED: Handle preflight requests with proper regex pattern instead of '*'
+app.options(/.*/, cors(corsOptions));
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
@@ -127,7 +160,9 @@ app.get('/api/health', (req, res) => {
     domain: 'api.wilsonmuita.com',
     cors: {
       allowedOrigins: corsOptions.origin,
-      enabled: true
+      enabled: true,
+      methods: corsOptions.methods,
+      headers: corsOptions.allowedHeaders
     },
     features: {
       seo: true,
@@ -201,7 +236,8 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ UPDATED: Enhanced catch-all handler for SPA routing - EXCLUDE BLOG ROUTES
+  // ✅ FIXED: Enhanced catch-all handler for SPA routing - EXCLUDE BLOG ROUTES
+  // Using proper regex pattern to avoid PathError
   app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap|blog).*$/, (req, res, next) => {
     // This regex matches all routes EXCEPT:
     // - /api/* (API routes)
@@ -222,7 +258,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Analytics fallback routes to ensure they work
-app.post('/api/analytics/pageview', async (req, res) => {
+app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Pageview Route Hit:', req.body);
     
@@ -283,7 +319,7 @@ app.post('/api/analytics/pageview', async (req, res) => {
   }
 });
 
-app.post('/api/analytics/track', async (req, res) => {
+app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Track Route Hit:', req.body);
     
@@ -362,6 +398,16 @@ app.use((err, req, res, next) => {
   // Check if headers already sent
   if (res.headersSent) {
     return next(err);
+  }
+  
+  // Handle CORS errors specifically
+  if (err.message.includes('CORS')) {
+    return res.status(403).json({
+      success: false,
+      message: 'CORS policy blocked the request',
+      error: err.message,
+      allowedOrigins: corsOptions.origin
+    });
   }
   
   res.status(err.status || 500).json({ 
@@ -450,7 +496,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Root endpoint: https://api.wilsonmuita.com/`);
   console.log(`✅ Analytics test: https://api.wilsonmuita.com/api/analytics/test`);
   console.log(`✅ Privacy Policy: https://api.wilsonmuita.com/api/privacy-policy`); // ✅ ADDED: Privacy policy endpoint
-  console.log(`🌐 CORS enabled for: ${corsOptions.origin.join(', ')}`);
+  console.log(`🌐 CORS enabled for: ${corsOptions.origin}`);
   console.log('✅ All features integrated successfully!');
   console.log('📊 Available features:');
   console.log('   - SEO: Sitemap, Robots, RSS, AMP');
@@ -460,6 +506,10 @@ const server = app.listen(PORT, () => {
   console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
   console.log('   - Server Rendering: EJS templates for blog pages'); // ✅ ADDED: Server rendering
+  console.log('🔒 CORS Configuration:');
+  console.log('   - ✅ Preflight requests handled with regex pattern');
+  console.log('   - ✅ Enhanced allowed headers');
+  console.log('   - ✅ Credentials support enabled');
   console.log('🔒 Privacy features:');
   console.log('   - ✅ Privacy Policy API endpoint added');
   console.log('   - ✅ GDPR/CCPA compliance ready');
