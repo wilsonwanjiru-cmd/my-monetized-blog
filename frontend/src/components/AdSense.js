@@ -1,8 +1,9 @@
 // frontend/src/components/AdSense.js
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
-// Add global flag to track script loading
+// Global tracking for script and ad initialization
 window._adSenseScriptLoaded = false;
+window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
 
 const AdSense = ({ 
   slot, 
@@ -13,7 +14,7 @@ const AdSense = ({
   layoutKey = '',
   adStyle = {},
   fallbackContent = null,
-  currentPath = window.location.pathname // Add currentPath to prevent re-renders
+  currentPath = window.location.pathname
 }) => {
   const [adLoaded, setAdLoaded] = useState(false);
   const [adError, setAdError] = useState(false);
@@ -22,7 +23,8 @@ const AdSense = ({
   const [isEEAUser, setIsEEAUser] = useState(false);
   const [adStatus, setAdStatus] = useState('idle');
   const maxRetries = 2;
-  const adInitializedRef = useRef(false); // Track if ad has been initialized
+  const adInitializedRef = useRef(false);
+  const adElementRef = useRef(null);
 
   // Enhanced environment detection
   const isProduction = process.env.NODE_ENV === 'production' || 
@@ -97,14 +99,14 @@ const AdSense = ({
   const loadAdSenseScript = useCallback(() => {
     // Check if script is already loaded globally
     if (window._adSenseScriptLoaded) {
-      console.log('AdSense script already loaded (global check)');
+      console.log('✅ AdSense script already loaded (global check)');
       return true;
     }
 
     // Check if script is already loaded
     if (window.adsbygoogle) {
       window._adSenseScriptLoaded = true;
-      console.log('AdSense script already loaded (window.adsbygoogle check)');
+      console.log('✅ AdSense script already loaded (window.adsbygoogle check)');
       return true;
     }
 
@@ -112,86 +114,97 @@ const AdSense = ({
     const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
     if (existingScript) {
       window._adSenseScriptLoaded = true;
-      console.log('AdSense script tag already exists');
+      console.log('✅ AdSense script tag already exists');
       return true;
     }
 
     try {
       const script = document.createElement('script');
-      // CRITICAL FIX: Added missing .com in the domain
       script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
       script.async = true;
       script.crossOrigin = 'anonymous';
       script.onload = () => {
         window._adSenseScriptLoaded = true;
-        console.log('AdSense script loaded successfully');
+        console.log('✅ AdSense script loaded successfully');
       };
       script.onerror = (error) => {
-        console.error('Failed to load AdSense script:', error);
+        console.error('❌ Failed to load AdSense script:', error);
         setAdError(true);
         setAdStatus('error');
       };
       document.head.appendChild(script);
       return true;
     } catch (error) {
-      console.error('Error loading AdSense script:', error);
+      console.error('❌ Error loading AdSense script:', error);
       return false;
     }
   }, []);
 
   // FIXED: Robust AdSense loading with prevention of repeated initialization
   const loadAd = useCallback(() => {
-    // Prevent multiple initializations
+    // Prevent multiple initializations for the same slot
     if (adInitializedRef.current) {
-      console.log(`AdSense: Ad for slot ${slot} already initialized, skipping`);
+      console.log(`🔄 AdSense: Ad for slot ${slot} already initialized, skipping`);
+      return;
+    }
+
+    // Global slot tracking to prevent duplicates across components
+    if (window._adSenseInitializedSlots.has(slot)) {
+      console.log(`🔄 AdSense: Slot ${slot} already initialized globally, skipping`);
       return;
     }
 
     if (!slot) {
-      console.warn('AdSense: No slot ID provided');
+      console.warn('⚠️ AdSense: No slot ID provided');
       setAdError(true);
       return;
     }
 
     // CRITICAL FIX: Don't load ads if consent is explicitly denied
     if (hasConsent === false) {
-      console.log('AdSense: Skipping ad load - consent denied');
+      console.log('🔒 AdSense: Skipping ad load - consent denied');
       return;
     }
 
     // Check if ads should be loaded based on consent and environment
     if (isEEAUser && hasConsent !== true) {
-      console.log('AdSense: Skipping ad load - no consent for EEA user');
+      console.log('🔒 AdSense: Skipping ad load - no consent for EEA user');
       return;
     }
 
     // Don't load ads on excluded pages
     const excludedPaths = ['/privacy', '/disclaimer', '/about'];
     if (excludedPaths.includes(window.location.pathname)) {
-      console.log('AdSense: Skipping ad load - excluded page');
+      console.log('🚫 AdSense: Skipping ad load - excluded page');
       return;
     }
 
     setAdStatus('loading');
     adInitializedRef.current = true;
+    window._adSenseInitializedSlots.add(slot);
 
     // Load AdSense script first
     const scriptLoaded = loadAdSenseScript();
     if (!scriptLoaded) {
       setAdError(true);
       setAdStatus('error');
+      window._adSenseInitializedSlots.delete(slot);
+      adInitializedRef.current = false;
       return;
     }
 
     // Check if the script is ready, push the ad request
     const pushAd = () => {
       try {
-        console.log(`AdSense: Loading ad for slot ${slot}`);
+        console.log(`📢 AdSense: Loading ad for slot ${slot}`);
         (window.adsbygoogle = window.adsbygoogle || []).push({});
+        setAdStatus('pushed');
       } catch (e) {
-        console.error('AdSense push error:', e);
+        console.error('❌ AdSense push error:', e);
         setAdError(true);
         setAdStatus('error');
+        window._adSenseInitializedSlots.delete(slot);
+        adInitializedRef.current = false;
       }
     };
 
@@ -200,19 +213,20 @@ const AdSense = ({
       if (window.adsbygoogle) {
         pushAd();
       } else {
-        console.log('AdSense script not loaded yet');
+        console.log('⏳ AdSense script not loaded yet');
         setAdError(true);
         setAdStatus('error');
+        window._adSenseInitializedSlots.delete(slot);
+        adInitializedRef.current = false;
         
         // Retry logic
         if (retryCount < maxRetries) {
           setTimeout(() => {
             setRetryCount(prev => prev + 1);
-            adInitializedRef.current = false; // Reset for retry
           }, 2000 * (retryCount + 1));
         }
       }
-    }, 1000); // Increased delay to ensure DOM readiness
+    }, 1500); // Increased delay to ensure DOM readiness
 
     // Cleanup function to clear the timeout if the component unmounts
     return () => {
@@ -222,7 +236,7 @@ const AdSense = ({
 
   // Handle ad loaded event
   const handleAdLoad = useCallback(() => {
-    console.log(`AdSense: Ad loaded successfully for slot ${slot}`);
+    console.log(`✅ AdSense: Ad loaded successfully for slot ${slot}`);
     setAdLoaded(true);
     setAdStatus('loaded');
     setAdError(false);
@@ -230,14 +244,15 @@ const AdSense = ({
 
   // Handle ad error event
   const handleAdError = useCallback(() => {
-    console.error(`AdSense: Ad failed to load for slot ${slot}`);
+    console.error(`❌ AdSense: Ad failed to load for slot ${slot}`);
     setAdError(true);
     setAdStatus('error');
+    window._adSenseInitializedSlots.delete(slot);
+    adInitializedRef.current = false;
     
     if (retryCount < maxRetries) {
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
-        adInitializedRef.current = false; // Reset for retry
       }, 2000 * (retryCount + 1));
     }
   }, [slot, retryCount]);
@@ -248,10 +263,13 @@ const AdSense = ({
     
     // Listen for consent changes from ConsentManager
     const handleConsentChange = () => {
-      console.log('AdSense: Consent change detected');
+      console.log('🔄 AdSense: Consent change detected');
       checkConsentStatus();
       // Reset initialization state when consent changes
       adInitializedRef.current = false;
+      if (slot) {
+        window._adSenseInitializedSlots.delete(slot);
+      }
     };
     
     window.addEventListener('consentChanged', handleConsentChange);
@@ -259,7 +277,7 @@ const AdSense = ({
     return () => {
       window.removeEventListener('consentChanged', handleConsentChange);
     };
-  }, [checkConsentStatus]);
+  }, [checkConsentStatus, slot]);
 
   // FIXED: Effect for ad loading with prevention of repeated calls
   useEffect(() => {
@@ -273,7 +291,7 @@ const AdSense = ({
 
     // CRITICAL FIX: Only load ads if we have consent or user doesn't need consent
     if (hasConsent === false) {
-      console.log('AdSense: Not loading ad - consent denied');
+      console.log('🔒 AdSense: Not loading ad - consent denied');
       return;
     }
 
@@ -281,11 +299,11 @@ const AdSense = ({
     const cleanup = loadAd();
     
     return cleanup;
-  }, [slot, currentPath, loadAd, hasConsent]); // Re-run only if slot, currentPath, or consent changes
+  }, [slot, currentPath, loadAd, hasConsent]);
 
   // Add event listeners for ad callbacks
   useEffect(() => {
-    const adElement = document.querySelector(`[data-ad-slot="${slot}"]`);
+    const adElement = adElementRef.current;
     if (adElement) {
       adElement.addEventListener('load', handleAdLoad);
       adElement.addEventListener('error', handleAdError);
@@ -297,7 +315,16 @@ const AdSense = ({
         adElement.removeEventListener('error', handleAdError);
       }
     };
-  }, [slot, handleAdLoad, handleAdError]);
+  }, [handleAdLoad, handleAdError]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (slot && adInitializedRef.current) {
+        window._adSenseInitializedSlots.delete(slot);
+      }
+    };
+  }, [slot]);
 
   // =======================================================================
   // RENDER LOGIC WITH CONSENT MANAGEMENT
@@ -530,7 +557,7 @@ const AdSense = ({
 
   // CRITICAL FIX: Don't render anything in production if consent is denied
   if (isProduction && hasConsent === false) {
-    console.log('AdSense: Not rendering ad - consent denied in production');
+    console.log('🔒 AdSense: Not rendering ad - consent denied in production');
     return null;
   }
 
@@ -543,6 +570,7 @@ const AdSense = ({
   return (
     <div className={`ad-container ${className}`} data-ad-slot={slot} data-ad-status={adStatus}>
       <ins
+        ref={adElementRef}
         className="adsbygoogle"
         style={{ 
           display: 'block',
@@ -558,7 +586,7 @@ const AdSense = ({
         data-ad-layout={layout}
         data-ad-layout-key={layoutKey}
         data-ad-status={adStatus}
-        key={`${slot}-${currentPath}`} // CRITICAL: This helps React identify unique ad instances
+        key={`${slot}-${currentPath}-${retryCount}`} // CRITICAL: This helps React identify unique ad instances
       />
       
       <div className="ad-label" style={{ 
@@ -641,7 +669,7 @@ export const consentHelper = {
     });
     window.dispatchEvent(consentEvent);
     
-    console.log(`AdSense: Consent ${granted ? 'granted' : 'denied'}`);
+    console.log(`🔄 AdSense: Consent ${granted ? 'granted' : 'denied'}`);
     
     // Update Google CMP if available
     if (window.googlefc && window.googlefc.call) {
@@ -661,7 +689,7 @@ export const consentHelper = {
     localStorage.removeItem('adsense_consent');
     localStorage.removeItem('is_eea_user');
     window.dispatchEvent(new Event('consentChanged'));
-    console.log('AdSense: Consent cleared');
+    console.log('🔄 AdSense: Consent cleared');
   },
   
   getConsent: () => {
@@ -683,7 +711,7 @@ export const consentHelper = {
     const consent = localStorage.getItem('cookieConsent');
     const isEEA = consentHelper.isEEAUser();
     
-    console.log(`AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
+    console.log(`🔍 AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
     
     return {
       isEEA,

@@ -8,6 +8,13 @@ let currentSessionId = null;
 let isInitialized = false;
 let pendingEvents = [];
 
+// ✅ NEW: Language code normalization helper
+export const normalizeLanguageCode = (lang) => {
+  if (!lang) return 'en';
+  // Convert 'en-US' to 'en', 'fr-FR' to 'fr', etc.
+  return lang.split('-')[0];
+};
+
 // Initialize analytics with enhanced error handling
 export const initAnalyticsTracking = () => {
   if (isInitialized) {
@@ -93,7 +100,7 @@ const getSessionId = () => {
   }
 };
 
-// ✅ FIXED: Enhanced page view tracking with better error handling
+// ✅ FIXED: Enhanced page view tracking with language normalization
 export const trackPageView = async (page) => {
   let payload;
   let response;
@@ -125,7 +132,8 @@ export const trackPageView = async (page) => {
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
       screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown',
-      language: navigator.language || 'en-US',
+      // ✅ FIXED: Normalize language code before sending
+      language: normalizeLanguageCode(navigator.language || 'en'),
       utm_source: utmParams.utm_source,
       utm_medium: utmParams.utm_medium,
       utm_campaign: utmParams.utm_campaign,
@@ -136,6 +144,7 @@ export const trackPageView = async (page) => {
     console.log('📊 Tracking page view:', {
       sessionId: sessionId.substring(0, 20) + '...',
       page: pagePath,
+      language: payload.language, // Log normalized language
       backend: API_BASE_URL
     });
     
@@ -201,7 +210,8 @@ export const trackPageView = async (page) => {
       type: error.name,
       payload: payload ? {
         sessionId: payload.sessionId?.substring(0, 20) + '...',
-        page: payload.page
+        page: payload.page,
+        language: payload.language
       } : 'No payload'
     });
     
@@ -218,7 +228,7 @@ export const trackPageView = async (page) => {
   }
 };
 
-// ✅ FIXED: Enhanced event tracking with better error handling
+// ✅ FIXED: Enhanced event tracking with language normalization
 export const trackEvent = async (eventData) => {
   try {
     // Check if analytics are enabled
@@ -243,6 +253,8 @@ export const trackEvent = async (eventData) => {
       url: window.location.href,
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
+      // ✅ FIXED: Normalize language code for all events
+      language: normalizeLanguageCode(navigator.language || 'en'),
       utm_source: utmParams.utm_source,
       utm_medium: utmParams.utm_medium,
       utm_campaign: utmParams.utm_campaign,
@@ -252,6 +264,7 @@ export const trackEvent = async (eventData) => {
     console.log('📈 Tracking event:', {
       eventName: enhancedEventData.eventName,
       sessionId: enhancedEventData.sessionId?.substring(0, 20) + '...',
+      language: enhancedEventData.language,
       backend: API_BASE_URL
     });
 
@@ -756,7 +769,9 @@ export const getAnalyticsStatus = () => {
       pendingEvents: pendingEvents.length,
       offlineEvents: offlineEvents.length,
       backend: API_BASE_URL,
-      domain: window.location.hostname
+      domain: window.location.hostname,
+      // ✅ ADDED: Current normalized language
+      currentLanguage: normalizeLanguageCode(navigator.language || 'en')
     };
   } catch (error) {
     return {
@@ -767,6 +782,7 @@ export const getAnalyticsStatus = () => {
       offlineEvents: 0,
       backend: API_BASE_URL,
       domain: window.location.hostname,
+      currentLanguage: normalizeLanguageCode(navigator.language || 'en'),
       error: error.message
     };
   }
@@ -816,7 +832,9 @@ const analyticsTracker = {
   trackScrollDepth,
   retryOfflineEvents,
   resetAnalytics,
-  getAnalyticsStatus
+  getAnalyticsStatus,
+  // ✅ ADDED: Export the language normalization function
+  normalizeLanguageCode
 };
 
 export default analyticsTracker;
