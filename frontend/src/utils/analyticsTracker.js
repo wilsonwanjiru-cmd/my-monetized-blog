@@ -1,7 +1,7 @@
 // frontend/src/utils/analyticsTracker.js
 
-// Get API base URL from config
-const API_BASE_URL = window.APP_CONFIG?.API_BASE_URL || 'https://api.wilsonmuita.com';
+// ✅ UPDATED: API base URL for deployed backend
+const API_BASE_URL = 'https://api.wilsonmuita.com';
 
 // Session management
 let currentSessionId = null;
@@ -32,6 +32,9 @@ export const initAnalyticsTracking = () => {
     
     // Set up performance tracking
     setupPerformanceTracking();
+    
+    // Initialize UTM tracking
+    initUTMTracking();
     
     // Track initial page view after ensuring session is set
     setTimeout(() => {
@@ -90,9 +93,8 @@ const getSessionId = () => {
   }
 };
 
-// ✅ FIXED: Enhanced page view tracking with guaranteed required fields
+// ✅ UPDATED: Enhanced page view tracking for deployed backend
 export const trackPageView = async (page) => {
-  // ✅ FIXED: Declare payload in function scope to fix ESLint error
   let payload;
 
   try {
@@ -115,25 +117,35 @@ export const trackPageView = async (page) => {
       return;
     }
 
-    // FIXED: Complete payload with all required fields
+    // ✅ UPDATED: Get UTM parameters for tracking
+    const utmParams = getUTMParams();
+
+    // ✅ CRITICAL: Send payload that matches backend expectations
     payload = {
       type: 'pageview',
-      eventName: 'page_view', // ✅ Required field
-      sessionId: sessionId,   // ✅ Required field
-      page: pagePath,         // ✅ Required field
-      title: document.title,
+      eventName: 'page_view',
+      sessionId: sessionId,
+      page: pagePath,
+      title: document.title || 'Unknown Page',
       url: window.location.href,
       referrer: document.referrer || 'direct',
       userAgent: navigator.userAgent,
       timestamp: new Date().toISOString(),
       screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown',
-      language: navigator.language
+      language: navigator.language || 'en-US',
+      // ✅ ADDED: UTM parameters for campaign tracking
+      utm_source: utmParams.utm_source,
+      utm_medium: utmParams.utm_medium,
+      utm_campaign: utmParams.utm_campaign,
+      utm_content: utmParams.utm_content,
+      utm_term: utmParams.utm_term
     };
 
     console.log('📊 Tracking page view with payload:', {
       sessionId: sessionId.substring(0, 20) + '...',
       page: pagePath,
-      hasConsent: getConsentStatus()
+      hasConsent: getConsentStatus(),
+      backend: API_BASE_URL
     });
     
     const response = await fetch(`${API_BASE_URL}/api/analytics/pageview`, {
@@ -144,14 +156,25 @@ export const trackPageView = async (page) => {
       body: JSON.stringify(payload)
     });
 
-    // FIXED: Handle empty responses gracefully
+    // ✅ ENHANCED: Better error handling for deployed environment
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Analytics API error:', response.status, errorText);
+      console.error('❌ Analytics API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        endpoint: `${API_BASE_URL}/api/analytics/pageview`
+      });
+      
+      // Store for retry if it's a server error
+      if (response.status >= 500) {
+        storeOfflineEvent(payload);
+      }
+      
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    // FIXED: Handle empty response body
+    // Handle empty response body gracefully
     const responseText = await response.text();
     if (!responseText) {
       console.log('✅ Page view tracked successfully (empty response)');
@@ -169,15 +192,26 @@ export const trackPageView = async (page) => {
     
   } catch (error) {
     console.error('❌ Page view tracking failed:', error);
-    // ✅ FIXED: payload is now defined in function scope
+    
+    // ✅ ENHANCED: Better error reporting for production
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      console.warn('🌐 Network error - backend might be unreachable:', API_BASE_URL);
+    }
+    
     // Store for retry later
     if (payload) {
       storeOfflineEvent(payload);
     }
+    
+    return {
+      success: false,
+      message: 'Failed to track page view',
+      error: error.message
+    };
   }
 };
 
-// Enhanced event tracking with comprehensive error handling
+// ✅ UPDATED: Enhanced event tracking for deployed backend
 export const trackEvent = async (eventData) => {
   try {
     // Check if analytics are enabled
@@ -192,17 +226,28 @@ export const trackEvent = async (eventData) => {
       return;
     }
 
+    // ✅ ENHANCED: Include UTM parameters in all events
+    const utmParams = getUTMParams();
+
     const enhancedEventData = {
       type: 'event',
       sessionId: currentSessionId || getSessionId(),
       page: window.location.pathname,
-      url: window.location.href, // ✅ Added missing url
+      url: window.location.href,
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
+      // ✅ ADDED: UTM parameters
+      utm_source: utmParams.utm_source,
+      utm_medium: utmParams.utm_medium,
+      utm_campaign: utmParams.utm_campaign,
       ...eventData
     };
 
-    console.log('📈 Tracking event:', enhancedEventData.eventName, enhancedEventData);
+    console.log('📈 Tracking event:', {
+      eventName: enhancedEventData.eventName,
+      sessionId: enhancedEventData.sessionId?.substring(0, 20) + '...',
+      backend: API_BASE_URL
+    });
 
     // Send event data
     const result = await sendAnalyticsData('/api/analytics/event', enhancedEventData);
@@ -211,10 +256,15 @@ export const trackEvent = async (eventData) => {
   } catch (error) {
     console.error('❌ Event tracking failed:', error);
     // Don't throw to avoid breaking user experience
+    return {
+      success: false,
+      message: 'Event tracking failed',
+      error: error.message
+    };
   }
 };
 
-// ✅ FIXED: Core function to send analytics data with robust error handling
+// ✅ UPDATED: Core function to send analytics data to deployed backend
 const sendAnalyticsData = async (endpoint, data) => {
   try {
     // CRITICAL FIX: Validate required fields before sending
@@ -278,7 +328,11 @@ const sendAnalyticsData = async (endpoint, data) => {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
       } else {
-        console.error('❌ Analytics API error:', response.status, responseData);
+        console.error('❌ Analytics API error:', {
+          status: response.status,
+          endpoint: endpoint,
+          error: responseData
+        });
         return {
           success: false,
           message: responseData.message || 'Analytics API error',
@@ -295,11 +349,16 @@ const sendAnalyticsData = async (endpoint, data) => {
     }
 
   } catch (error) {
-    console.error('🌐 Network error in analytics request:', error);
+    console.error('🌐 Network error in analytics request:', {
+      error: error.message,
+      endpoint: endpoint,
+      backend: API_BASE_URL
+    });
     
-    // Don't retry for certain errors
+    // Store for retry if it's a network error
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      console.warn('🌐 Network offline, analytics request failed');
+      console.warn('🌐 Network offline, storing event for retry');
+      storeOfflineEvent({ endpoint, data });
     }
     
     return {
@@ -310,7 +369,7 @@ const sendAnalyticsData = async (endpoint, data) => {
   }
 };
 
-// ✅ FIXED: Store offline events for retry
+// ✅ ENHANCED: Store offline events for retry
 const storeOfflineEvent = (eventData) => {
   try {
     const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
@@ -318,7 +377,8 @@ const storeOfflineEvent = (eventData) => {
     // Add timestamp and limit to 50 events to prevent storage issues
     offlineEvents.push({
       ...eventData,
-      offlineTimestamp: new Date().toISOString()
+      offlineTimestamp: new Date().toISOString(),
+      retryCount: 0
     });
     
     // Keep only the last 50 events
@@ -334,13 +394,68 @@ const storeOfflineEvent = (eventData) => {
   }
 };
 
+// ✅ NEW: Retry offline events
+export const retryOfflineEvents = async () => {
+  try {
+    const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
+    
+    if (offlineEvents.length === 0) {
+      return { success: true, message: 'No offline events to retry' };
+    }
+
+    console.log(`🔄 Retrying ${offlineEvents.length} offline events`);
+    
+    const successfulRetries = [];
+    const failedRetries = [];
+
+    for (const event of offlineEvents) {
+      try {
+        const result = await sendAnalyticsData(event.endpoint, event.data);
+        
+        if (result.success) {
+          successfulRetries.push(event);
+        } else {
+          // Increment retry count and keep if under limit
+          event.retryCount = (event.retryCount || 0) + 1;
+          if (event.retryCount < 5) {
+            failedRetries.push(event);
+          }
+        }
+      } catch (error) {
+        event.retryCount = (event.retryCount || 0) + 1;
+        if (event.retryCount < 5) {
+          failedRetries.push(event);
+        }
+      }
+    }
+
+    // Update localStorage with remaining failed events
+    localStorage.setItem('analytics_offline_events', JSON.stringify(failedRetries));
+    
+    console.log(`✅ Offline events retry completed: ${successfulRetries.length} successful, ${failedRetries.length} failed`);
+    
+    return {
+      success: true,
+      retried: successfulRetries.length,
+      remaining: failedRetries.length
+    };
+
+  } catch (error) {
+    console.error('❌ Offline events retry failed:', error);
+    return {
+      success: false,
+      message: 'Failed to retry offline events',
+      error: error.message
+    };
+  }
+};
+
 // Process any events that were queued before initialization
 const processPendingEvents = () => {
   if (pendingEvents.length === 0) return;
 
   console.log(`🔄 Processing ${pendingEvents.length} pending events`);
   
-  // Use a regular for loop instead of forEach with async to avoid potential issues
   const processEvents = async () => {
     for (const event of pendingEvents) {
       try {
@@ -355,7 +470,7 @@ const processPendingEvents = () => {
   processEvents();
 };
 
-// UTM tracking initialization
+// ✅ UPDATED: UTM tracking initialization for production
 export const initUTMTracking = () => {
   try {
     const urlParams = new URLSearchParams(window.location.search);
@@ -555,7 +670,7 @@ export const trackError = (error, context = {}) => {
   });
 };
 
-// ✅ FIXED: Spelling - E-commerce tracking (if needed)
+// E-commerce tracking (if needed)
 export const trackEcommerceEvent = (eventType, data) => {
   trackEvent({
     eventName: `ecommerce_${eventType}`,
@@ -575,11 +690,24 @@ export const trackSocialShare = (platform, content) => {
   });
 };
 
+// Scroll depth tracking
+export const trackScrollDepth = (depth) => {
+  trackEvent({
+    eventName: 'scroll_depth',
+    eventData: {
+      depth: depth,
+      page: window.location.pathname,
+      maxScroll: document.documentElement.scrollHeight - window.innerHeight
+    }
+  });
+};
+
 // Reset analytics (for testing or user opt-out)
 export const resetAnalytics = () => {
   try {
     localStorage.removeItem('analytics_session_id');
     localStorage.removeItem('analytics_session_timestamp');
+    localStorage.removeItem('analytics_offline_events');
     sessionStorage.removeItem('utm_params');
     
     currentSessionId = null;
@@ -594,12 +722,30 @@ export const resetAnalytics = () => {
 
 // Get analytics status
 export const getAnalyticsStatus = () => {
-  return {
-    isInitialized,
-    hasConsent: getConsentStatus(),
-    sessionId: currentSessionId,
-    pendingEvents: pendingEvents.length
-  };
+  try {
+    const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
+    
+    return {
+      isInitialized,
+      hasConsent: getConsentStatus(),
+      sessionId: currentSessionId,
+      pendingEvents: pendingEvents.length,
+      offlineEvents: offlineEvents.length,
+      backend: API_BASE_URL,
+      domain: window.location.hostname
+    };
+  } catch (error) {
+    return {
+      isInitialized,
+      hasConsent: getConsentStatus(),
+      sessionId: currentSessionId,
+      pendingEvents: pendingEvents.length,
+      offlineEvents: 0,
+      backend: API_BASE_URL,
+      domain: window.location.hostname,
+      error: error.message
+    };
+  }
 };
 
 // Enhanced initialization with automatic retry
@@ -622,12 +768,17 @@ const initializeWithRetry = () => {
 
 // Auto-initialize when imported (with delay to ensure DOM is ready)
 if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    initializeWithRetry();
-  }, 1000);
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(initializeWithRetry, 1000);
+    });
+  } else {
+    setTimeout(initializeWithRetry, 1000);
+  }
 }
 
-// ✅ FIXED: Assign object to variable before exporting as default
+// Analytics tracker object with all exports
 const analyticsTracker = {
   initAnalyticsTracking,
   trackEvent,
@@ -636,8 +787,10 @@ const analyticsTracker = {
   getUTMParams,
   trackUserInteraction,
   trackError,
-  trackEcommerceEvent, // ✅ Fixed spelling
+  trackEcommerceEvent,
   trackSocialShare,
+  trackScrollDepth,
+  retryOfflineEvents,
   resetAnalytics,
   getAnalyticsStatus
 };

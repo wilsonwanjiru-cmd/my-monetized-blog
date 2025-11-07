@@ -3,6 +3,19 @@ const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 
+// ✅ ADDED: Utility function to get client IP (moved to top to avoid reference errors)
+function getClientIP(req) {
+  try {
+    return req.ip || 
+           req.connection.remoteAddress || 
+           req.socket.remoteAddress ||
+           (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+           'unknown';
+  } catch (error) {
+    return 'unknown';
+  }
+}
+
 // ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
   try {
@@ -30,35 +43,69 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced pageview tracking with comprehensive error handling
+// ✅ FIXED: Enhanced pageview tracking with proper schema mapping
 router.post('/pageview', async (req, res) => {
   try {
     console.log('📊 Pageview request received:', {
       body: req.body,
-      headers: req.headers
+      headers: {
+        'content-type': req.headers['content-type'],
+        'user-agent': req.headers['user-agent']
+      }
     });
 
-    // ✅ FIXED: Extract fields with proper fallbacks
+    // ✅ FIXED: Extract fields with proper defaults
     const { 
       sessionId, 
       page, 
-      url, 
-      title, 
-      referrer, 
-      timestamp, 
+      url,
+      eventType = 'pageview', // Map to model field
+      eventName = 'page_view',
+      type = 'pageview', // Keep for backward compatibility
+      metadata = {},
+      title,
+      referrer,
       userAgent,
-      eventName = 'page_view', // ✅ Default eventName
-      type = 'pageview' 
+      timestamp,
+      screenResolution,
+      language,
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
+      ...otherFields
     } = req.body;
 
-    // ✅ CRITICAL FIX: Better validation with detailed logging
-    if (!sessionId || !page) {
-      console.warn('⚠️ Pageview validation failed:', {
+    // ✅ FIXED: Smart page extraction
+    let extractedPage = page;
+    
+    if (!extractedPage && url) {
+      try {
+        const urlObj = new URL(url);
+        extractedPage = urlObj.pathname;
+        console.log('🔍 Extracted page from URL:', { url, extractedPage });
+      } catch (error) {
+        console.warn('⚠️ Could not parse URL, using URL as page:', url);
+        extractedPage = url;
+      }
+    }
+    
+    if (!extractedPage && metadata.path) {
+      extractedPage = metadata.path;
+      console.log('🔍 Extracted page from metadata.path:', extractedPage);
+    }
+
+    // ✅ FIXED: Enhanced validation
+    console.log('🔍 Field validation:', {
+      sessionId: sessionId ? `${sessionId.substring(0, 20)}...` : 'MISSING',
+      page: extractedPage || 'MISSING'
+    });
+
+    if (!sessionId || !extractedPage) {
+      console.warn('❌ Validation failed - missing required fields:', {
         missingSessionId: !sessionId,
-        missingPage: !page,
-        receivedFields: Object.keys(req.body),
-        sessionId: sessionId,
-        page: page
+        missingPage: !extractedPage
       });
       
       return res.status(400).json({
@@ -66,29 +113,39 @@ router.post('/pageview', async (req, res) => {
         message: 'Missing required fields: sessionId and page are required',
         status: 400,
         data: { 
-          received: req.body,
-          required: ['sessionId', 'page'],
-          missing: {
-            sessionId: !sessionId,
-            page: !page
-          }
+          received: {
+            sessionId: sessionId,
+            page: page,
+            url: url,
+            extractedPage: extractedPage
+          },
+          required: ['sessionId', 'page']
         }
       });
     }
 
     // ✅ FIXED: Create event with proper field mapping
     const analyticsEvent = new AnalyticsEvent({
-      sessionId: sessionId.trim(), // ✅ Trim any whitespace
-      page: page.trim(), // ✅ Trim any whitespace
-      url: url || req.body.url || 'unknown',
-      title: title || req.body.title || 'Unknown Page',
-      referrer: referrer || req.body.referrer || 'direct',
+      // ✅ Map to model fields correctly
+      eventType: eventType, // This matches the model
+      type: type, // Store the original type as well
+      eventName: eventName,
+      sessionId: sessionId.trim(),
+      page: extractedPage.trim(),
+      url: url || `https://wilsonmuita.com${extractedPage}`,
+      title: title || metadata.title || 'Unknown Page',
+      referrer: referrer || metadata.referrer || 'direct',
+      userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      userAgent: userAgent || req.headers['user-agent'],
-      ip: getClientIP(req),
-      type: type,
-      eventName: eventName, // ✅ Ensure eventName is included
+      screenResolution: screenResolution || metadata.screenResolution,
+      language: language || metadata.language || 'en-US',
+      utmSource: utm_source || metadata.utm_source,
+      utmMedium: utm_medium || metadata.utm_medium,
+      utmCampaign: utm_campaign || metadata.utm_campaign,
+      utmContent: utm_content || metadata.utm_content,
+      utmTerm: utm_term || metadata.utm_term,
       metadata: {
+        ...metadata,
         ip: getClientIP(req),
         source: 'analytics-pageview',
         userAgent: req.headers['user-agent'],
@@ -96,6 +153,13 @@ router.post('/pageview', async (req, res) => {
           referer: req.get('Referer'),
           origin: req.get('Origin'),
           host: req.get('Host')
+        },
+        // Add extraction info for debugging
+        pageExtraction: {
+          originalPage: page,
+          fromUrl: !!url,
+          fromMetadata: !!metadata.path,
+          finalPage: extractedPage
         }
       }
     });
@@ -105,25 +169,29 @@ router.post('/pageview', async (req, res) => {
     console.log('✅ Pageview tracked successfully:', {
       eventId: analyticsEvent._id,
       sessionId: sessionId.substring(0, 20) + '...',
-      page: page
+      page: extractedPage
     });
 
-    // ✅ FIXED: Always return valid JSON response
     res.status(200).json({ 
       success: true,
       message: 'Pageview tracked successfully',
       eventId: analyticsEvent._id,
-      timestamp: analyticsEvent.timestamp
+      timestamp: analyticsEvent.timestamp,
+      extracted: {
+        originalPage: page,
+        finalPage: extractedPage
+      }
     });
 
   } catch (error) {
     console.error('❌ Analytics error:', error);
     
-    // ✅ FIXED: Return proper JSON even on error
+    // ✅ FIXED: Better error response
     res.status(500).json({ 
       success: false,
       message: 'Internal server error',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -148,7 +216,10 @@ router.post('/event', async (req, res) => {
       utmSource,
       utmMedium,
       utmCampaign,
-      url // ✅ Added url field
+      url,
+      title,
+      referrer,
+      ...otherFields
     } = req.body;
 
     // ✅ ENHANCED: Better validation with helpful errors
@@ -163,7 +234,9 @@ router.post('/event', async (req, res) => {
     }
 
     const event = new AnalyticsEvent({
-      type,
+      // ✅ FIXED: Proper field mapping
+      eventType: type,
+      type: type,
       sessionId,
       page: page || req.get('Referer') || 'unknown',
       eventName,
@@ -173,7 +246,9 @@ router.post('/event', async (req, res) => {
       utmSource,
       utmMedium,
       utmCampaign,
-      url: url || req.get('Referer') || 'unknown', // ✅ Include URL
+      url: url || req.get('Referer') || 'unknown',
+      title: title || 'Custom Event',
+      referrer: referrer || req.get('Referer') || 'direct',
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-event',
@@ -181,7 +256,8 @@ router.post('/event', async (req, res) => {
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin')
-        }
+        },
+        eventData: eventData || {}
       }
     });
 
@@ -204,7 +280,7 @@ router.post('/event', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to track event',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -237,24 +313,29 @@ router.post('/postview', async (req, res) => {
     }
 
     const event = new AnalyticsEvent({
+      // ✅ FIXED: Proper field mapping
+      eventType: 'post_view',
       type: 'post_view',
       sessionId: sessionId || `post_${postId}_${Date.now()}`,
       page: url || req.get('Referer') || 'direct',
       eventName: 'post_view',
-      eventData: {
-        postId,
-        title,
-        slug,
-        category,
-        readTime,
-        referrer: referrer || 'direct'
-      },
+      title: title || 'Blog Post',
+      url: url || req.get('Referer') || 'direct',
+      referrer: referrer || 'direct',
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-postview',
         userAgent: req.get('User-Agent'),
-        postId: postId
+        postId: postId,
+        eventData: {
+          postId,
+          title,
+          slug,
+          category,
+          readTime,
+          referrer: referrer || 'direct'
+        }
       }
     });
 
@@ -274,7 +355,7 @@ router.post('/postview', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to track post view',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -369,7 +450,7 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics stats',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -531,7 +612,7 @@ router.get('/dashboard', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard analytics',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -620,7 +701,7 @@ router.get('/utm-report', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to fetch UTM report',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -636,6 +717,7 @@ router.get('/health', async (req, res) => {
     
     // Test database write capability
     const testEvent = new AnalyticsEvent({
+      eventType: 'health_check',
       type: 'health_check',
       sessionId: 'health_check_' + Date.now(),
       page: '/api/analytics/health',
@@ -710,6 +792,13 @@ router.post('/bulk', async (req, res) => {
         if (!event.timestamp) {
           event.timestamp = new Date();
         }
+        // Ensure proper field mapping
+        if (!event.eventType && event.type) {
+          event.eventType = event.type;
+        }
+        if (!event.type && event.eventType) {
+          event.type = event.eventType;
+        }
         // Add metadata
         event.metadata = {
           ...event.metadata,
@@ -744,7 +833,7 @@ router.post('/bulk', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to process bulk events',
-      error: process.env.NODE_ENV === 'production' ? 'Internal server error' : error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -790,19 +879,6 @@ router.get('/status', async (req, res) => {
     });
   }
 });
-
-// ✅ ADDED: Utility function to get client IP
-function getClientIP(req) {
-  try {
-    return req.ip || 
-           req.connection.remoteAddress || 
-           req.socket.remoteAddress ||
-           (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
-           'unknown';
-  } catch (error) {
-    return 'unknown';
-  }
-}
 
 // ✅ ADDED: Cleanup old events endpoint (admin only)
 router.delete('/cleanup', async (req, res) => {
