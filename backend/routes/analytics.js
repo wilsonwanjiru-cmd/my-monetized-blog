@@ -16,6 +16,42 @@ function getClientIP(req) {
   }
 }
 
+// ✅ ADDED: Database connection check
+router.get('/db-status', async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const dbState = mongoose.connection.readyState;
+    const states = {
+      0: 'disconnected',
+      1: 'connected', 
+      2: 'connecting',
+      3: 'disconnecting'
+    };
+
+    // Test database operation
+    const count = await AnalyticsEvent.countDocuments();
+    const recentEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
+
+    res.json({
+      success: true,
+      database: {
+        state: states[dbState],
+        readyState: dbState,
+        totalEvents: count,
+        lastEvent: recentEvent ? recentEvent.timestamp : null
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Database status check failed:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Database connection failed',
+      error: error.message
+    });
+  }
+});
+
 // ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
   try {
@@ -30,7 +66,8 @@ router.get('/test', (req, res) => {
         stats: 'GET /api/analytics/stats',
         dashboard: 'GET /api/analytics/dashboard',
         health: 'GET /api/analytics/health',
-        status: 'GET /api/analytics/status'
+        status: 'GET /api/analytics/status',
+        dbStatus: 'GET /api/analytics/db-status'
       }
     });
   } catch (error) {
@@ -43,25 +80,28 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced pageview tracking with proper schema mapping
+// ✅ ENHANCED: Pageview tracking with detailed error handling
 router.post('/pageview', async (req, res) => {
+  let analyticsEvent;
+  
   try {
     console.log('📊 Pageview request received:', {
       body: req.body,
       headers: {
         'content-type': req.headers['content-type'],
         'user-agent': req.headers['user-agent']
-      }
+      },
+      timestamp: new Date().toISOString()
     });
 
-    // ✅ FIXED: Extract fields with proper defaults
+    // ✅ FIXED: Extract fields with proper validation
     const { 
       sessionId, 
       page, 
       url,
-      eventType = 'pageview', // Map to model field
+      eventType = 'pageview',
       eventName = 'page_view',
-      type = 'pageview', // Keep for backward compatibility
+      type = 'pageview',
       metadata = {},
       title,
       referrer,
@@ -77,73 +117,75 @@ router.post('/pageview', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Smart page extraction
+    // ✅ FIXED: Enhanced validation with better error messages
+    if (!sessionId) {
+      console.error('❌ Validation failed: Missing sessionId');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: sessionId',
+        received: Object.keys(req.body)
+      });
+    }
+
+    if (!page && !url) {
+      console.error('❌ Validation failed: Missing both page and url');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: page or url',
+        received: Object.keys(req.body)
+      });
+    }
+
+    // ✅ FIXED: Smart page extraction with fallbacks
     let extractedPage = page;
     
     if (!extractedPage && url) {
       try {
         const urlObj = new URL(url);
         extractedPage = urlObj.pathname;
-        console.log('🔍 Extracted page from URL:', { url, extractedPage });
+        console.log('🔍 Extracted page from URL:', extractedPage);
       } catch (error) {
         console.warn('⚠️ Could not parse URL, using URL as page:', url);
         extractedPage = url;
       }
     }
-    
-    if (!extractedPage && metadata.path) {
-      extractedPage = metadata.path;
-      console.log('🔍 Extracted page from metadata.path:', extractedPage);
-    }
 
-    // ✅ FIXED: Enhanced validation
-    console.log('🔍 Field validation:', {
-      sessionId: sessionId ? `${sessionId.substring(0, 20)}...` : 'MISSING',
-      page: extractedPage || 'MISSING'
-    });
-
-    if (!sessionId || !extractedPage) {
-      console.warn('❌ Validation failed - missing required fields:', {
-        missingSessionId: !sessionId,
-        missingPage: !extractedPage
-      });
-      
-      return res.status(400).json({
+    // ✅ FIXED: Check if AnalyticsEvent model is properly connected
+    if (!AnalyticsEvent || typeof AnalyticsEvent !== 'function') {
+      console.error('❌ AnalyticsEvent model not properly initialized');
+      return res.status(500).json({
         success: false,
-        message: 'Missing required fields: sessionId and page are required',
-        status: 400,
-        data: { 
-          received: {
-            sessionId: sessionId,
-            page: page,
-            url: url,
-            extractedPage: extractedPage
-          },
-          required: ['sessionId', 'page']
-        }
+        message: 'Analytics service not properly configured',
+        error: 'Database model not available'
       });
     }
 
-    // ✅ FIXED: Create event with proper field mapping
-    const analyticsEvent = new AnalyticsEvent({
-      // ✅ Map to model fields correctly
-      eventType: eventType, // This matches the model
-      type: type, // Store the original type as well
+    // ✅ FIXED: Create event with minimal required fields first
+    const eventData = {
+      // Core required fields
+      eventType: eventType,
+      type: type,
       eventName: eventName,
       sessionId: sessionId.trim(),
       page: extractedPage.trim(),
+      
+      // Additional fields with fallbacks
       url: url || `https://wilsonmuita.com${extractedPage}`,
       title: title || metadata.title || 'Unknown Page',
       referrer: referrer || metadata.referrer || 'direct',
       userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      screenResolution: screenResolution || metadata.screenResolution,
+      screenResolution: screenResolution || metadata.screenResolution || 'unknown',
       language: language || metadata.language || 'en-US',
-      utmSource: utm_source || metadata.utm_source,
-      utmMedium: utm_medium || metadata.utm_medium,
-      utmCampaign: utm_campaign || metadata.utm_campaign,
-      utmContent: utm_content || metadata.utm_content,
-      utmTerm: utm_term || metadata.utm_term,
+      
+      // UTM parameters
+      utmSource: utm_source,
+      utmMedium: utm_medium,
+      utmCampaign: utm_campaign,
+      utmContent: utm_content,
+      utmTerm: utm_term,
+      
+      // Metadata
       metadata: {
         ...metadata,
         ip: getClientIP(req),
@@ -154,16 +196,24 @@ router.post('/pageview', async (req, res) => {
           origin: req.get('Origin'),
           host: req.get('Host')
         },
-        // Add extraction info for debugging
         pageExtraction: {
           originalPage: page,
           fromUrl: !!url,
-          fromMetadata: !!metadata.path,
           finalPage: extractedPage
         }
       }
+    };
+
+    console.log('🔧 Creating analytics event with data:', {
+      sessionId: eventData.sessionId.substring(0, 20) + '...',
+      page: eventData.page,
+      eventType: eventData.eventType
     });
 
+    // ✅ FIXED: Create and save with better error handling
+    analyticsEvent = new AnalyticsEvent(eventData);
+    
+    // Test save operation
     await analyticsEvent.save();
     
     console.log('✅ Pageview tracked successfully:', {
@@ -176,22 +226,45 @@ router.post('/pageview', async (req, res) => {
       success: true,
       message: 'Pageview tracked successfully',
       eventId: analyticsEvent._id,
-      timestamp: analyticsEvent.timestamp,
-      extracted: {
-        originalPage: page,
-        finalPage: extractedPage
-      }
+      timestamp: analyticsEvent.timestamp
     });
 
   } catch (error) {
-    console.error('❌ Analytics error:', error);
+    console.error('❌ Analytics error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue
+    });
     
-    // ✅ FIXED: Better error response
+    // ✅ FIXED: More specific error handling
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Data validation failed',
+        error: error.message,
+        details: error.errors
+      });
+    }
+    
+    if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+      return res.status(500).json({
+        success: false,
+        message: 'Database error',
+        error: error.message,
+        code: error.code
+      });
+    }
+    
+    // Generic error response
     res.status(500).json({ 
       success: false,
       message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message,
+      // Only include stack in development
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
   }
 });
@@ -276,6 +349,15 @@ router.post('/event', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Analytics event tracking error:', error);
+    
+    // Enhanced error response
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Event data validation failed',
+        error: error.message
+      });
+    }
     
     res.status(500).json({
       success: false,

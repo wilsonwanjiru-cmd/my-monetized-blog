@@ -93,9 +93,10 @@ const getSessionId = () => {
   }
 };
 
-// ✅ UPDATED: Enhanced page view tracking for deployed backend
+// ✅ FIXED: Enhanced page view tracking with better error handling
 export const trackPageView = async (page) => {
   let payload;
+  let response;
 
   try {
     if (!getConsentStatus()) {
@@ -103,24 +104,16 @@ export const trackPageView = async (page) => {
       return;
     }
 
-    // CRITICAL FIX: Ensure we have sessionId and page before sending
     const sessionId = currentSessionId || getSessionId();
     const pagePath = page || window.location.pathname;
 
     if (!sessionId || !pagePath) {
-      console.warn('⚠️ Page view tracking skipped: Missing sessionId or page', { 
-        sessionId, 
-        page: pagePath,
-        currentSessionId,
-        location: window.location.pathname
-      });
+      console.warn('⚠️ Page view tracking skipped: Missing sessionId or page');
       return;
     }
 
-    // ✅ UPDATED: Get UTM parameters for tracking
     const utmParams = getUTMParams();
 
-    // ✅ CRITICAL: Send payload that matches backend expectations
     payload = {
       type: 'pageview',
       eventName: 'page_view',
@@ -133,7 +126,6 @@ export const trackPageView = async (page) => {
       timestamp: new Date().toISOString(),
       screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown',
       language: navigator.language || 'en-US',
-      // ✅ ADDED: UTM parameters for campaign tracking
       utm_source: utmParams.utm_source,
       utm_medium: utmParams.utm_medium,
       utm_campaign: utmParams.utm_campaign,
@@ -141,14 +133,14 @@ export const trackPageView = async (page) => {
       utm_term: utmParams.utm_term
     };
 
-    console.log('📊 Tracking page view with payload:', {
+    console.log('📊 Tracking page view:', {
       sessionId: sessionId.substring(0, 20) + '...',
       page: pagePath,
-      hasConsent: getConsentStatus(),
       backend: API_BASE_URL
     });
     
-    const response = await fetch(`${API_BASE_URL}/api/analytics/pageview`, {
+    // ✅ FIXED: Better fetch with timeout and error handling
+    response = await fetch(`${API_BASE_URL}/api/analytics/pageview`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -156,13 +148,14 @@ export const trackPageView = async (page) => {
       body: JSON.stringify(payload)
     });
 
-    // ✅ ENHANCED: Better error handling for deployed environment
+    // ✅ FIXED: Handle different response types properly
+    const responseText = await response.text();
+    
     if (!response.ok) {
-      const errorText = await response.text();
       console.error('❌ Analytics API error:', {
         status: response.status,
         statusText: response.statusText,
-        error: errorText,
+        response: responseText,
         endpoint: `${API_BASE_URL}/api/analytics/pageview`
       });
       
@@ -171,32 +164,46 @@ export const trackPageView = async (page) => {
         storeOfflineEvent(payload);
       }
       
-      throw new Error(`HTTP error! status: ${response.status}`);
+      // Return structured error instead of throwing
+      return {
+        success: false,
+        message: `HTTP error: ${response.status}`,
+        status: response.status,
+        response: responseText
+      };
     }
 
-    // Handle empty response body gracefully
-    const responseText = await response.text();
+    // ✅ FIXED: Handle empty response
     if (!responseText) {
       console.log('✅ Page view tracked successfully (empty response)');
-      return { success: true, message: 'Page view tracked' };
+      return { 
+        success: true, 
+        message: 'Page view tracked successfully' 
+      };
     }
 
+    // ✅ FIXED: Safe JSON parsing
     try {
       const responseData = JSON.parse(responseText);
       console.log('✅ Page view tracked successfully:', responseData);
       return responseData;
     } catch (parseError) {
-      console.log('✅ Page view tracked successfully (non-JSON response)');
-      return { success: true, message: 'Page view tracked' };
+      console.warn('⚠️ Response parsing failed, but request succeeded:', parseError);
+      return { 
+        success: true, 
+        message: 'Page view tracked (non-JSON response)' 
+      };
     }
     
   } catch (error) {
-    console.error('❌ Page view tracking failed:', error);
-    
-    // ✅ ENHANCED: Better error reporting for production
-    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-      console.warn('🌐 Network error - backend might be unreachable:', API_BASE_URL);
-    }
+    console.error('❌ Page view tracking failed:', {
+      error: error.message,
+      type: error.name,
+      payload: payload ? {
+        sessionId: payload.sessionId?.substring(0, 20) + '...',
+        page: payload.page
+      } : 'No payload'
+    });
     
     // Store for retry later
     if (payload) {
@@ -205,13 +212,13 @@ export const trackPageView = async (page) => {
     
     return {
       success: false,
-      message: 'Failed to track page view',
+      message: 'Network error',
       error: error.message
     };
   }
 };
 
-// ✅ UPDATED: Enhanced event tracking for deployed backend
+// ✅ FIXED: Enhanced event tracking with better error handling
 export const trackEvent = async (eventData) => {
   try {
     // Check if analytics are enabled
@@ -226,7 +233,7 @@ export const trackEvent = async (eventData) => {
       return;
     }
 
-    // ✅ ENHANCED: Include UTM parameters in all events
+    // Include UTM parameters in all events
     const utmParams = getUTMParams();
 
     const enhancedEventData = {
@@ -236,7 +243,6 @@ export const trackEvent = async (eventData) => {
       url: window.location.href,
       timestamp: new Date().toISOString(),
       userAgent: navigator.userAgent,
-      // ✅ ADDED: UTM parameters
       utm_source: utmParams.utm_source,
       utm_medium: utmParams.utm_medium,
       utm_campaign: utmParams.utm_campaign,
@@ -255,7 +261,6 @@ export const trackEvent = async (eventData) => {
 
   } catch (error) {
     console.error('❌ Event tracking failed:', error);
-    // Don't throw to avoid breaking user experience
     return {
       success: false,
       message: 'Event tracking failed',
@@ -264,7 +269,7 @@ export const trackEvent = async (eventData) => {
   }
 };
 
-// ✅ UPDATED: Core function to send analytics data to deployed backend
+// ✅ FIXED: Core function to send analytics data with robust error handling
 const sendAnalyticsData = async (endpoint, data) => {
   try {
     // CRITICAL FIX: Validate required fields before sending
@@ -308,19 +313,38 @@ const sendAnalyticsData = async (endpoint, data) => {
       body: JSON.stringify(data),
     });
 
-    // Handle different response types
-    if (response.status === 204) {
-      console.log('✅ Analytics request successful (no content)');
-      return { success: true, message: 'Event tracked successfully' };
-    }
-
+    // ✅ FIXED: Handle different response types properly
     const responseText = await response.text();
     
+    if (!response.ok) {
+      console.error('❌ Analytics API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        endpoint: endpoint,
+        response: responseText
+      });
+      
+      // Store for retry if it's a server error
+      if (response.status >= 500) {
+        storeOfflineEvent({ endpoint, data });
+      }
+      
+      // Return structured error
+      return {
+        success: false,
+        message: `HTTP error: ${response.status}`,
+        status: response.status,
+        response: responseText
+      };
+    }
+
+    // Handle empty response
     if (!responseText) {
       console.log('✅ Analytics request successful (empty response)');
       return { success: true, message: 'Event tracked successfully' };
     }
 
+    // ✅ FIXED: Safe JSON parsing with proper error handling
     try {
       const responseData = JSON.parse(responseText);
       
@@ -328,7 +352,7 @@ const sendAnalyticsData = async (endpoint, data) => {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
       } else {
-        console.error('❌ Analytics API error:', {
+        console.error('❌ Analytics API error response:', {
           status: response.status,
           endpoint: endpoint,
           error: responseData
@@ -341,7 +365,7 @@ const sendAnalyticsData = async (endpoint, data) => {
         };
       }
     } catch (parseError) {
-      console.warn('⚠️ Analytics response not JSON, but request succeeded');
+      console.warn('⚠️ Analytics response not JSON, but request succeeded:', parseError);
       return { 
         success: true, 
         message: 'Event tracked (non-JSON response)' 
