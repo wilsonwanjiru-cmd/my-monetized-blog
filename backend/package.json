@@ -7,7 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "heroku-postbuild": "cd ../frontend && npm install && npm run build"
+    "heroku-postbuild": "cd ../frontend && npm install && npm run build",
+    "deploy": "pm2 restart backend || pm2 start index.js --name backend",
+    "deploy:setup": "pm2 start index.js --name backend",
+    "logs": "pm2 logs backend"
   },
   "keywords": [],
   "author": "",
