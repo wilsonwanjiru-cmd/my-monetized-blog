@@ -32,7 +32,7 @@ router.get('/db-status', async (req, res) => {
     const count = await AnalyticsEvent.countDocuments();
     const recentEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
 
-    res.json({
+    return res.json({
       success: true,
       database: {
         state: states[dbState],
@@ -44,7 +44,7 @@ router.get('/db-status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Database status check failed:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Database connection failed',
       error: error.message
@@ -55,7 +55,7 @@ router.get('/db-status', async (req, res) => {
 // ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
   try {
-    res.json({
+    return res.json({
       success: true,
       message: 'Analytics routes are working correctly!',
       timestamp: new Date().toISOString(),
@@ -72,7 +72,7 @@ router.get('/test', (req, res) => {
     });
   } catch (error) {
     console.error('❌ Test endpoint error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Test endpoint failed',
       error: error.message
@@ -80,7 +80,7 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Pageview tracking with detailed error handling
+// ✅ FIXED: Pageview tracking with proper JSON responses
 router.post('/pageview', async (req, res) => {
   let analyticsEvent;
   
@@ -160,6 +160,11 @@ router.post('/pageview', async (req, res) => {
       });
     }
 
+    // ✅ FIXED: Normalize language code to prevent MongoDB errors
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
     // ✅ FIXED: Create event with minimal required fields first
     const eventData = {
       // Core required fields
@@ -176,7 +181,7 @@ router.post('/pageview', async (req, res) => {
       userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       screenResolution: screenResolution || metadata.screenResolution || 'unknown',
-      language: language || metadata.language || 'en-US',
+      language: normalizedLanguage, // ✅ FIXED: Use normalized language
       
       // UTM parameters
       utmSource: utm_source,
@@ -207,7 +212,8 @@ router.post('/pageview', async (req, res) => {
     console.log('🔧 Creating analytics event with data:', {
       sessionId: eventData.sessionId.substring(0, 20) + '...',
       page: eventData.page,
-      eventType: eventData.eventType
+      eventType: eventData.eventType,
+      language: eventData.language // ✅ FIXED: Log normalized language
     });
 
     // ✅ FIXED: Create and save with better error handling
@@ -222,7 +228,8 @@ router.post('/pageview', async (req, res) => {
       page: extractedPage
     });
 
-    res.status(200).json({ 
+    // ✅ FIXED: Always return proper JSON response
+    return res.status(200).json({ 
       success: true,
       message: 'Pageview tracked successfully',
       eventId: analyticsEvent._id,
@@ -239,7 +246,7 @@ router.post('/pageview', async (req, res) => {
       keyValue: error.keyValue
     });
     
-    // ✅ FIXED: More specific error handling
+    // ✅ FIXED: More specific error handling with proper JSON responses
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -259,7 +266,7 @@ router.post('/pageview', async (req, res) => {
     }
     
     // Generic error response
-    res.status(500).json({ 
+    return res.status(500).json({ 
       success: false,
       message: 'Internal server error',
       error: error.message,
@@ -269,7 +276,7 @@ router.post('/pageview', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Track general analytics events with robust error handling
+// ✅ FIXED: Track general analytics events with proper JSON responses
 router.post('/event', async (req, res) => {
   try {
     console.log('📊 Event request received:', {
@@ -292,8 +299,14 @@ router.post('/event', async (req, res) => {
       url,
       title,
       referrer,
+      language, // ✅ ADDED: Extract language
       ...otherFields
     } = req.body;
+
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
 
     // ✅ ENHANCED: Better validation with helpful errors
     if (!sessionId || !eventName) {
@@ -322,6 +335,7 @@ router.post('/event', async (req, res) => {
       url: url || req.get('Referer') || 'unknown',
       title: title || 'Custom Event',
       referrer: referrer || req.get('Referer') || 'direct',
+      language: normalizedLanguage, // ✅ FIXED: Use normalized language
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-event',
@@ -338,8 +352,8 @@ router.post('/event', async (req, res) => {
 
     console.log('✅ Event tracked successfully:', eventName, event._id);
 
-    // Always return valid JSON
-    res.json({
+    // ✅ FIXED: Always return valid JSON
+    return res.json({
       success: true,
       message: 'Event tracked successfully',
       eventId: event._id,
@@ -359,7 +373,7 @@ router.post('/event', async (req, res) => {
       });
     }
     
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to track event',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -367,7 +381,7 @@ router.post('/event', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Track post-specific views with improved validation
+// ✅ FIXED: Track post-specific views with proper JSON responses
 router.post('/postview', async (req, res) => {
   try {
     console.log('📊 Postview request received:', {
@@ -384,7 +398,8 @@ router.post('/postview', async (req, res) => {
       url,
       referrer,
       timestamp,
-      sessionId
+      sessionId,
+      language // ✅ ADDED: Extract language
     } = req.body;
 
     if (!postId) {
@@ -393,6 +408,11 @@ router.post('/postview', async (req, res) => {
         message: 'Missing required field: postId'
       });
     }
+
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
 
     const event = new AnalyticsEvent({
       // ✅ FIXED: Proper field mapping
@@ -405,6 +425,7 @@ router.post('/postview', async (req, res) => {
       url: url || req.get('Referer') || 'direct',
       referrer: referrer || 'direct',
       timestamp: timestamp ? new Date(timestamp) : new Date(),
+      language: normalizedLanguage, // ✅ FIXED: Use normalized language
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-postview',
@@ -425,7 +446,7 @@ router.post('/postview', async (req, res) => {
 
     console.log('✅ Post view tracked successfully:', postId);
 
-    res.json({
+    return res.json({
       success: true,
       message: 'Post view tracked successfully',
       eventId: event._id,
@@ -434,7 +455,7 @@ router.post('/postview', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error tracking post view:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to track post view',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -442,7 +463,7 @@ router.post('/postview', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Get basic analytics stats with error handling
+// ✅ FIXED: Get basic analytics stats with proper JSON responses
 router.get('/stats', async (req, res) => {
   try {
     const { days = 30, type } = req.query;
@@ -510,7 +531,7 @@ router.get('/stats', async (req, res) => {
 
     console.log('✅ Analytics stats fetched successfully');
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         totalEvents,
@@ -529,7 +550,7 @@ router.get('/stats', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error fetching analytics stats:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics stats',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -537,7 +558,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Get comprehensive analytics for dashboard
+// ✅ FIXED: Get comprehensive analytics for dashboard with proper JSON responses
 router.get('/dashboard', async (req, res) => {
   try {
     const { days = 30 } = req.query;
@@ -673,7 +694,7 @@ router.get('/dashboard', async (req, res) => {
 
     console.log('✅ Dashboard analytics fetched successfully');
 
-    res.json({
+    return res.json({
       success: true,
       period: `${days} days`,
       summary: {
@@ -691,7 +712,7 @@ router.get('/dashboard', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Dashboard analytics error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard analytics',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -699,7 +720,7 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Get UTM parameters report
+// ✅ FIXED: Get UTM parameters report with proper JSON responses
 router.get('/utm-report', async (req, res) => {
   try {
     const { source, medium, campaign, days = 30 } = req.query;
@@ -770,7 +791,7 @@ router.get('/utm-report', async (req, res) => {
 
     console.log('✅ UTM report fetched successfully');
 
-    res.json({
+    return res.json({
       success: true,
       report: utmReport,
       filters: { source, medium, campaign, days },
@@ -780,7 +801,7 @@ router.get('/utm-report', async (req, res) => {
 
   } catch (error) {
     console.error('❌ UTM report error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch UTM report',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -788,7 +809,7 @@ router.get('/utm-report', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Health check for analytics API
+// ✅ FIXED: Health check for analytics API with proper JSON responses
 router.get('/health', async (req, res) => {
   try {
     // Test database connection
@@ -814,7 +835,7 @@ router.get('/health', async (req, res) => {
     await testEvent.save();
     await AnalyticsEvent.deleteOne({ _id: testEvent._id });
 
-    res.json({
+    return res.json({
       success: true,
       status: 'healthy',
       message: 'Analytics API is running correctly',
@@ -831,7 +852,7 @@ router.get('/health', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Analytics health check error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       status: 'unhealthy',
       message: 'Analytics API health check failed',
@@ -841,7 +862,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Bulk events endpoint for offline sync
+// ✅ FIXED: Bulk events endpoint with proper JSON responses
 router.post('/bulk', async (req, res) => {
   try {
     const { events } = req.body;
@@ -881,6 +902,10 @@ router.post('/bulk', async (req, res) => {
         if (!event.type && event.eventType) {
           event.type = event.eventType;
         }
+        // ✅ FIXED: Normalize language code for bulk events
+        if (event.language && event.language.includes('-')) {
+          event.language = event.language.split('-')[0];
+        }
         // Add metadata
         event.metadata = {
           ...event.metadata,
@@ -902,7 +927,7 @@ router.post('/bulk', async (req, res) => {
 
     const savedEvents = await AnalyticsEvent.insertMany(validEvents, { ordered: false });
 
-    res.json({
+    return res.json({
       success: true,
       message: `Successfully processed ${savedEvents.length} events`,
       savedCount: savedEvents.length,
@@ -912,7 +937,7 @@ router.post('/bulk', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Bulk events error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to process bulk events',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
@@ -920,13 +945,13 @@ router.post('/bulk', async (req, res) => {
   }
 });
 
-// ✅ ENHANCED: Endpoint to check if analytics is working
+// ✅ FIXED: Endpoint to check if analytics is working with proper JSON responses
 router.get('/status', async (req, res) => {
   try {
     const eventCount = await AnalyticsEvent.countDocuments();
     const lastEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
     
-    res.json({
+    return res.json({
       success: true,
       status: 'operational',
       timestamp: new Date().toISOString(),
@@ -952,7 +977,7 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Status endpoint error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       status: 'degraded',
       message: 'Analytics service status check failed',
@@ -962,7 +987,7 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// ✅ ADDED: Cleanup old events endpoint (admin only)
+// ✅ FIXED: Cleanup old events endpoint with proper JSON responses
 router.delete('/cleanup', async (req, res) => {
   try {
     // Simple authentication check (you might want to enhance this)
@@ -986,7 +1011,7 @@ router.delete('/cleanup', async (req, res) => {
 
     console.log(`✅ Cleanup completed: Deleted ${result.deletedCount} events`);
 
-    res.json({
+    return res.json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} events older than ${days} days`,
       deletedCount: result.deletedCount,
@@ -995,7 +1020,7 @@ router.delete('/cleanup', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Cleanup error:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to cleanup old events',
       error: error.message
