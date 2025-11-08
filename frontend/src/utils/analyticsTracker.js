@@ -108,7 +108,7 @@ export const trackPageView = async (page) => {
   try {
     if (!getConsentStatus()) {
       console.log('🔕 Page view tracking skipped: No consent');
-      return;
+      return { success: true, message: 'Page view tracking skipped: No consent' };
     }
 
     const sessionId = currentSessionId || getSessionId();
@@ -116,7 +116,7 @@ export const trackPageView = async (page) => {
 
     if (!sessionId || !pagePath) {
       console.warn('⚠️ Page view tracking skipped: Missing sessionId or page');
-      return;
+      return { success: false, message: 'Missing sessionId or page' };
     }
 
     const utmParams = getUTMParams();
@@ -148,61 +148,9 @@ export const trackPageView = async (page) => {
       backend: API_BASE_URL
     });
     
-    // ✅ FIXED: Better fetch with timeout and error handling
-    response = await fetch(`${API_BASE_URL}/api/analytics/pageview`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload)
-    });
-
-    // ✅ FIXED: Handle different response types properly
-    const responseText = await response.text();
-    
-    if (!response.ok) {
-      console.error('❌ Analytics API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        response: responseText,
-        endpoint: `${API_BASE_URL}/api/analytics/pageview`
-      });
-      
-      // Store for retry if it's a server error
-      if (response.status >= 500) {
-        storeOfflineEvent(payload);
-      }
-      
-      // Return structured error instead of throwing
-      return {
-        success: false,
-        message: `HTTP error: ${response.status}`,
-        status: response.status,
-        response: responseText
-      };
-    }
-
-    // ✅ ENHANCED: Handle empty response with better validation
-    if (!responseText || responseText.trim() === '') {
-      console.log('✅ Page view tracked successfully (empty response)');
-      return { 
-        success: true, 
-        message: 'Page view tracked successfully' 
-      };
-    }
-
-    // ✅ FIXED: Safe JSON parsing
-    try {
-      const responseData = JSON.parse(responseText);
-      console.log('✅ Page view tracked successfully:', responseData);
-      return responseData;
-    } catch (parseError) {
-      console.warn('⚠️ Response parsing failed, but request succeeded:', parseError);
-      return { 
-        success: true, 
-        message: 'Page view tracked (non-JSON response)' 
-      };
-    }
+    // Use the enhanced sendAnalyticsData function for consistency
+    const result = await sendAnalyticsData('/api/analytics/pageview', payload);
+    return result;
     
   } catch (error) {
     console.error('❌ Page view tracking failed:', {
@@ -217,7 +165,7 @@ export const trackPageView = async (page) => {
     
     // Store for retry later
     if (payload) {
-      storeOfflineEvent(payload);
+      storeOfflineEvent({ endpoint: '/api/analytics/pageview', data: payload });
     }
     
     return {
@@ -228,62 +176,10 @@ export const trackPageView = async (page) => {
   }
 };
 
-// ✅ FIXED: Enhanced event tracking with language normalization
-export const trackEvent = async (eventData) => {
-  try {
-    // Check if analytics are enabled
-    if (!getConsentStatus()) {
-      console.log('🔕 Event tracking disabled: No user consent');
-      return;
-    }
-
-    // Validate event data
-    if (!eventData || !eventData.eventName) {
-      console.warn('⚠️ Event tracking skipped: Missing event name');
-      return;
-    }
-
-    // Include UTM parameters in all events
-    const utmParams = getUTMParams();
-
-    const enhancedEventData = {
-      type: 'event',
-      sessionId: currentSessionId || getSessionId(),
-      page: window.location.pathname,
-      url: window.location.href,
-      timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      // ✅ FIXED: Normalize language code for all events
-      language: normalizeLanguageCode(navigator.language || 'en'),
-      utm_source: utmParams.utm_source,
-      utm_medium: utmParams.utm_medium,
-      utm_campaign: utmParams.utm_campaign,
-      ...eventData
-    };
-
-    console.log('📈 Tracking event:', {
-      eventName: enhancedEventData.eventName,
-      sessionId: enhancedEventData.sessionId?.substring(0, 20) + '...',
-      language: enhancedEventData.language,
-      backend: API_BASE_URL
-    });
-
-    // Send event data
-    const result = await sendAnalyticsData('/api/analytics/event', enhancedEventData);
-    return result;
-
-  } catch (error) {
-    console.error('❌ Event tracking failed:', error);
-    return {
-      success: false,
-      message: 'Event tracking failed',
-      error: error.message
-    };
-  }
-};
-
 // ✅ ENHANCED: Core function to send analytics data with robust error handling
 const sendAnalyticsData = async (endpoint, data) => {
+  let response;
+  
   try {
     // CRITICAL FIX: Validate required fields before sending
     if (endpoint === '/api/analytics/pageview') {
@@ -318,16 +214,34 @@ const sendAnalyticsData = async (endpoint, data) => {
       return { success: true, message: 'Event queued' };
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    console.log(`📊 Sending analytics to: ${API_BASE_URL}${endpoint}`, {
+      eventName: data.eventName,
+      sessionId: data.sessionId?.substring(0, 10) + '...',
+      page: data.page
+    });
+
+    // ✅ ENHANCED: Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+      signal: controller.signal
     });
 
-    // ✅ FIXED: Handle different response types properly
+    clearTimeout(timeoutId);
+
+    // ✅ ENHANCED: Handle empty responses first
     const responseText = await response.text();
+    console.log(`📊 Analytics response for ${endpoint}:`, {
+      status: response.status,
+      statusText: response.statusText,
+      body: responseText || '[EMPTY RESPONSE]'
+    });
     
     if (!response.ok) {
       console.error('❌ Analytics API error:', {
@@ -351,13 +265,17 @@ const sendAnalyticsData = async (endpoint, data) => {
       };
     }
 
-    // ✅ ENHANCED: Handle empty response with better validation
+    // ✅ CRITICAL FIX: Handle empty response gracefully
     if (!responseText || responseText.trim() === '') {
       console.log('✅ Analytics request successful (empty response)');
-      return { success: true, message: 'Event tracked successfully' };
+      return { 
+        success: true, 
+        message: 'Event tracked successfully',
+        emptyResponse: true 
+      };
     }
 
-    // ✅ FIXED: Safe JSON parsing with proper error handling
+    // ✅ ENHANCED: Safe JSON parsing with better error context
     try {
       const responseData = JSON.parse(responseText);
       
@@ -378,22 +296,33 @@ const sendAnalyticsData = async (endpoint, data) => {
         };
       }
     } catch (parseError) {
-      console.warn('⚠️ Analytics response not JSON, but request succeeded:', parseError);
+      // ✅ FIXED: Handle non-JSON responses gracefully
+      console.warn('⚠️ Analytics response not JSON, but request succeeded:', {
+        parseError: parseError.message,
+        responseText: responseText.substring(0, 100) + '...',
+        endpoint: endpoint
+      });
+      
       return { 
         success: true, 
-        message: 'Event tracked (non-JSON response)' 
+        message: 'Event tracked (non-JSON response)',
+        responseText: responseText 
       };
     }
 
   } catch (error) {
+    // ✅ ENHANCED: Better error classification
     console.error('🌐 Network error in analytics request:', {
       error: error.message,
+      errorType: error.name,
       endpoint: endpoint,
-      backend: API_BASE_URL
+      backend: API_BASE_URL,
+      isTimeout: error.name === 'AbortError',
+      isNetworkError: error.message.includes('Failed to fetch')
     });
     
     // Store for retry if it's a network error
-    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+    if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
       console.warn('🌐 Network offline, storing event for retry');
       storeOfflineEvent({ endpoint, data });
     }
@@ -401,6 +330,66 @@ const sendAnalyticsData = async (endpoint, data) => {
     return {
       success: false,
       message: 'Network error',
+      error: error.message,
+      errorType: error.name
+    };
+  }
+};
+
+// ✅ FIXED: Enhanced event tracking with language normalization
+export const trackEvent = async (eventData) => {
+  try {
+    // Check if analytics are enabled
+    if (!getConsentStatus()) {
+      console.log('🔕 Event tracking disabled: No user consent');
+      return { success: true, message: 'Event tracking disabled: No consent' };
+    }
+
+    // Validate event data
+    if (!eventData || !eventData.eventName) {
+      console.warn('⚠️ Event tracking skipped: Missing event name');
+      return { success: false, message: 'Missing event name' };
+    }
+
+    // Include UTM parameters in all events
+    const utmParams = getUTMParams();
+
+    const enhancedEventData = {
+      type: 'event',
+      sessionId: currentSessionId || getSessionId(),
+      page: window.location.pathname,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      // ✅ FIXED: Normalize language code for all events
+      language: normalizeLanguageCode(navigator.language || 'en'),
+      utm_source: utmParams.utm_source,
+      utm_medium: utmParams.utm_medium,
+      utm_campaign: utmParams.utm_campaign,
+      ...eventData
+    };
+
+    console.log('📈 Tracking event:', {
+      eventName: enhancedEventData.eventName,
+      sessionId: enhancedEventData.sessionId?.substring(0, 10) + '...',
+      language: enhancedEventData.language
+    });
+
+    // Send event data using the enhanced function
+    const result = await sendAnalyticsData('/api/analytics/event', enhancedEventData);
+    
+    // ✅ FIXED: Don't throw errors, just return the result
+    return result;
+
+  } catch (error) {
+    console.error('❌ Event tracking failed:', {
+      error: error.message,
+      eventName: eventData?.eventName
+    });
+    
+    return {
+      success: false,
+      message: 'Event tracking failed',
       error: error.message
     };
   }

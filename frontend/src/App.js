@@ -19,6 +19,9 @@ import { initHeatmapTracking } from './utils/heatmapTracker';
 // NEW: Import ConsentManager helper for global consent management
 import { consentHelper } from './components/AdSense';
 
+// ✅ ADDED: Import analytics debugger for enhanced debugging
+import './utils/analyticsDebugger';
+
 // Component to handle page view tracking
 const PageViewTracker = () => {
   const location = useLocation();

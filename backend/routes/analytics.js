@@ -32,6 +32,7 @@ router.get('/db-status', async (req, res) => {
     const count = await AnalyticsEvent.countDocuments();
     const recentEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       database: {
@@ -44,6 +45,7 @@ router.get('/db-status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Database status check failed:', error);
+    // ✅ FIXED: Always return JSON even for errors
     return res.status(500).json({
       success: false,
       message: 'Database connection failed',
@@ -55,6 +57,7 @@ router.get('/db-status', async (req, res) => {
 // ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
   try {
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: 'Analytics routes are working correctly!',
@@ -72,6 +75,7 @@ router.get('/test', (req, res) => {
     });
   } catch (error) {
     console.error('❌ Test endpoint error:', error);
+    // ✅ FIXED: Always return JSON even for errors
     return res.status(500).json({
       success: false,
       message: 'Test endpoint failed',
@@ -120,6 +124,7 @@ router.post('/pageview', async (req, res) => {
     // ✅ FIXED: Enhanced validation with better error messages
     if (!sessionId) {
       console.error('❌ Validation failed: Missing sessionId');
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: sessionId',
@@ -129,6 +134,7 @@ router.post('/pageview', async (req, res) => {
 
     if (!page && !url) {
       console.error('❌ Validation failed: Missing both page and url');
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: page or url',
@@ -153,6 +159,7 @@ router.post('/pageview', async (req, res) => {
     // ✅ FIXED: Check if AnalyticsEvent model is properly connected
     if (!AnalyticsEvent || typeof AnalyticsEvent !== 'function') {
       console.error('❌ AnalyticsEvent model not properly initialized');
+      // ✅ FIXED: Always return JSON
       return res.status(500).json({
         success: false,
         message: 'Analytics service not properly configured',
@@ -266,6 +273,7 @@ router.post('/pageview', async (req, res) => {
     }
     
     // Generic error response
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({ 
       success: false,
       message: 'Internal server error',
@@ -311,6 +319,7 @@ router.post('/event', async (req, res) => {
     // ✅ ENHANCED: Better validation with helpful errors
     if (!sessionId || !eventName) {
       console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: sessionId and eventName are required',
@@ -365,6 +374,7 @@ router.post('/event', async (req, res) => {
     console.error('❌ Analytics event tracking error:', error);
     
     // Enhanced error response
+    // ✅ FIXED: Always return JSON
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -403,6 +413,7 @@ router.post('/postview', async (req, res) => {
     } = req.body;
 
     if (!postId) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: postId'
@@ -446,6 +457,7 @@ router.post('/postview', async (req, res) => {
 
     console.log('✅ Post view tracked successfully:', postId);
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: 'Post view tracked successfully',
@@ -455,6 +467,7 @@ router.post('/postview', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error tracking post view:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to track post view',
@@ -470,6 +483,7 @@ router.get('/stats', async (req, res) => {
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -531,6 +545,7 @@ router.get('/stats', async (req, res) => {
 
     console.log('✅ Analytics stats fetched successfully');
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       data: {
@@ -550,6 +565,7 @@ router.get('/stats', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error fetching analytics stats:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics stats',
@@ -565,6 +581,7 @@ router.get('/dashboard', async (req, res) => {
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -694,6 +711,7 @@ router.get('/dashboard', async (req, res) => {
 
     console.log('✅ Dashboard analytics fetched successfully');
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       period: `${days} days`,
@@ -712,6 +730,7 @@ router.get('/dashboard', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Dashboard analytics error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard analytics',
@@ -727,6 +746,7 @@ router.get('/utm-report', async (req, res) => {
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -791,6 +811,7 @@ router.get('/utm-report', async (req, res) => {
 
     console.log('✅ UTM report fetched successfully');
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       report: utmReport,
@@ -801,6 +822,7 @@ router.get('/utm-report', async (req, res) => {
 
   } catch (error) {
     console.error('❌ UTM report error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch UTM report',
@@ -835,6 +857,7 @@ router.get('/health', async (req, res) => {
     await testEvent.save();
     await AnalyticsEvent.deleteOne({ _id: testEvent._id });
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       status: 'healthy',
@@ -852,6 +875,7 @@ router.get('/health', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Analytics health check error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       status: 'unhealthy',
@@ -868,6 +892,7 @@ router.post('/bulk', async (req, res) => {
     const { events } = req.body;
 
     if (!events || !Array.isArray(events)) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing or invalid events array'
@@ -875,6 +900,7 @@ router.post('/bulk', async (req, res) => {
     }
 
     if (events.length > 1000) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Too many events in bulk request. Maximum 1000 events allowed.'
@@ -918,6 +944,7 @@ router.post('/bulk', async (req, res) => {
     });
 
     if (errors.length > 0 && validEvents.length === 0) {
+      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'All events failed validation',
@@ -927,6 +954,7 @@ router.post('/bulk', async (req, res) => {
 
     const savedEvents = await AnalyticsEvent.insertMany(validEvents, { ordered: false });
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: `Successfully processed ${savedEvents.length} events`,
@@ -937,6 +965,7 @@ router.post('/bulk', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Bulk events error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to process bulk events',
@@ -951,6 +980,7 @@ router.get('/status', async (req, res) => {
     const eventCount = await AnalyticsEvent.countDocuments();
     const lastEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
     
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       status: 'operational',
@@ -977,6 +1007,7 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Status endpoint error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       status: 'degraded',
@@ -993,6 +1024,7 @@ router.delete('/cleanup', async (req, res) => {
     // Simple authentication check (you might want to enhance this)
     const { authorization } = req.headers;
     if (!authorization || authorization !== `Bearer ${process.env.ADMIN_TOKEN}`) {
+      // ✅ FIXED: Always return JSON
       return res.status(401).json({
         success: false,
         message: 'Unauthorized: Admin token required'
@@ -1011,6 +1043,7 @@ router.delete('/cleanup', async (req, res) => {
 
     console.log(`✅ Cleanup completed: Deleted ${result.deletedCount} events`);
 
+    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} events older than ${days} days`,
@@ -1020,6 +1053,7 @@ router.delete('/cleanup', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Cleanup error:', error);
+    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to cleanup old events',
