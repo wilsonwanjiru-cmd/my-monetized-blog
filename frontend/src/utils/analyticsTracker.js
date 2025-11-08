@@ -182,8 +182,8 @@ export const trackPageView = async (page) => {
       };
     }
 
-    // ✅ FIXED: Handle empty response
-    if (!responseText) {
+    // ✅ ENHANCED: Handle empty response with better validation
+    if (!responseText || responseText.trim() === '') {
       console.log('✅ Page view tracked successfully (empty response)');
       return { 
         success: true, 
@@ -282,7 +282,7 @@ export const trackEvent = async (eventData) => {
   }
 };
 
-// ✅ FIXED: Core function to send analytics data with robust error handling
+// ✅ ENHANCED: Core function to send analytics data with robust error handling
 const sendAnalyticsData = async (endpoint, data) => {
   try {
     // CRITICAL FIX: Validate required fields before sending
@@ -351,8 +351,8 @@ const sendAnalyticsData = async (endpoint, data) => {
       };
     }
 
-    // Handle empty response
-    if (!responseText) {
+    // ✅ ENHANCED: Handle empty response with better validation
+    if (!responseText || responseText.trim() === '') {
       console.log('✅ Analytics request successful (empty response)');
       return { success: true, message: 'Event tracked successfully' };
     }
