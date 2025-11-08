@@ -16,7 +16,7 @@ const AdSense = ({
   fallbackContent = null,
   currentPath = window.location.pathname
 }) => {
-  const [adLoaded, setAdLoaded] = useState(false);
+  // ✅ FIXED: Removed unused adLoaded state
   const [adError, setAdError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [hasConsent, setHasConsent] = useState(null);
@@ -234,14 +234,7 @@ const AdSense = ({
     };
   }, [slot, isEEAUser, hasConsent, retryCount, loadAdSenseScript]);
 
-  // Handle ad loaded event
-  const handleAdLoad = useCallback(() => {
-    console.log(`✅ AdSense: Ad loaded successfully for slot ${slot}`);
-    setAdLoaded(true);
-    setAdStatus('loaded');
-    setAdError(false);
-  }, [slot]);
-
+  // ✅ FIXED: Removed handleAdLoad since adLoaded state was removed
   // Handle ad error event
   const handleAdError = useCallback(() => {
     console.error(`❌ AdSense: Ad failed to load for slot ${slot}`);
@@ -257,9 +250,9 @@ const AdSense = ({
     }
   }, [slot, retryCount]);
 
-  // FIXED: Effect for consent management with better initialization
+  // ✅ FIXED: Effect for consent management - removed unused consentStatus variable
   useEffect(() => {
-    const consentStatus = checkConsentStatus();
+    checkConsentStatus();
     
     // Listen for consent changes from ConsentManager
     const handleConsentChange = () => {
@@ -283,7 +276,7 @@ const AdSense = ({
   useEffect(() => {
     // Reset states when slot or path changes
     if (!adInitializedRef.current) {
-      setAdLoaded(false);
+      // ✅ FIXED: Removed setAdLoaded(false) since adLoaded state was removed
       setAdError(false);
       setRetryCount(0);
       setAdStatus('idle');
@@ -305,17 +298,17 @@ const AdSense = ({
   useEffect(() => {
     const adElement = adElementRef.current;
     if (adElement) {
-      adElement.addEventListener('load', handleAdLoad);
+      // ✅ FIXED: Removed load event listener since adLoaded state was removed
       adElement.addEventListener('error', handleAdError);
     }
 
     return () => {
       if (adElement) {
-        adElement.removeEventListener('load', handleAdLoad);
+        // ✅ FIXED: Removed load event listener cleanup
         adElement.removeEventListener('error', handleAdError);
       }
     };
-  }, [handleAdLoad, handleAdError]);
+  }, [handleAdError]);
 
   // Cleanup on unmount
   useEffect(() => {
