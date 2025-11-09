@@ -1,0 +1,23 @@
+{
+  "files.watcherExclude": {
+    "**/build/**": true,
+    "**/node_modules/**": true,
+    "**/.git/**": true
+  },
+  "search.exclude": {
+    "**/build/**": true,
+    "**/node_modules/**": true,
+    "**/.git/**": true
+  },
+  "files.exclude": {
+    "**/build/**": true,
+    "**/node_modules/**": true,
+    "**/.git/**": true
+  },
+  "javascript.validate.enable": false,
+  "typescript.validate.enable": true,
+  "files.associations": {
+    "**/build/**/*.js": "ignore",
+    "**/build/**/*.html": "ignore"
+  }
+}
