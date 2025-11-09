@@ -43,10 +43,8 @@ export const initAnalyticsTracking = () => {
     // Initialize UTM tracking
     initUTMTracking();
     
-    // Track initial page view after ensuring session is set
-    setTimeout(() => {
-      trackPageView();
-    }, 500);
+    // ✅ REMOVED: Don't track initial page view here - let App.js handle it
+    // This prevents duplicate pageview tracking
 
     // Process any pending events
     processPendingEvents();

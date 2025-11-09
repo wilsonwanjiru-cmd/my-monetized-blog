@@ -30,23 +30,31 @@ const PageViewTracker = () => {
     // Track page view when route changes
     const trackPageView = async () => {
       const pageData = {
-        eventType: 'pageview',
-        url: window.location.href,
-        path: location.pathname,
+        // ✅ FIXED: Use the correct field names for backend
+        type: 'pageview',
+        eventName: 'page_view',
         sessionId: utmTracker.getCurrentSessionId(),
+        page: location.pathname,
+        url: window.location.href,
+        title: document.title,
+        referrer: document.referrer || 'direct',
+        userAgent: navigator.userAgent,
+        timestamp: new Date().toISOString(),
+        screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown',
+        language: navigator.language,
+        // ✅ FIXED: Include UTM parameters
+        ...utmTracker.getUTMParams(),
+        // ✅ FIXED: Include metadata as a separate field
         metadata: {
-          title: document.title,
-          referrer: document.referrer,
           previousPath: sessionStorage.getItem('previous_path') || '',
-          // NEW: Add consent status to page views
           consentStatus: consentHelper.getConsent() || 'not_set',
           isEEAUser: consentHelper.isEEAUser()
         }
       };
 
       try {
-        // Send to backend analytics
-        await fetch('/api/analytics/track', {
+        // ✅ FIXED: Use the correct endpoint - /api/analytics/pageview
+        await fetch('/api/analytics/pageview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -100,18 +108,26 @@ const generateSessionId = () => {
 // Enhanced event tracking function
 const trackEvent = async (eventType, metadata = {}) => {
   const eventData = {
-    eventType,
-    url: window.location.href,
-    path: window.location.pathname,
-    timestamp: new Date().toISOString(),
+    // ✅ FIXED: Use the correct field names for backend
+    type: 'event',
+    eventName: eventType,
     sessionId: generateSessionId(),
-    metadata,
+    page: window.location.pathname,
+    url: window.location.href,
+    title: document.title,
+    timestamp: new Date().toISOString(),
     userAgent: navigator.userAgent,
     screenResolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
-    viewport: `${window.innerWidth}x${window.innerHeight}`,
     language: navigator.language,
-    // NEW: Include consent status in all events
-    consentStatus: consentHelper.getConsent() || 'not_set'
+    // ✅ FIXED: Include UTM parameters
+    ...utmTracker.getUTMParams(),
+    // ✅ FIXED: Event data in the correct field
+    eventData: metadata,
+    // ✅ FIXED: Consent status in metadata
+    metadata: {
+      consentStatus: consentHelper.getConsent() || 'not_set',
+      viewport: `${window.innerWidth}x${window.innerHeight}`
+    }
   };
 
   // Always log events in development for debugging
@@ -122,7 +138,8 @@ const trackEvent = async (eventType, metadata = {}) => {
   // Only send to backend in production or if explicitly enabled
   if (process.env.NODE_ENV === 'production' || process.env.REACT_APP_ANALYTICS_DEV === 'true') {
     try {
-      const response = await fetch('/api/analytics/track', {
+      // ✅ FIXED: Use the correct endpoint - /api/analytics/event
+      const response = await fetch('/api/analytics/event', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,11 +171,10 @@ const handleGlobalClick = (event) => {
   if (target.closest('.affiliate-link') || target.getAttribute('rel')?.includes('sponsored')) {
     const link = target.closest('a');
     trackEvent('affiliate_click', {
-      element: 'affiliate_link',
-      href: link?.href,
-      text: link?.textContent?.substring(0, 100),
-      product: link?.getAttribute('data-affiliate-product'),
-      position: link?.getAttribute('data-affiliate-position')
+      buttonId: link?.id || 'affiliate_link',
+      buttonText: link?.textContent?.substring(0, 100),
+      position: link?.getAttribute('data-affiliate-position') || 'unknown',
+      href: link?.href
     });
   }
   
@@ -167,10 +183,10 @@ const handleGlobalClick = (event) => {
       target.classList.contains('newsletter-signup') || 
       target.type === 'submit') {
     trackEvent('cta_click', {
-      element: target.className,
-      text: target.textContent?.substring(0, 100),
+      buttonId: target.id || target.className,
+      buttonText: target.textContent?.substring(0, 100),
       type: target.type,
-      id: target.id
+      element: target.tagName
     });
   }
 
@@ -206,11 +222,11 @@ const setupErrorTracking = () => {
   // Global error handler
   window.addEventListener('error', (event) => {
     trackEvent('javascript_error', {
-      message: event.message,
+      errorMessage: event.message,
+      errorStack: event.error?.toString(),
       filename: event.filename,
       lineno: event.lineno,
-      colno: event.colno,
-      error: event.error?.toString()
+      colno: event.colno
     });
   });
 
