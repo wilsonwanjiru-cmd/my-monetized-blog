@@ -257,7 +257,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Analytics fallback routes to ensure they work
+// ✅ FIXED: Updated fallback analytics routes to handle frontend event structure
 app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Pageview Route Hit:', req.body);
@@ -266,59 +266,121 @@ app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
     const AnalyticsEvent = require('./models/AnalyticsEvent');
     
     const {
-      url,
       sessionId,
+      page,
+      url,
+      eventType = 'pageview',
+      eventName = 'page_view',
+      type = 'pageview',
+      metadata = {},
+      title,
+      referrer,
+      userAgent,
+      timestamp,
+      screenResolution,
+      language,
       utm_source,
       utm_medium,
       utm_campaign,
       utm_content,
       utm_term,
-      metadata
+      ...otherFields
     } = req.body;
 
-    // Validate required fields
-    if (!url || !sessionId) {
+    // ✅ FIXED: Enhanced validation with better error messages
+    if (!sessionId) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: url and sessionId are required'
+        message: 'Missing required field: sessionId'
       });
     }
 
-    const event = new AnalyticsEvent({
-      eventType: 'pageview',
-      url,
-      sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
+    if (!page && !url) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: page or url'
+      });
+    }
+
+    // ✅ FIXED: Smart page extraction with fallbacks
+    let extractedPage = page;
+    
+    if (!extractedPage && url) {
+      try {
+        const urlObj = new URL(url);
+        extractedPage = urlObj.pathname;
+        console.log('🔍 Extracted page from URL:', extractedPage);
+      } catch (error) {
+        console.warn('⚠️ Could not parse URL, using URL as page:', url);
+        extractedPage = url;
+      }
+    }
+
+    // ✅ FIXED: Normalize language code to prevent MongoDB errors
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
+    const eventData = {
+      eventType: eventType,
+      type: type,
+      eventName: eventName,
+      sessionId: sessionId.trim(),
+      page: extractedPage.trim(),
+      url: url || `https://wilsonmuita.com${extractedPage}`,
+      title: title || metadata.title || 'Unknown Page',
+      referrer: referrer || metadata.referrer || 'direct',
+      userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      screenResolution: screenResolution || metadata.screenResolution || 'unknown',
+      language: normalizedLanguage,
+      utmSource: utm_source,
+      utmMedium: utm_medium,
+      utmCampaign: utm_campaign,
+      utmContent: utm_content,
+      utmTerm: utm_term,
       metadata: {
         ...metadata,
-        userAgent: req.get('User-Agent'),
         ip: req.ip || req.connection.remoteAddress,
-        timestamp: new Date(),
-        source: 'fallback-route'
+        source: 'fallback-pageview',
+        userAgent: req.headers['user-agent'],
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin'),
+          host: req.get('Host')
+        }
       }
-    });
+    };
 
+    const event = new AnalyticsEvent(eventData);
     await event.save();
 
     res.status(201).json({
       success: true,
       message: 'Page view tracked successfully (fallback)',
-      eventId: event._id
+      eventId: event._id,
+      timestamp: event.timestamp
     });
   } catch (error) {
-    console.error('Fallback pageview error:', error);
+    console.error('❌ Fallback pageview error:', error);
+    
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Data validation failed in fallback',
+        error: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to track page view in fallback',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
 
+// ✅ FIXED: Updated fallback track route to match frontend event structure
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Track Route Hit:', req.body);
@@ -327,66 +389,105 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
     const AnalyticsEvent = require('./models/AnalyticsEvent');
     
     const {
-      eventType,
-      url,
+      type = 'event',
       sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      metadata,
-      postId,
-      elementId,
-      scrollDepth,
-      viewportSize,
-      coordinates
+      page,
+      eventName,
+      eventData,
+      userAgent,
+      timestamp,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      url,
+      title,
+      referrer,
+      language,
+      ...otherFields
     } = req.body;
 
-    // Validate required fields
-    if (!eventType || !sessionId) {
+    // ✅ FIXED: Better validation that matches your frontend
+    if (!sessionId) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: eventType and sessionId are required'
+        message: 'Missing required field: sessionId'
       });
     }
 
-    const event = new AnalyticsEvent({
-      eventType,
-      url,
-      sessionId,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      postId,
-      elementId,
-      scrollDepth,
-      viewportSize,
-      coordinates,
+    if (!eventName && !page) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: eventName or page'
+      });
+    }
+
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
+    // ✅ FIXED: Create proper event structure that matches AnalyticsEvent model
+    const eventPayload = {
+      eventType: type,
+      type: type,
+      sessionId: sessionId,
+      page: page || url || req.get('Referer') || 'unknown',
+      eventName: eventName || `${type}_event`,
+      eventData: eventData || {},
+      userAgent: userAgent || req.get('User-Agent'),
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      utmSource: utmSource,
+      utmMedium: utmMedium,
+      utmCampaign: utmCampaign,
+      url: url || req.get('Referer') || 'unknown',
+      title: title || 'Custom Event',
+      referrer: referrer || req.get('Referer') || 'direct',
+      language: normalizedLanguage,
       metadata: {
-        ...metadata,
-        userAgent: req.get('User-Agent'),
+        ...(eventData || {}),
         ip: req.ip || req.connection.remoteAddress,
-        timestamp: new Date(),
-        source: 'fallback-route'
+        source: 'fallback-track-route',
+        userAgent: req.get('User-Agent'),
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin')
+        }
       }
+    };
+
+    console.log('🔧 Fallback track event payload:', {
+      sessionId: sessionId?.substring(0, 20) + '...',
+      eventName: eventPayload.eventName,
+      type: type
     });
 
+    const event = new AnalyticsEvent(eventPayload);
     await event.save();
 
     res.status(201).json({ 
       success: true,
       message: 'Event tracked successfully (fallback)',
-      eventId: event._id 
+      eventId: event._id,
+      eventName: eventPayload.eventName,
+      timestamp: event.timestamp
     });
+
   } catch (error) {
-    console.error('Fallback track error:', error);
+    console.error('❌ Fallback track error:', error);
+    
+    // ✅ FIXED: Better error response
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Event data validation failed in fallback',
+        error: error.message
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Failed to track event in fallback',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
