@@ -8,7 +8,7 @@ require('dotenv').config();
 // Import routes
 const postsRoutes = require('./routes/posts');
 const contactRoutes = require('./routes/contact');
-const newsletterRoutes = require('./routes/newsletter');
+const newsletterRoutes = require('./routes/newsletter'); 
 const sitemapRoutes = require('./routes/sitemap');
 const robotsRoutes = require('./routes/robots');
 const rssRoutes = require('./routes/rss');
@@ -16,7 +16,7 @@ const ampRoutes = require('./routes/amp');
 const analyticsRoutes = require('./routes/analytics');
 const consentRoutes = require('./routes/consent');
 const videoSitemapRoutes = require('./routes/videoSitemap');
-const privacyRoutes = require('./routes/privacy'); // ✅ ADDED: Privacy routes
+const privacyRoutes = require('./routes/privacy');
 
 // Import middleware
 const etagMiddleware = require('./middleware/etag');
@@ -36,7 +36,7 @@ const corsOptions = {
       'https://my-monetized-blog-2.onrender.com',
       'http://localhost:3000',
       'http://localhost:3001',
-      'http://localhost:5173' // Added for Vite dev server
+      'http://localhost:5173'
     ];
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -81,7 +81,7 @@ app.use(express.urlencoded({ extended: true }));
 // Use ETag middleware for conditional requests
 app.use(etagMiddleware);
 
-// ✅ UPDATED: Set view engine for EJS templates (CRITICAL FOR FIXING DUPLICATE ISSUE)
+// ✅ UPDATED: Set view engine for EJS templates
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
@@ -107,7 +107,7 @@ app.get('/', (req, res) => {
       contact: '/api/contact',
       newsletter: '/api/newsletter',
       analytics: '/api/analytics',
-      privacy: '/api/privacy-policy', // ✅ ADDED: Privacy policy endpoint
+      privacy: '/api/privacy-policy',
       sitemap: '/sitemap.xml',
       robots: '/robots.txt',
       rss: '/rss.xml'
@@ -126,29 +126,28 @@ app.get('/api/analytics/test', (req, res) => {
       track: 'POST /api/analytics/track',
       stats: 'GET /api/analytics/stats',
       dashboard: 'GET /api/analytics/dashboard',
-      privacy: 'GET /api/privacy-policy' // ✅ ADDED: Privacy policy endpoint
+      privacy: 'GET /api/privacy-policy'
     }
   });
 });
 
-// ✅ UPDATED: Mount posts routes at root level FIRST to handle blog pages
-// This is CRITICAL for fixing the duplicate content issue
-app.use('/', postsRoutes); // This will handle /blog/:slug and /blog routes
-
-// API Routes
+// ✅ FIXED: Mount API routes BEFORE the SPA catch-all handler
 app.use('/api/posts', postsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/consent', consentRoutes);
-app.use('/api', privacyRoutes); // ✅ ADDED: Privacy routes
+app.use('/api', privacyRoutes);
 
-// SEO Routes
+// ✅ FIXED: Mount SEO routes
 app.use('/', sitemapRoutes);
 app.use('/', robotsRoutes);  
 app.use('/', rssRoutes);
 app.use('/', ampRoutes);
 app.use('/', videoSitemapRoutes);
+
+// ✅ FIXED: Mount blog routes AFTER API routes but BEFORE SPA handler
+app.use('/', postsRoutes); // This handles /blog/:slug and /blog routes
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -170,8 +169,8 @@ app.get('/api/health', (req, res) => {
       monetization: true,
       caching: true,
       amp: true,
-      privacy: true, // ✅ ADDED: Privacy policy feature
-      server_rendering: true // ✅ ADDED: EJS server-side rendering
+      privacy: true,
+      server_rendering: true
     },
     database: {
       status: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
@@ -182,8 +181,8 @@ app.get('/api/health', (req, res) => {
       contact: 'active',
       newsletter: 'active',
       consent: 'active',
-      privacy: 'active', // ✅ ADDED: Privacy routes status
-      blog_pages: 'active' // ✅ ADDED: Blog page rendering
+      privacy: 'active',
+      blog_pages: 'active'
     }
   });
 });
@@ -224,7 +223,7 @@ app.use('/api/posts', (req, res, next) => {
   next();
 });
 
-// ✅ UPDATED: Serve frontend build (React) in production with proper route exclusion
+// ✅ FIXED: Serve frontend build (React) in production with PROPER route ordering
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/build');
   
@@ -236,17 +235,30 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ FIXED: Enhanced catch-all handler for SPA routing - EXCLUDE BLOG ROUTES
-  // Using proper regex pattern to avoid PathError
-  app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap|blog).*$/, (req, res, next) => {
-    // This regex matches all routes EXCEPT:
-    // - /api/* (API routes)
-    // - /sitemap.xml
-    // - /robots.txt  
-    // - /rss.xml
-    // - /video-sitemap.xml
-    // - /blog/* (Blog routes - now handled by Express EJS templates)
+  // ✅ FIXED: Enhanced catch-all handler for SPA routing - EXCLUDE SPECIFIC ROUTES
+  app.get('*', (req, res, next) => {
+    // Skip SPA routing for these specific routes that should be handled by Express
+    const excludedRoutes = [
+      '/api',
+      '/sitemap.xml',
+      '/robots.txt',
+      '/rss.xml',
+      '/video-sitemap.xml',
+      '/blog'
+    ];
     
+    // Check if the request path starts with any excluded route
+    const shouldExclude = excludedRoutes.some(route => 
+      req.path.startsWith(route) || 
+      req.path === '/' || // Don't handle root with SPA
+      req.path.startsWith('/blog/') // Don't handle blog posts with SPA
+    );
+    
+    if (shouldExclude) {
+      return next(); // Let Express handle these routes
+    }
+    
+    // For all other routes, serve the React app
     console.log(`🔄 SPA Routing: Serving index.html for ${req.originalUrl}`);
     res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
       if (err) {
@@ -406,7 +418,7 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Better validation that matches your frontend
+    // ✅ FIXED: Updated validation to match frontend payload
     if (!sessionId) {
       return res.status(400).json({
         success: false,
@@ -414,10 +426,10 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
       });
     }
 
-    if (!eventName && !page) {
+    if (!eventName) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required field: eventName or page'
+        message: 'Missing required field: eventName'
       });
     }
 
@@ -428,11 +440,11 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
 
     // ✅ FIXED: Create proper event structure that matches AnalyticsEvent model
     const eventPayload = {
-      eventType: type,
+      eventType: type, // Use 'type' as eventType
       type: type,
       sessionId: sessionId,
       page: page || url || req.get('Referer') || 'unknown',
-      eventName: eventName || `${type}_event`,
+      eventName: eventName,
       eventData: eventData || {},
       userAgent: userAgent || req.get('User-Agent'),
       timestamp: timestamp ? new Date(timestamp) : new Date(),
@@ -534,7 +546,7 @@ app.use((req, res, next) => {
         '/api/newsletter',
         '/api/analytics',
         '/api/consent',
-        '/api/privacy-policy', // ✅ ADDED: Privacy policy endpoint
+        '/api/privacy-policy',
         '/sitemap.xml',
         '/robots.txt',
         '/rss.xml'
@@ -596,7 +608,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Health check: https://api.wilsonmuita.com/api/health`);
   console.log(`✅ Root endpoint: https://api.wilsonmuita.com/`);
   console.log(`✅ Analytics test: https://api.wilsonmuita.com/api/analytics/test`);
-  console.log(`✅ Privacy Policy: https://api.wilsonmuita.com/api/privacy-policy`); // ✅ ADDED: Privacy policy endpoint
+  console.log(`✅ Privacy Policy: https://api.wilsonmuita.com/api/privacy-policy`);
   console.log(`🌐 CORS enabled for: ${corsOptions.origin}`);
   console.log('✅ All features integrated successfully!');
   console.log('📊 Available features:');
@@ -606,7 +618,7 @@ const server = app.listen(PORT, () => {
   console.log('   - Performance: ETag support, conditional requests');
   console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
-  console.log('   - Server Rendering: EJS templates for blog pages'); // ✅ ADDED: Server rendering
+  console.log('   - Server Rendering: EJS templates for blog pages');
   console.log('🔒 CORS Configuration:');
   console.log('   - ✅ Preflight requests handled with regex pattern');
   console.log('   - ✅ Enhanced allowed headers');
