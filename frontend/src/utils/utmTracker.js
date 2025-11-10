@@ -4,7 +4,7 @@ import { blogAPI } from './api';
 /**
  * Comprehensive UTM Tracking Utility
  * Handles affiliate links, campaign tracking, and automatic parameter injection
- * Updated for Wilson Muita blog with enhanced features
+ * COMPLETELY FIXED VERSION - Matches your working Postman endpoints
  */
 
 // ✅ UPDATED: UTM Configuration with new domain
@@ -24,12 +24,22 @@ const UTM_CONFIG = {
 let currentSessionId = null;
 let isInitialized = false;
 
-// ✅ FIXED: Safe analytics function checking
+// ✅ FIXED: Proper analytics availability check with your actual API methods
 const isAnalyticsAvailable = () => {
   return blogAPI && 
          blogAPI.analytics && 
          typeof blogAPI.analytics.trackEvent === 'function' &&
-         typeof blogAPI.analytics.trackPageView === 'function';
+         typeof blogAPI.analytics.trackPageView === 'function' &&
+         blogAPI.analytics.trackEvent !== undefined &&
+         blogAPI.analytics.trackPageView !== undefined;
+};
+
+/**
+ * ✅ FIXED: Add the missing getUTMParams method that's causing the error
+ * This fixes: "Uncaught (in promise) TypeError: yr.getUTMParams is not a function"
+ */
+export const getUTMParams = () => {
+  return getCurrentUTMParams();
 };
 
 /**
@@ -111,7 +121,8 @@ export const addUTMParams = (
 };
 
 /**
- * Track page view with UTM parameters from URL
+ * ✅ FIXED: Track page view with UTM parameters from URL
+ * Now matches your working Postman endpoint structure
  */
 export const trackPageView = async () => {
   // Check if we're in a browser environment
@@ -119,27 +130,27 @@ export const trackPageView = async () => {
 
   const utmParams = getCurrentUTMParams();
   
-  // ✅ FIXED: Use window.screen instead of global screen object
-  const screenResolution = typeof window !== 'undefined' && window.screen ? 
-    `${window.screen.width}x${window.screen.height}` : 'unknown';
-  
-  const pageData = {
-    eventType: 'pageview',
-    url: window.location.href,
-    sessionId: currentSessionId,
-    ...utmParams,
-    metadata: {
-      referrer: document.referrer,
-      title: document.title,
-      path: window.location.pathname,
-      hostname: window.location.hostname,
-      userAgent: navigator.userAgent,
-      language: navigator.language,
-      screenResolution: screenResolution
-    }
-  };
-
   try {
+    // ✅ FIXED: Use the exact structure from your working Postman example
+    const pageData = {
+      type: 'pageview',
+      eventName: 'page_view',
+      sessionId: currentSessionId,
+      page: window.location.pathname,
+      url: window.location.href,
+      title: document.title,
+      referrer: document.referrer,
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString(),
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      language: navigator.language,
+      utm_source: utmParams.utm_source,
+      utm_medium: utmParams.utm_medium,
+      utm_campaign: utmParams.utm_campaign,
+      utm_content: utmParams.utm_content,
+      utm_term: utmParams.utm_term
+    };
+
     await sendToAnalyticsAPI(pageData);
     
     // Store UTM parameters for future events
@@ -152,31 +163,43 @@ export const trackPageView = async () => {
 };
 
 /**
- * Track affiliate link clicks with enhanced product tracking
+ * ✅ FIXED: Track affiliate link clicks with enhanced product tracking
+ * Now uses correct event structure
  */
 export const trackAffiliateClick = async (data) => {
-  const eventData = {
-    eventType: 'affiliate_click',
-    url: data.url,
-    sessionId: currentSessionId,
-    utmSource: UTM_CONFIG.defaultSource,
-    utmMedium: UTM_CONFIG.affiliateMedium,
-    utmCampaign: data.product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
-    utmContent: data.position || 'content',
-    utmTerm: data.product,
-    metadata: {
-      product: data.product,
-      position: data.position,
-      linkText: data.text,
-      elementId: data.elementId,
-      category: data.category,
-      price: data.price,
-      vendor: data.vendor,
-      commissionRate: data.commissionRate
-    }
-  };
-
   try {
+    // ✅ FIXED: Use the exact structure from your working Postman example
+    const eventData = {
+      sessionId: currentSessionId,
+      eventName: 'affiliate_click',
+      type: 'click',
+      page: window.location.pathname,
+      url: data.url,
+      title: document.title,
+      eventData: {
+        product: data.product,
+        position: data.position,
+        linkText: data.text,
+        elementId: data.elementId,
+        category: data.category,
+        price: data.price,
+        vendor: data.vendor,
+        commissionRate: data.commissionRate,
+        isAffiliate: true,
+        linkType: 'affiliate'
+      },
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      language: navigator.language,
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      utmSource: UTM_CONFIG.defaultSource,
+      utmMedium: UTM_CONFIG.affiliateMedium,
+      utmCampaign: data.product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
+      utmContent: data.position || 'content',
+      utmTerm: data.product,
+      timestamp: new Date().toISOString()
+    };
+
     await sendToAnalyticsAPI(eventData);
     
     if (process.env.NODE_ENV !== 'production') {
@@ -188,29 +211,39 @@ export const trackAffiliateClick = async (data) => {
 };
 
 /**
- * Track outbound link clicks with enhanced analytics
+ * ✅ FIXED: Track outbound link clicks with enhanced analytics
+ * Now uses correct event structure
  */
 export const trackOutboundClick = async (data) => {
-  const eventData = {
-    eventType: 'click',
-    url: data.originalUrl,
-    sessionId: currentSessionId,
-    utmSource: data.utmSource || UTM_CONFIG.defaultSource,
-    utmMedium: data.utmMedium || UTM_CONFIG.referralMedium,
-    utmCampaign: data.campaign || 'outbound',
-    utmContent: data.content,
-    utmTerm: data.term,
-    metadata: {
-      element: data.element,
-      text: data.text,
-      isExternal: true,
-      isAffiliate: data.isAffiliate || false,
-      linkType: data.linkType || 'general',
-      destination: new URL(data.originalUrl).hostname
-    }
-  };
-
   try {
+    const eventData = {
+      sessionId: currentSessionId,
+      eventName: 'outbound_click',
+      type: 'click',
+      page: window.location.pathname,
+      url: data.originalUrl,
+      title: document.title,
+      eventData: {
+        element: data.element,
+        text: data.text,
+        isExternal: true,
+        isAffiliate: data.isAffiliate || false,
+        linkType: data.linkType || 'general',
+        destination: new URL(data.originalUrl).hostname,
+        trackedUrl: data.trackedUrl
+      },
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      language: navigator.language,
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      utmSource: data.utmSource || UTM_CONFIG.defaultSource,
+      utmMedium: data.utmMedium || UTM_CONFIG.referralMedium,
+      utmCampaign: data.campaign || 'outbound',
+      utmContent: data.content,
+      utmTerm: data.term,
+      timestamp: new Date().toISOString()
+    };
+
     await sendToAnalyticsAPI(eventData);
     
     if (process.env.NODE_ENV !== 'production') {
@@ -222,26 +255,35 @@ export const trackOutboundClick = async (data) => {
 };
 
 /**
- * Track social media shares with platform-specific campaigns
+ * ✅ FIXED: Track social media shares with platform-specific campaigns
+ * Now uses correct event structure
  */
 export const trackSocialShare = async (platform, url, campaign = 'social_share', content = '') => {
-  const eventData = {
-    eventType: 'social_share',
-    url: url,
-    sessionId: currentSessionId,
-    utmSource: UTM_CONFIG.defaultSource,
-    utmMedium: UTM_CONFIG.socialMedium,
-    utmCampaign: campaign,
-    utmContent: content || platform,
-    metadata: {
-      platform: platform,
-      sharedUrl: url,
-      shareMethod: 'manual',
-      timestamp: new Date().toISOString()
-    }
-  };
-
   try {
+    const eventData = {
+      sessionId: currentSessionId,
+      eventName: 'social_share',
+      type: 'click',
+      page: window.location.pathname,
+      url: url,
+      title: document.title,
+      eventData: {
+        platform: platform,
+        sharedUrl: url,
+        shareMethod: 'manual',
+        timestamp: new Date().toISOString()
+      },
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      language: navigator.language,
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      utmSource: UTM_CONFIG.defaultSource,
+      utmMedium: UTM_CONFIG.socialMedium,
+      utmCampaign: campaign,
+      utmContent: content || platform,
+      timestamp: new Date().toISOString()
+    };
+
     await sendToAnalyticsAPI(eventData);
     
     if (process.env.NODE_ENV !== 'production') {
@@ -253,26 +295,35 @@ export const trackSocialShare = async (platform, url, campaign = 'social_share',
 };
 
 /**
- * Track email link clicks
+ * ✅ FIXED: Track email link clicks
+ * Now uses correct event structure
  */
 export const trackEmailClick = async (data) => {
-  const eventData = {
-    eventType: 'email_click',
-    url: data.url,
-    sessionId: currentSessionId,
-    utmSource: UTM_CONFIG.defaultSource,
-    utmMedium: UTM_CONFIG.emailMedium,
-    utmCampaign: data.campaign || 'newsletter',
-    utmContent: data.content,
-    utmTerm: data.term,
-    metadata: {
-      emailType: data.emailType,
-      subject: data.subject,
-      linkPosition: data.position
-    }
-  };
-
   try {
+    const eventData = {
+      sessionId: currentSessionId,
+      eventName: 'email_click',
+      type: 'click',
+      page: window.location.pathname,
+      url: data.url,
+      title: document.title,
+      eventData: {
+        emailType: data.emailType,
+        subject: data.subject,
+        linkPosition: data.position
+      },
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      language: navigator.language,
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      utmSource: UTM_CONFIG.defaultSource,
+      utmMedium: UTM_CONFIG.emailMedium,
+      utmCampaign: data.campaign || 'newsletter',
+      utmContent: data.content,
+      utmTerm: data.term,
+      timestamp: new Date().toISOString()
+    };
+
     await sendToAnalyticsAPI(eventData);
     
     if (process.env.NODE_ENV !== 'production') {
@@ -284,25 +335,35 @@ export const trackEmailClick = async (data) => {
 };
 
 /**
- * Track custom events with UTM parameters
+ * ✅ FIXED: Track custom events with UTM parameters
+ * Now uses correct event structure
  */
 export const trackCustomEvent = async (eventName, data = {}) => {
-  const eventData = {
-    eventType: eventName,
-    sessionId: currentSessionId,
-    utmSource: UTM_CONFIG.defaultSource,
-    utmMedium: data.medium || UTM_CONFIG.defaultMedium,
-    utmCampaign: data.campaign || 'custom_event',
-    utmContent: data.content,
-    utmTerm: data.term,
-    metadata: {
-      ...data.metadata,
-      customData: data.customData,
-      timestamp: new Date().toISOString()
-    }
-  };
-
   try {
+    const eventData = {
+      sessionId: currentSessionId,
+      eventName: eventName,
+      type: mapEventTypeToAPI(eventName),
+      page: window.location.pathname,
+      url: window.location.href,
+      title: document.title,
+      eventData: {
+        ...data.metadata,
+        customData: data.customData,
+        timestamp: new Date().toISOString()
+      },
+      userAgent: navigator.userAgent,
+      referrer: document.referrer,
+      language: navigator.language,
+      screenResolution: `${window.screen.width}x${window.screen.height}`,
+      utmSource: UTM_CONFIG.defaultSource,
+      utmMedium: data.medium || UTM_CONFIG.defaultMedium,
+      utmCampaign: data.campaign || 'custom_event',
+      utmContent: data.content,
+      utmTerm: data.term,
+      timestamp: new Date().toISOString()
+    };
+
     await sendToAnalyticsAPI(eventData);
     
     if (process.env.NODE_ENV !== 'production') {
@@ -314,205 +375,8 @@ export const trackCustomEvent = async (eventName, data = {}) => {
 };
 
 /**
- * Auto-enhance external links with UTM parameters
- */
-const enhanceExternalLinks = () => {
-  // Only run in browser environment
-  if (typeof document === 'undefined') return;
-
-  document.addEventListener('click', (e) => {
-    const link = e.target.closest('a[href^="http"]');
-    if (!link) return;
-
-    const href = link.getAttribute('href');
-    if (!href) return;
-
-    try {
-      const url = new URL(href);
-      const isInternal = url.hostname === window.location.hostname || 
-                        url.hostname === 'wilsonmuita.com' ||
-                        url.hostname === 'api.wilsonmuita.com';
-      
-      // Skip if already has UTM params or is internal
-      if (isInternal || url.searchParams.has('utm_source')) {
-        return;
-      }
-
-      const isAffiliate = link.classList.contains('affiliate-link') || 
-                         link.getAttribute('rel')?.includes('sponsored') ||
-                         href.includes('amazon') ||
-                         href.includes('partner');
-      
-      let medium = UTM_CONFIG.referralMedium;
-      let campaign = 'outbound';
-      let content = 'auto_enhanced';
-      let linkType = 'general';
-
-      if (isAffiliate) {
-        medium = UTM_CONFIG.affiliateMedium;
-        campaign = link.getAttribute('data-affiliate-product') || 
-                  extractProductFromUrl(href) || 
-                  'affiliate';
-        content = link.getAttribute('data-affiliate-position') || 'content';
-        linkType = 'affiliate';
-      }
-
-      const trackedUrl = addUTMParams(
-        href,
-        UTM_CONFIG.defaultSource,
-        medium,
-        campaign,
-        content
-      );
-
-      // Update the link href
-      link.setAttribute('href', trackedUrl);
-      
-      // Track the click (only if analytics available)
-      if (isAnalyticsAvailable()) {
-        trackOutboundClick({
-          originalUrl: href,
-          trackedUrl,
-          utmSource: UTM_CONFIG.defaultSource,
-          utmMedium: medium,
-          campaign,
-          content,
-          element: link.tagName,
-          text: link.textContent?.substring(0, 100),
-          isAffiliate,
-          linkType
-        });
-      }
-    } catch (error) {
-      console.warn('UTM Tracking: Error processing link', href, error);
-    }
-  });
-};
-
-/**
- * Auto-enhance affiliate links with comprehensive tracking
- */
-const enhanceAffiliateLinks = () => {
-  // Only run in browser environment
-  if (typeof document === 'undefined') return;
-
-  // Enhance existing affiliate links
-  const affiliateSelectors = [
-    'a[href*="amazon"]',
-    'a[href*="partner"]',
-    'a[data-affiliate]',
-    'a.affiliate-link',
-    'a[rel*="sponsored"]',
-    'a[href*="click.linksynergy"]',
-    'a[href*="shareasale"]',
-    'a[href*="commissionjunction"]'
-  ];
-
-  const affiliateLinks = document.querySelectorAll(affiliateSelectors.join(', '));
-  
-  affiliateLinks.forEach(link => {
-    const href = link.getAttribute('href');
-    if (!href) return;
-
-    const product = link.getAttribute('data-affiliate-product') || 
-                   link.getAttribute('data-product') ||
-                   extractProductFromUrl(href);
-    const position = link.getAttribute('data-affiliate-position') || 
-                    link.getAttribute('data-position') || 
-                    'content';
-    const category = link.getAttribute('data-category') || 'technology';
-    const price = link.getAttribute('data-price');
-    const vendor = link.getAttribute('data-vendor') || extractVendorFromUrl(href);
-
-    const trackedUrl = addUTMParams(
-      href,
-      UTM_CONFIG.defaultSource,
-      UTM_CONFIG.affiliateMedium,
-      product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
-      position,
-      product
-    );
-
-    link.setAttribute('href', trackedUrl);
-    link.setAttribute('rel', 'sponsored noopener noreferrer');
-    link.setAttribute('target', '_blank');
-    
-    if (!link.classList.contains('affiliate-link')) {
-      link.classList.add('affiliate-link');
-    }
-
-    // Add click listener for tracking (only if analytics available)
-    if (isAnalyticsAvailable()) {
-      link.addEventListener('click', (e) => {
-        trackAffiliateClick({
-          url: trackedUrl,
-          product,
-          position,
-          text: link.textContent?.substring(0, 100),
-          elementId: link.id,
-          category,
-          price,
-          vendor,
-          commissionRate: link.getAttribute('data-commission')
-        });
-      });
-    }
-  });
-};
-
-/**
- * Enhance social share buttons with tracking
- */
-const enhanceSocialShares = () => {
-  // Only run in browser environment
-  if (typeof document === 'undefined') return;
-
-  const socialButtons = document.querySelectorAll('[data-social-share], .social-share, .share-button');
-  
-  socialButtons.forEach(button => {
-    button.addEventListener('click', (e) => {
-      const platform = button.getAttribute('data-platform') || 
-                      button.getAttribute('data-social-share') ||
-                      extractPlatformFromClass(button.className);
-      const url = button.getAttribute('data-url') || window.location.href;
-      const campaign = button.getAttribute('data-campaign') || 'social_share';
-      
-      if (platform && isAnalyticsAvailable()) {
-        trackSocialShare(platform, url, campaign, 'social_button');
-      }
-    });
-  });
-};
-
-/**
- * Enhance email links with tracking
- */
-const enhanceEmailLinks = () => {
-  // Only run in browser environment
-  if (typeof document === 'undefined') return;
-
-  const emailLinks = document.querySelectorAll('a[href^="mailto:"]');
-  
-  emailLinks.forEach(link => {
-    const href = link.getAttribute('href');
-    const email = href.replace('mailto:', '').split('?')[0];
-    
-    if (isAnalyticsAvailable()) {
-      link.addEventListener('click', (e) => {
-        trackEmailClick({
-          url: href,
-          campaign: 'email_contact',
-          content: 'email_link',
-          emailType: 'contact',
-          subject: link.getAttribute('data-subject') || 'Inquiry from Wilson Muita Blog'
-        });
-      });
-    }
-  });
-};
-
-/**
  * ✅ FIXED: Send analytics data to backend API with correct function names
+ * COMPLETELY REWRITTEN to match your working Postman endpoints
  */
 const sendToAnalyticsAPI = async (data) => {
   // Don't send analytics in development unless explicitly enabled
@@ -525,20 +389,62 @@ const sendToAnalyticsAPI = async (data) => {
 
   // ✅ FIXED: Check if analytics functions are available
   if (!isAnalyticsAvailable()) {
-    console.warn('Analytics functions not available. Storing event offline:', data.eventType);
+    console.warn('Analytics functions not available. Storing event offline:', data.eventName);
     storeEventOffline(data);
     return { success: false, reason: 'analytics_not_available' };
   }
 
   try {
-    // ✅ FIXED: Use the correct function names from api.js
     let result;
-    if (data.eventType === 'pageview') {
-      // Use trackPageView for pageview events
-      result = await blogAPI.analytics.trackPageView(data);
+    
+    // ✅ FIXED: Use the correct endpoints based on event type
+    if (data.type === 'pageview') {
+      // Use trackPageView for pageview events with the exact structure from Postman
+      const pageviewData = {
+        type: 'pageview',
+        eventName: data.eventName || 'page_view',
+        sessionId: data.sessionId,
+        page: data.page,
+        url: data.url,
+        title: data.title,
+        referrer: data.referrer,
+        userAgent: data.userAgent,
+        timestamp: data.timestamp,
+        screenResolution: data.screenResolution,
+        language: data.language,
+        utm_source: data.utm_source,
+        utm_medium: data.utm_medium,
+        utm_campaign: data.utm_campaign,
+        utm_content: data.utm_content,
+        utm_term: data.utm_term
+      };
+      
+      console.log('📊 Sending Pageview:', pageviewData);
+      result = await blogAPI.analytics.trackPageView(pageviewData);
     } else {
-      // Use trackEvent for all other events
-      result = await blogAPI.analytics.trackEvent(data);
+      // Use trackEvent for all other events with the exact structure from Postman
+      const eventData = {
+        sessionId: data.sessionId,
+        eventName: data.eventName,
+        type: data.type,
+        page: data.page,
+        url: data.url,
+        title: data.title,
+        eventData: data.eventData,
+        userAgent: data.userAgent,
+        referrer: data.referrer,
+        language: data.language,
+        screenResolution: data.screenResolution,
+        utmSource: data.utmSource,
+        utmMedium: data.utmMedium,
+        utmCampaign: data.utmCampaign,
+        utmContent: data.utmContent,
+        utmTerm: data.utmTerm,
+        timestamp: data.timestamp
+      };
+      
+      console.log('📊 Sending Event:', eventData);
+      result = await blogAPI.analytics.trackEvent(eventData);
     }
     
     return result;
@@ -547,6 +453,26 @@ const sendToAnalyticsAPI = async (data) => {
     storeEventOffline(data);
     throw error;
   }
+};
+
+/**
+ * ✅ NEW: Map custom event types to valid API types
+ */
+const mapEventTypeToAPI = (eventType) => {
+  const eventTypeMap = {
+    'click': 'click',
+    'affiliate_click': 'click',
+    'outbound_click': 'click',
+    'social_share': 'click',
+    'email_click': 'click',
+    'pageview': 'pageview',
+    'view': 'view',
+    'scroll': 'view',
+    'form_submit': 'form_submission',
+    'custom_event': 'click'
+  };
+  
+  return eventTypeMap[eventType] || 'click';
 };
 
 /**
@@ -783,6 +709,203 @@ export const resetUTMTracking = () => {
   }
 };
 
+// ============================================================================
+// ✅ FIXED: Link enhancement functions (unchanged but kept for completeness)
+// ============================================================================
+
+/**
+ * Auto-enhance external links with UTM parameters
+ */
+const enhanceExternalLinks = () => {
+  if (typeof document === 'undefined') return;
+
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="http"]');
+    if (!link) return;
+
+    const href = link.getAttribute('href');
+    if (!href) return;
+
+    try {
+      const url = new URL(href);
+      const isInternal = url.hostname === window.location.hostname || 
+                        url.hostname === 'wilsonmuita.com' ||
+                        url.hostname === 'api.wilsonmuita.com';
+      
+      if (isInternal || url.searchParams.has('utm_source')) {
+        return;
+      }
+
+      const isAffiliate = link.classList.contains('affiliate-link') || 
+                         link.getAttribute('rel')?.includes('sponsored') ||
+                         href.includes('amazon') ||
+                         href.includes('partner');
+      
+      let medium = UTM_CONFIG.referralMedium;
+      let campaign = 'outbound';
+      let content = 'auto_enhanced';
+      let linkType = 'general';
+
+      if (isAffiliate) {
+        medium = UTM_CONFIG.affiliateMedium;
+        campaign = link.getAttribute('data-affiliate-product') || 
+                  extractProductFromUrl(href) || 
+                  'affiliate';
+        content = link.getAttribute('data-affiliate-position') || 'content';
+        linkType = 'affiliate';
+      }
+
+      const trackedUrl = addUTMParams(
+        href,
+        UTM_CONFIG.defaultSource,
+        medium,
+        campaign,
+        content
+      );
+
+      link.setAttribute('href', trackedUrl);
+      
+      if (isAnalyticsAvailable()) {
+        trackOutboundClick({
+          originalUrl: href,
+          trackedUrl,
+          utmSource: UTM_CONFIG.defaultSource,
+          utmMedium: medium,
+          campaign,
+          content,
+          element: link.tagName,
+          text: link.textContent?.substring(0, 100),
+          isAffiliate,
+          linkType
+        });
+      }
+    } catch (error) {
+      console.warn('UTM Tracking: Error processing link', href, error);
+    }
+  });
+};
+
+/**
+ * Auto-enhance affiliate links with comprehensive tracking
+ */
+const enhanceAffiliateLinks = () => {
+  if (typeof document === 'undefined') return;
+
+  const affiliateSelectors = [
+    'a[href*="amazon"]',
+    'a[href*="partner"]',
+    'a[data-affiliate]',
+    'a.affiliate-link',
+    'a[rel*="sponsored"]',
+    'a[href*="click.linksynergy"]',
+    'a[href*="shareasale"]',
+    'a[href*="commissionjunction"]'
+  ];
+
+  const affiliateLinks = document.querySelectorAll(affiliateSelectors.join(', '));
+  
+  affiliateLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    if (!href) return;
+
+    const product = link.getAttribute('data-affiliate-product') || 
+                   link.getAttribute('data-product') ||
+                   extractProductFromUrl(href);
+    const position = link.getAttribute('data-affiliate-position') || 
+                    link.getAttribute('data-position') || 
+                    'content';
+    const category = link.getAttribute('data-category') || 'technology';
+    const price = link.getAttribute('data-price');
+    const vendor = link.getAttribute('data-vendor') || extractVendorFromUrl(href);
+
+    const trackedUrl = addUTMParams(
+      href,
+      UTM_CONFIG.defaultSource,
+      UTM_CONFIG.affiliateMedium,
+      product?.replace(/\s+/g, '_').toLowerCase() || 'affiliate_product',
+      position,
+      product
+    );
+
+    link.setAttribute('href', trackedUrl);
+    link.setAttribute('rel', 'sponsored noopener noreferrer');
+    link.setAttribute('target', '_blank');
+    
+    if (!link.classList.contains('affiliate-link')) {
+      link.classList.add('affiliate-link');
+    }
+
+    if (isAnalyticsAvailable()) {
+      link.addEventListener('click', (e) => {
+        trackAffiliateClick({
+          url: trackedUrl,
+          product,
+          position,
+          text: link.textContent?.substring(0, 100),
+          elementId: link.id,
+          category,
+          price,
+          vendor,
+          commissionRate: link.getAttribute('data-commission')
+        });
+      });
+    }
+  });
+};
+
+/**
+ * Enhance social share buttons with tracking
+ */
+const enhanceSocialShares = () => {
+  if (typeof document === 'undefined') return;
+
+  const socialButtons = document.querySelectorAll('[data-social-share], .social-share, .share-button');
+  
+  socialButtons.forEach(button => {
+    button.addEventListener('click', (e) => {
+      const platform = button.getAttribute('data-platform') || 
+                      button.getAttribute('data-social-share') ||
+                      extractPlatformFromClass(button.className);
+      const url = button.getAttribute('data-url') || window.location.href;
+      const campaign = button.getAttribute('data-campaign') || 'social_share';
+      
+      if (platform && isAnalyticsAvailable()) {
+        trackSocialShare(platform, url, campaign, 'social_button');
+      }
+    });
+  });
+};
+
+/**
+ * Enhance email links with tracking
+ */
+const enhanceEmailLinks = () => {
+  if (typeof document === 'undefined') return;
+
+  const emailLinks = document.querySelectorAll('a[href^="mailto:"]');
+  
+  emailLinks.forEach(link => {
+    const href = link.getAttribute('href');
+    const email = href.replace('mailto:', '').split('?')[0];
+    
+    if (isAnalyticsAvailable()) {
+      link.addEventListener('click', (e) => {
+        trackEmailClick({
+          url: href,
+          campaign: 'email_contact',
+          content: 'email_link',
+          emailType: 'contact',
+          subject: link.getAttribute('data-subject') || 'Inquiry from Wilson Muita Blog'
+        });
+      });
+    }
+  });
+};
+
+// ============================================================================
+// ✅ FIXED: Default export with ALL required methods
+// ============================================================================
+
 export default {
   initUTMTracking,
   addUTMParams,
@@ -794,6 +917,7 @@ export default {
   trackCustomEvent,
   getCurrentUTMParams,
   getStoredUTMParams,
+  getUTMParams, // ✅ CRITICAL: This fixes the "yr.getUTMParams is not a function" error
   hasUTMParams,
   removeUTMParams,
   getCurrentSessionId,
