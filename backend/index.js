@@ -235,30 +235,16 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ FIXED: Enhanced catch-all handler for SPA routing - EXCLUDE SPECIFIC ROUTES
-  app.get('*', (req, res, next) => {
-    // Skip SPA routing for these specific routes that should be handled by Express
-    const excludedRoutes = [
-      '/api',
-      '/sitemap.xml',
-      '/robots.txt',
-      '/rss.xml',
-      '/video-sitemap.xml',
-      '/blog'
-    ];
+  // ✅ FIXED: Use proper regex pattern instead of '*' to avoid PathError
+  app.get(/^(?!\/api|\/sitemap\.xml|\/robots\.txt|\/rss\.xml|\/video-sitemap\.xml|\/blog).*$/, (req, res, next) => {
+    // This regex matches all routes EXCEPT:
+    // - /api/* (API routes)
+    // - /sitemap.xml
+    // - /robots.txt  
+    // - /rss.xml
+    // - /video-sitemap.xml
+    // - /blog/* (Blog routes - handled by Express EJS templates)
     
-    // Check if the request path starts with any excluded route
-    const shouldExclude = excludedRoutes.some(route => 
-      req.path.startsWith(route) || 
-      req.path === '/' || // Don't handle root with SPA
-      req.path.startsWith('/blog/') // Don't handle blog posts with SPA
-    );
-    
-    if (shouldExclude) {
-      return next(); // Let Express handle these routes
-    }
-    
-    // For all other routes, serve the React app
     console.log(`🔄 SPA Routing: Serving index.html for ${req.originalUrl}`);
     res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
       if (err) {
