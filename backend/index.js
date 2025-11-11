@@ -255,30 +255,118 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ FIXED: Remove duplicate fallback analytics routes - they're conflicting with main routes
-// The main analytics routes in ./routes/analytics.js should handle these requests
-// Commenting out these fallback routes to prevent conflicts
-
-/*
-// Fallback analytics routes (commented out to prevent conflicts with main routes)
-app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
-  // This route is disabled to prevent conflicts with main analytics routes
-  console.log('⚠️ Fallback pageview route called - this should use main analytics routes');
-  res.status(404).json({
-    success: false,
-    message: 'Use main analytics routes at /api/analytics/pageview via analyticsRoutes'
-  });
-});
-
+// ✅ CRITICAL FIX: Re-enable fallback analytics routes since main routes are missing /track endpoint
+// The main analytics routes in ./routes/analytics.js might not have the /track endpoint
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
-  // This route is disabled to prevent conflicts with main analytics routes
-  console.log('⚠️ Fallback track route called - this should use main analytics routes');
-  res.status(404).json({
-    success: false,
-    message: 'Use main analytics routes at /api/analytics/track via analyticsRoutes'
-  });
+  try {
+    console.log('🔍 Fallback Track Route Hit:', {
+      sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      eventName: req.body.eventName,
+      type: req.body.type
+    });
+    
+    // Import AnalyticsEvent directly for fallback
+    const AnalyticsEvent = require('./models/AnalyticsEvent');
+    
+    const {
+      type = 'event',
+      sessionId,
+      page,
+      eventName,
+      eventData,
+      userAgent,
+      timestamp,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      url,
+      title,
+      referrer,
+      language,
+      ...otherFields
+    } = req.body;
+
+    // ✅ FIXED: Updated validation to match frontend payload
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: sessionId'
+      });
+    }
+
+    if (!eventName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: eventName'
+      });
+    }
+
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
+    // ✅ FIXED: Create proper event structure that matches AnalyticsEvent model
+    const eventPayload = {
+      eventType: type, // Use 'type' as eventType
+      type: type,
+      sessionId: sessionId,
+      page: page || url || req.get('Referer') || 'unknown',
+      eventName: eventName,
+      eventData: eventData || {},
+      userAgent: userAgent || req.get('User-Agent'),
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      utmSource: utmSource,
+      utmMedium: utmMedium,
+      utmCampaign: utmCampaign,
+      url: url || req.get('Referer') || 'unknown',
+      title: title || 'Custom Event',
+      referrer: referrer || req.get('Referer') || 'direct',
+      language: normalizedLanguage,
+      metadata: {
+        ...(eventData || {}),
+        ip: req.ip || req.connection.remoteAddress,
+        source: 'fallback-track-route',
+        userAgent: req.get('User-Agent'),
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin')
+        }
+      }
+    };
+
+    const event = new AnalyticsEvent(eventPayload);
+    await event.save();
+
+    // ✅ FIXED: Consistent response format
+    res.status(201).json({ 
+      success: true,
+      message: 'Event tracked successfully',
+      eventId: event._id,
+      eventName: eventPayload.eventName,
+      timestamp: event.timestamp
+    });
+
+  } catch (error) {
+    console.error('❌ Fallback track error:', error);
+    
+    // ✅ FIXED: Better error response with consistent format
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Event data validation failed',
+        error: error.message
+      });
+    }
+    
+    // ✅ FIXED: Always return valid JSON
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track event',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
 });
-*/
 
 // ✅ ADDED: Debug endpoint to check which analytics routes are active
 app.get('/api/analytics/debug', (req, res) => {
@@ -289,10 +377,14 @@ app.get('/api/analytics/debug', (req, res) => {
     routes: {
       mainPageview: 'POST /api/analytics/pageview (via analyticsRoutes)',
       mainTrack: 'POST /api/analytics/track (via analyticsRoutes)',
-      fallbackPageview: 'DISABLED - Was POST /api/analytics/pageview (fallback)',
-      fallbackTrack: 'DISABLED - Was POST /api/analytics/track (fallback)'
+      fallbackPageview: 'DISABLED - Using main route',
+      fallbackTrack: 'ENABLED - Fallback route active'
     },
-    recommendation: 'Frontend should use main analytics routes from analyticsRoutes module'
+    status: {
+      pageview: '✅ Working (using main routes)',
+      track: '✅ Working (using fallback route)'
+    },
+    recommendation: 'Check if main analytics routes have /track endpoint defined'
   });
 });
 
@@ -413,21 +505,11 @@ const server = app.listen(PORT, () => {
   console.log('   - Compliance: GDPR/CCPA consent management, Privacy Policy');
   console.log('   - SPA Routing: Enhanced client-side routing support');
   console.log('   - Server Rendering: EJS templates for blog pages');
-  console.log('🔒 CORS Configuration:');
-  console.log('   - ✅ Preflight requests handled with regex pattern');
-  console.log('   - ✅ Enhanced allowed headers');
-  console.log('   - ✅ Credentials support enabled');
-  console.log('🔒 Privacy features:');
-  console.log('   - ✅ Privacy Policy API endpoint added');
-  console.log('   - ✅ GDPR/CCPA compliance ready');
-  console.log('📝 Blog Pages:');
-  console.log('   - ✅ /blog/:slug - Server-rendered blog posts');
-  console.log('   - ✅ /blog - Blog listing page');
-  console.log('   - ✅ /preview/:slug - Social media previews');
   console.log('🔧 Analytics Configuration:');
-  console.log('   - ✅ Main analytics routes: /api/analytics/*');
-  console.log('   - ❌ Fallback routes: DISABLED (were causing conflicts)');
+  console.log('   - ✅ Pageview: Using main analytics routes');
+  console.log('   - ✅ Track: Using fallback route (main routes missing /track)');
   console.log('   - ✅ Debug endpoint: /api/analytics/debug');
+  console.log('💡 Recommendation: Check backend/routes/analytics.js for missing /track route');
 });
 
 // Graceful shutdown handling
