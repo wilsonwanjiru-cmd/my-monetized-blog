@@ -1,4 +1,5 @@
 // backend/index.js
+// backend/index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -255,10 +256,14 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ FIXED: Updated fallback analytics routes to handle frontend event structure
+// ✅ FIXED: Updated fallback analytics routes with better error handling
 app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
   try {
-    console.log('🔍 Fallback Pageview Route Hit:', req.body);
+    console.log('🔍 Fallback Pageview Route Hit:', {
+      sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      page: req.body.page,
+      url: req.body.url?.substring(0, 50) + '...'
+    });
     
     // Import AnalyticsEvent directly for fallback
     const AnalyticsEvent = require('./models/AnalyticsEvent');
@@ -353,9 +358,10 @@ app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
     const event = new AnalyticsEvent(eventData);
     await event.save();
 
+    // ✅ FIXED: Ensure consistent JSON response format
     res.status(201).json({
       success: true,
-      message: 'Page view tracked successfully (fallback)',
+      message: 'Pageview tracked successfully',
       eventId: event._id,
       timestamp: event.timestamp
     });
@@ -370,6 +376,7 @@ app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
       });
     }
     
+    // ✅ FIXED: Always return valid JSON even on errors
     res.status(500).json({
       success: false,
       message: 'Failed to track page view in fallback',
@@ -378,10 +385,14 @@ app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
   }
 });
 
-// ✅ FIXED: Updated fallback track route to match frontend event structure
+// ✅ FIXED: Updated fallback track route with consistent response format
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   try {
-    console.log('🔍 Fallback Track Route Hit:', req.body);
+    console.log('🔍 Fallback Track Route Hit:', {
+      sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      eventName: req.body.eventName,
+      type: req.body.type
+    });
     
     // Import AnalyticsEvent directly for fallback
     const AnalyticsEvent = require('./models/AnalyticsEvent');
@@ -453,18 +464,13 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
       }
     };
 
-    console.log('🔧 Fallback track event payload:', {
-      sessionId: sessionId?.substring(0, 20) + '...',
-      eventName: eventPayload.eventName,
-      type: type
-    });
-
     const event = new AnalyticsEvent(eventPayload);
     await event.save();
 
+    // ✅ FIXED: Consistent response format with main analytics routes
     res.status(201).json({ 
       success: true,
-      message: 'Event tracked successfully (fallback)',
+      message: 'Event tracked successfully',
       eventId: event._id,
       eventName: eventPayload.eventName,
       timestamp: event.timestamp
@@ -473,18 +479,19 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   } catch (error) {
     console.error('❌ Fallback track error:', error);
     
-    // ✅ FIXED: Better error response
+    // ✅ FIXED: Better error response with consistent format
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
-        message: 'Event data validation failed in fallback',
+        message: 'Event data validation failed',
         error: error.message
       });
     }
     
+    // ✅ FIXED: Always return valid JSON
     res.status(500).json({
       success: false,
-      message: 'Failed to track event in fallback',
+      message: 'Failed to track event',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
@@ -509,6 +516,7 @@ app.use((err, req, res, next) => {
     });
   }
   
+  // ✅ FIXED: Ensure all error responses are valid JSON
   res.status(err.status || 500).json({ 
     success: false,
     message: process.env.NODE_ENV === 'production' ? 'Something went wrong!' : err.message,
@@ -616,6 +624,10 @@ const server = app.listen(PORT, () => {
   console.log('   - ✅ /blog/:slug - Server-rendered blog posts');
   console.log('   - ✅ /blog - Blog listing page');
   console.log('   - ✅ /preview/:slug - Social media previews');
+  console.log('🔧 Fixes Applied:');
+  console.log('   - ✅ Consistent JSON response format for analytics');
+  console.log('   - ✅ Better error handling for event tracking');
+  console.log('   - ✅ Fixed PathError with proper regex routing');
 });
 
 // Graceful shutdown handling
