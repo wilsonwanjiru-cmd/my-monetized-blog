@@ -66,6 +66,7 @@ router.get('/test', (req, res) => {
       endpoints: {
         pageview: 'POST /api/analytics/pageview',
         event: 'POST /api/analytics/event',
+        track: 'POST /api/analytics/track', // ✅ ADDED: Track endpoint
         stats: 'GET /api/analytics/stats',
         dashboard: 'GET /api/analytics/dashboard',
         health: 'GET /api/analytics/health',
@@ -375,6 +376,128 @@ router.post('/event', async (req, res) => {
     
     // Enhanced error response
     // ✅ FIXED: Always return JSON
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Event data validation failed',
+        error: error.message
+      });
+    }
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to track event',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// ✅ CRITICAL FIX: ADDED MISSING /track ENDPOINT
+// This is what the frontend is calling but was missing from main analytics routes
+router.post('/track', async (req, res) => {
+  try {
+    console.log('📊 Track request received (main route):', {
+      eventName: req.body.eventName,
+      sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      type: req.body.type,
+      page: req.body.page
+    });
+
+    const {
+      type = 'event',
+      sessionId,
+      page,
+      eventName,
+      eventData,
+      userAgent,
+      timestamp,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      url,
+      title,
+      referrer,
+      language,
+      ...otherFields
+    } = req.body;
+
+    // ✅ FIXED: Enhanced validation to match frontend expectations
+    if (!sessionId) {
+      console.warn('⚠️ Track validation failed: Missing sessionId');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: sessionId',
+        received: Object.keys(req.body)
+      });
+    }
+
+    if (!eventName) {
+      console.warn('⚠️ Track validation failed: Missing eventName');
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: eventName',
+        received: Object.keys(req.body)
+      });
+    }
+
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
+    // ✅ FIXED: Create event structure that matches frontend payload
+    const eventPayload = {
+      eventType: type,
+      type: type,
+      sessionId: sessionId,
+      page: page || url || req.get('Referer') || 'unknown',
+      eventName: eventName,
+      eventData: eventData || {},
+      userAgent: userAgent || req.get('User-Agent'),
+      timestamp: timestamp ? new Date(timestamp) : new Date(),
+      utmSource: utmSource,
+      utmMedium: utmMedium,
+      utmCampaign: utmCampaign,
+      url: url || req.get('Referer') || 'unknown',
+      title: title || 'Custom Event',
+      referrer: referrer || req.get('Referer') || 'direct',
+      language: normalizedLanguage,
+      metadata: {
+        ...(eventData || {}),
+        ip: getClientIP(req),
+        source: 'analytics-track-main',
+        userAgent: req.get('User-Agent'),
+        headers: {
+          referer: req.get('Referer'),
+          origin: req.get('Origin')
+        }
+      }
+    };
+
+    console.log('🔧 Track event payload (main route):', {
+      sessionId: sessionId?.substring(0, 20) + '...',
+      eventName: eventPayload.eventName,
+      type: type
+    });
+
+    const event = new AnalyticsEvent(eventPayload);
+    await event.save();
+
+    console.log('✅ Track event processed successfully (main route):', eventName, event._id);
+
+    // ✅ FIXED: Return consistent response format that frontend expects
+    return res.status(201).json({ 
+      success: true,
+      message: 'Event tracked successfully',
+      eventId: event._id,
+      eventName: eventPayload.eventName,
+      timestamp: event.timestamp
+    });
+
+  } catch (error) {
+    console.error('❌ Track route error (main):', error);
+    
+    // ✅ FIXED: Better error response
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -993,6 +1116,7 @@ router.get('/status', async (req, res) => {
       features: {
         pageview_tracking: true,
         event_tracking: true,
+        track_tracking: true, // ✅ ADDED: Track endpoint
         post_analytics: true,
         utm_tracking: true,
         dashboard: true,
