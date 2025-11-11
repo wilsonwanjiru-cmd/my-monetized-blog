@@ -1,5 +1,4 @@
 // backend/index.js
-// backend/index.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -136,7 +135,7 @@ app.get('/api/analytics/test', (req, res) => {
 app.use('/api/posts', postsRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/newsletter', newsletterRoutes);
-app.use('/api/analytics', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes); // ✅ MAIN ANALYTICS ROUTES
 app.use('/api/consent', consentRoutes);
 app.use('/api', privacyRoutes);
 
@@ -256,245 +255,45 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ FIXED: Updated fallback analytics routes with better error handling
+// ✅ FIXED: Remove duplicate fallback analytics routes - they're conflicting with main routes
+// The main analytics routes in ./routes/analytics.js should handle these requests
+// Commenting out these fallback routes to prevent conflicts
+
+/*
+// Fallback analytics routes (commented out to prevent conflicts with main routes)
 app.post('/api/analytics/pageview', cors(corsOptions), async (req, res) => {
-  try {
-    console.log('🔍 Fallback Pageview Route Hit:', {
-      sessionId: req.body.sessionId?.substring(0, 20) + '...',
-      page: req.body.page,
-      url: req.body.url?.substring(0, 50) + '...'
-    });
-    
-    // Import AnalyticsEvent directly for fallback
-    const AnalyticsEvent = require('./models/AnalyticsEvent');
-    
-    const {
-      sessionId,
-      page,
-      url,
-      eventType = 'pageview',
-      eventName = 'page_view',
-      type = 'pageview',
-      metadata = {},
-      title,
-      referrer,
-      userAgent,
-      timestamp,
-      screenResolution,
-      language,
-      utm_source,
-      utm_medium,
-      utm_campaign,
-      utm_content,
-      utm_term,
-      ...otherFields
-    } = req.body;
-
-    // ✅ FIXED: Enhanced validation with better error messages
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: sessionId'
-      });
-    }
-
-    if (!page && !url) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: page or url'
-      });
-    }
-
-    // ✅ FIXED: Smart page extraction with fallbacks
-    let extractedPage = page;
-    
-    if (!extractedPage && url) {
-      try {
-        const urlObj = new URL(url);
-        extractedPage = urlObj.pathname;
-        console.log('🔍 Extracted page from URL:', extractedPage);
-      } catch (error) {
-        console.warn('⚠️ Could not parse URL, using URL as page:', url);
-        extractedPage = url;
-      }
-    }
-
-    // ✅ FIXED: Normalize language code to prevent MongoDB errors
-    const normalizedLanguage = language && language.includes('-') 
-      ? language.split('-')[0] 
-      : language || 'en';
-
-    const eventData = {
-      eventType: eventType,
-      type: type,
-      eventName: eventName,
-      sessionId: sessionId.trim(),
-      page: extractedPage.trim(),
-      url: url || `https://wilsonmuita.com${extractedPage}`,
-      title: title || metadata.title || 'Unknown Page',
-      referrer: referrer || metadata.referrer || 'direct',
-      userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
-      screenResolution: screenResolution || metadata.screenResolution || 'unknown',
-      language: normalizedLanguage,
-      utmSource: utm_source,
-      utmMedium: utm_medium,
-      utmCampaign: utm_campaign,
-      utmContent: utm_content,
-      utmTerm: utm_term,
-      metadata: {
-        ...metadata,
-        ip: req.ip || req.connection.remoteAddress,
-        source: 'fallback-pageview',
-        userAgent: req.headers['user-agent'],
-        headers: {
-          referer: req.get('Referer'),
-          origin: req.get('Origin'),
-          host: req.get('Host')
-        }
-      }
-    };
-
-    const event = new AnalyticsEvent(eventData);
-    await event.save();
-
-    // ✅ FIXED: Ensure consistent JSON response format
-    res.status(201).json({
-      success: true,
-      message: 'Pageview tracked successfully',
-      eventId: event._id,
-      timestamp: event.timestamp
-    });
-  } catch (error) {
-    console.error('❌ Fallback pageview error:', error);
-    
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Data validation failed in fallback',
-        error: error.message
-      });
-    }
-    
-    // ✅ FIXED: Always return valid JSON even on errors
-    res.status(500).json({
-      success: false,
-      message: 'Failed to track page view in fallback',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
-  }
+  // This route is disabled to prevent conflicts with main analytics routes
+  console.log('⚠️ Fallback pageview route called - this should use main analytics routes');
+  res.status(404).json({
+    success: false,
+    message: 'Use main analytics routes at /api/analytics/pageview via analyticsRoutes'
+  });
 });
 
-// ✅ FIXED: Updated fallback track route with consistent response format
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
-  try {
-    console.log('🔍 Fallback Track Route Hit:', {
-      sessionId: req.body.sessionId?.substring(0, 20) + '...',
-      eventName: req.body.eventName,
-      type: req.body.type
-    });
-    
-    // Import AnalyticsEvent directly for fallback
-    const AnalyticsEvent = require('./models/AnalyticsEvent');
-    
-    const {
-      type = 'event',
-      sessionId,
-      page,
-      eventName,
-      eventData,
-      userAgent,
-      timestamp,
-      utmSource,
-      utmMedium,
-      utmCampaign,
-      url,
-      title,
-      referrer,
-      language,
-      ...otherFields
-    } = req.body;
+  // This route is disabled to prevent conflicts with main analytics routes
+  console.log('⚠️ Fallback track route called - this should use main analytics routes');
+  res.status(404).json({
+    success: false,
+    message: 'Use main analytics routes at /api/analytics/track via analyticsRoutes'
+  });
+});
+*/
 
-    // ✅ FIXED: Updated validation to match frontend payload
-    if (!sessionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: sessionId'
-      });
-    }
-
-    if (!eventName) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required field: eventName'
-      });
-    }
-
-    // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
-      ? language.split('-')[0] 
-      : language || 'en';
-
-    // ✅ FIXED: Create proper event structure that matches AnalyticsEvent model
-    const eventPayload = {
-      eventType: type, // Use 'type' as eventType
-      type: type,
-      sessionId: sessionId,
-      page: page || url || req.get('Referer') || 'unknown',
-      eventName: eventName,
-      eventData: eventData || {},
-      userAgent: userAgent || req.get('User-Agent'),
-      timestamp: timestamp ? new Date(timestamp) : new Date(),
-      utmSource: utmSource,
-      utmMedium: utmMedium,
-      utmCampaign: utmCampaign,
-      url: url || req.get('Referer') || 'unknown',
-      title: title || 'Custom Event',
-      referrer: referrer || req.get('Referer') || 'direct',
-      language: normalizedLanguage,
-      metadata: {
-        ...(eventData || {}),
-        ip: req.ip || req.connection.remoteAddress,
-        source: 'fallback-track-route',
-        userAgent: req.get('User-Agent'),
-        headers: {
-          referer: req.get('Referer'),
-          origin: req.get('Origin')
-        }
-      }
-    };
-
-    const event = new AnalyticsEvent(eventPayload);
-    await event.save();
-
-    // ✅ FIXED: Consistent response format with main analytics routes
-    res.status(201).json({ 
-      success: true,
-      message: 'Event tracked successfully',
-      eventId: event._id,
-      eventName: eventPayload.eventName,
-      timestamp: event.timestamp
-    });
-
-  } catch (error) {
-    console.error('❌ Fallback track error:', error);
-    
-    // ✅ FIXED: Better error response with consistent format
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        success: false,
-        message: 'Event data validation failed',
-        error: error.message
-      });
-    }
-    
-    // ✅ FIXED: Always return valid JSON
-    res.status(500).json({
-      success: false,
-      message: 'Failed to track event',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
-    });
-  }
+// ✅ ADDED: Debug endpoint to check which analytics routes are active
+app.get('/api/analytics/debug', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Analytics routes debug information',
+    timestamp: new Date().toISOString(),
+    routes: {
+      mainPageview: 'POST /api/analytics/pageview (via analyticsRoutes)',
+      mainTrack: 'POST /api/analytics/track (via analyticsRoutes)',
+      fallbackPageview: 'DISABLED - Was POST /api/analytics/pageview (fallback)',
+      fallbackTrack: 'DISABLED - Was POST /api/analytics/track (fallback)'
+    },
+    recommendation: 'Frontend should use main analytics routes from analyticsRoutes module'
+  });
 });
 
 // Error handling middleware
@@ -602,6 +401,7 @@ const server = app.listen(PORT, () => {
   console.log(`✅ Health check: https://api.wilsonmuita.com/api/health`);
   console.log(`✅ Root endpoint: https://api.wilsonmuita.com/`);
   console.log(`✅ Analytics test: https://api.wilsonmuita.com/api/analytics/test`);
+  console.log(`✅ Analytics debug: https://api.wilsonmuita.com/api/analytics/debug`);
   console.log(`✅ Privacy Policy: https://api.wilsonmuita.com/api/privacy-policy`);
   console.log(`🌐 CORS enabled for: ${corsOptions.origin}`);
   console.log('✅ All features integrated successfully!');
@@ -624,10 +424,10 @@ const server = app.listen(PORT, () => {
   console.log('   - ✅ /blog/:slug - Server-rendered blog posts');
   console.log('   - ✅ /blog - Blog listing page');
   console.log('   - ✅ /preview/:slug - Social media previews');
-  console.log('🔧 Fixes Applied:');
-  console.log('   - ✅ Consistent JSON response format for analytics');
-  console.log('   - ✅ Better error handling for event tracking');
-  console.log('   - ✅ Fixed PathError with proper regex routing');
+  console.log('🔧 Analytics Configuration:');
+  console.log('   - ✅ Main analytics routes: /api/analytics/*');
+  console.log('   - ❌ Fallback routes: DISABLED (were causing conflicts)');
+  console.log('   - ✅ Debug endpoint: /api/analytics/debug');
 });
 
 // Graceful shutdown handling
