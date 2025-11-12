@@ -98,7 +98,7 @@ const getSessionId = () => {
   }
 };
 
-// ✅ FIXED: Enhanced page view tracking with language normalization and eventType
+// ✅ CRITICAL FIX: Enhanced page view tracking with better error handling
 export const trackPageView = async (page) => {
   let payload;
   let response;
@@ -144,7 +144,7 @@ export const trackPageView = async (page) => {
       sessionId: sessionId.substring(0, 20) + '...',
       page: pagePath,
       language: payload.language,
-      eventType: payload.eventType, // ✅ Log eventType
+      eventType: payload.eventType,
       backend: API_BASE_URL
     });
     
@@ -177,7 +177,7 @@ export const trackPageView = async (page) => {
   }
 };
 
-// ✅ ENHANCED: Core function to send analytics data with robust error handling
+// ✅ CRITICAL FIX: Enhanced sendAnalyticsData with robust JSON parsing and error handling
 const sendAnalyticsData = async (endpoint, data) => {
   let response;
   
@@ -223,7 +223,7 @@ const sendAnalyticsData = async (endpoint, data) => {
 
     console.log(`📊 Sending analytics to: ${API_BASE_URL}${endpoint}`, {
       eventName: data.eventName,
-      eventType: data.eventType, // ✅ Log eventType
+      eventType: data.eventType,
       sessionId: data.sessionId?.substring(0, 10) + '...',
       page: data.page
     });
@@ -243,14 +243,16 @@ const sendAnalyticsData = async (endpoint, data) => {
 
     clearTimeout(timeoutId);
 
-    // ✅ ENHANCED: Handle empty responses first
+    // ✅ CRITICAL FIX: Handle response as text first to avoid JSON parsing errors
     const responseText = await response.text();
+    
     console.log(`📊 Analytics response for ${endpoint}:`, {
       status: response.status,
       statusText: response.statusText,
       body: responseText || '[EMPTY RESPONSE]'
     });
     
+    // ✅ CRITICAL FIX: Handle non-200 responses first
     if (!response.ok) {
       console.error('❌ Analytics API error:', {
         status: response.status,
@@ -264,7 +266,7 @@ const sendAnalyticsData = async (endpoint, data) => {
         storeOfflineEvent({ endpoint, data });
       }
       
-      // Return structured error
+      // Return structured error - don't try to parse as JSON
       return {
         success: false,
         message: `HTTP error: ${response.status}`,
@@ -283,10 +285,11 @@ const sendAnalyticsData = async (endpoint, data) => {
       };
     }
 
-    // ✅ ENHANCED: Safe JSON parsing with better error context
+    // ✅ CRITICAL FIX: Safe JSON parsing with comprehensive error handling
     try {
       const responseData = JSON.parse(responseText);
       
+      // Double check if response indicates success
       if (response.ok) {
         console.log('✅ Analytics Success:', responseData);
         return responseData;
@@ -304,18 +307,29 @@ const sendAnalyticsData = async (endpoint, data) => {
         };
       }
     } catch (parseError) {
-      // ✅ FIXED: Handle non-JSON responses gracefully
+      // ✅ CRITICAL FIX: Handle non-JSON responses gracefully
       console.warn('⚠️ Analytics response not JSON, but request succeeded:', {
         parseError: parseError.message,
         responseText: responseText.substring(0, 100) + '...',
-        endpoint: endpoint
+        endpoint: endpoint,
+        status: response.status
       });
       
-      return { 
-        success: true, 
-        message: 'Event tracked (non-JSON response)',
-        responseText: responseText 
-      };
+      // Even if not JSON, if status is 200, consider it successful
+      if (response.ok) {
+        return { 
+          success: true, 
+          message: 'Event tracked (non-JSON response)',
+          responseText: responseText 
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Invalid JSON response',
+          error: parseError.message,
+          responseText: responseText
+        };
+      }
     }
 
   } catch (error) {
@@ -344,7 +358,7 @@ const sendAnalyticsData = async (endpoint, data) => {
   }
 };
 
-// ✅ CRITICAL FIX: Enhanced event tracking with eventType support for backend compatibility
+// ✅ CRITICAL FIX: Enhanced event tracking with better error handling
 export const trackEvent = async (eventData) => {
   try {
     // Check if analytics are enabled
@@ -367,7 +381,7 @@ export const trackEvent = async (eventData) => {
 
     const enhancedEventData = {
       type: 'event',
-      eventType: eventType, // ✅ ADDED: Include eventType for backend compatibility
+      eventType: eventType,
       sessionId: currentSessionId || getSessionId(),
       page: window.location.pathname,
       url: window.location.href,
@@ -383,7 +397,7 @@ export const trackEvent = async (eventData) => {
 
     console.log('📈 Tracking event:', {
       eventName: enhancedEventData.eventName,
-      eventType: enhancedEventData.eventType, // ✅ Log eventType
+      eventType: enhancedEventData.eventType,
       sessionId: enhancedEventData.sessionId?.substring(0, 10) + '...',
       language: enhancedEventData.language
     });
@@ -391,8 +405,8 @@ export const trackEvent = async (eventData) => {
     // ✅ ENHANCED: Try multiple endpoints for better compatibility
     let result;
     
-    // First try the main track endpoint
     try {
+      // First try the main track endpoint
       result = await sendAnalyticsData('/api/analytics/track', enhancedEventData);
     } catch (error) {
       console.warn('⚠️ Track endpoint failed, trying event endpoint:', error.message);
@@ -550,7 +564,7 @@ export const initUTMTracking = () => {
       // Track UTM acquisition with proper eventType
       trackEvent({
         eventName: 'utm_acquisition',
-        eventType: 'conversion', // ✅ Added eventType
+        eventType: 'conversion',
         eventData: utmParams
       });
     }
@@ -587,10 +601,10 @@ const setupVisibilityTracking = () => {
       if (visibleTime > 1000) { // Only track if visible for more than 1 second
         trackEvent({
           eventName: 'page_visibility',
-          eventType: 'engagement', // ✅ Added eventType
+          eventType: 'engagement',
           eventData: {
             action: 'hidden',
-            visibleTime: Math.round(visibleTime / 1000), // Convert to seconds
+            visibleTime: Math.round(visibleTime / 1000),
             page: window.location.pathname
           }
         });
@@ -602,7 +616,7 @@ const setupVisibilityTracking = () => {
       if (!visible) {
         trackEvent({
           eventName: 'page_visibility',
-          eventType: 'engagement', // ✅ Added eventType
+          eventType: 'engagement',
           eventData: {
             action: 'visible',
             page: window.location.pathname
@@ -639,7 +653,7 @@ const setupPerformanceTracking = () => {
         
         const performanceData = {
           eventName: 'page_performance',
-          eventType: 'performance', // ✅ Added eventType
+          eventType: 'performance',
           eventData: {
             dnsLookup: timing.domainLookupEnd - timing.domainLookupStart,
             tcpConnect: timing.connectEnd - timing.connectStart,
@@ -701,7 +715,7 @@ const getCumulativeLayoutShift = () => {
         cls += entry.value;
       }
     });
-    return Math.round(cls * 1000) / 1000; // Round to 3 decimal places
+    return Math.round(cls * 1000) / 1000;
   } catch (error) {
     return null;
   }
@@ -711,7 +725,7 @@ const getCumulativeLayoutShift = () => {
 export const trackUserInteraction = (element, action, metadata = {}) => {
   trackEvent({
     eventName: 'user_interaction',
-    eventType: 'click', // ✅ Added eventType
+    eventType: 'click',
     eventData: {
       element,
       action,
@@ -721,25 +735,35 @@ export const trackUserInteraction = (element, action, metadata = {}) => {
   });
 };
 
-// Error tracking
+// ✅ ENHANCED: Error tracking with better error handling
 export const trackError = (error, context = {}) => {
-  trackEvent({
-    eventName: 'javascript_error',
-    eventType: 'error', // ✅ Added eventType
-    eventData: {
-      errorMessage: error.message,
-      errorStack: error.stack,
-      page: window.location.pathname,
-      ...context
-    }
-  });
+  // Don't track errors if analytics isn't initialized or no consent
+  if (!isInitialized || !getConsentStatus()) {
+    return;
+  }
+
+  try {
+    trackEvent({
+      eventName: 'javascript_error',
+      eventType: 'error',
+      eventData: {
+        errorMessage: error.message,
+        errorStack: error.stack,
+        page: window.location.pathname,
+        ...context
+      }
+    });
+  } catch (trackingError) {
+    // Don't create infinite loop if tracking fails
+    console.warn('⚠️ Failed to track error:', trackingError.message);
+  }
 };
 
 // E-commerce tracking (if needed)
 export const trackEcommerceEvent = (eventType, data) => {
   trackEvent({
     eventName: `ecommerce_${eventType}`,
-    eventType: 'conversion', // ✅ Added eventType
+    eventType: 'conversion',
     eventData: data
   });
 };
@@ -748,7 +772,7 @@ export const trackEcommerceEvent = (eventType, data) => {
 export const trackSocialShare = (platform, content) => {
   trackEvent({
     eventName: 'social_share',
-    eventType: 'social', // ✅ Added eventType
+    eventType: 'social',
     eventData: {
       platform,
       content,
@@ -761,7 +785,7 @@ export const trackSocialShare = (platform, content) => {
 export const trackScrollDepth = (depth) => {
   trackEvent({
     eventName: 'scroll_depth',
-    eventType: 'engagement', // ✅ Added eventType
+    eventType: 'engagement',
     eventData: {
       depth: depth,
       page: window.location.pathname,
@@ -801,9 +825,7 @@ export const getAnalyticsStatus = () => {
       offlineEvents: offlineEvents.length,
       backend: API_BASE_URL,
       domain: window.location.hostname,
-      // ✅ ADDED: Current normalized language
       currentLanguage: normalizeLanguageCode(navigator.language || 'en'),
-      // ✅ ADDED: Endpoint compatibility info
       endpoints: {
         pageview: `${API_BASE_URL}/api/analytics/pageview`,
         event: `${API_BASE_URL}/api/analytics/event`,
@@ -860,7 +882,7 @@ const analyticsTracker = {
   initAnalyticsTracking,
   trackEvent,
   trackPageView,
-  track, // ✅ ADDED: Direct track function
+  track,
   initUTMTracking,
   getUTMParams,
   trackUserInteraction,
@@ -871,7 +893,6 @@ const analyticsTracker = {
   retryOfflineEvents,
   resetAnalytics,
   getAnalyticsStatus,
-  // ✅ ADDED: Export the language normalization function
   normalizeLanguageCode
 };
 
