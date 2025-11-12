@@ -172,8 +172,9 @@ const AdSense = ({
       return;
     }
 
-    // Don't load ads on excluded pages
-    const excludedPaths = ['/privacy', '/disclaimer', '/about'];
+    // 🚨 CRITICAL FIX: Updated excluded paths - REMOVED '/contact' from exclusions
+    // Only exclude essential pages where ads shouldn't appear
+    const excludedPaths = ['/privacy', '/disclaimer']; // Removed '/contact' and '/about'
     if (excludedPaths.includes(window.location.pathname)) {
       console.log('🚫 AdSense: Skipping ad load - excluded page');
       return;

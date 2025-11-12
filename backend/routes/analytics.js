@@ -85,7 +85,7 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ FIXED: Pageview tracking with proper JSON responses
+// ✅ CRITICAL FIX: Enhanced pageview tracking with better eventType handling
 router.post('/pageview', async (req, res) => {
   let analyticsEvent;
   
@@ -99,7 +99,7 @@ router.post('/pageview', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    // ✅ FIXED: Extract fields with proper validation
+    // ✅ CRITICAL FIX: Extract fields with enhanced eventType handling
     const { 
       sessionId, 
       page, 
@@ -122,7 +122,7 @@ router.post('/pageview', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Enhanced validation with better error messages
+    // ✅ CRITICAL FIX: Enhanced validation with eventType awareness
     if (!sessionId) {
       console.error('❌ Validation failed: Missing sessionId');
       // ✅ FIXED: Always return JSON
@@ -173,11 +173,14 @@ router.post('/pageview', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ FIXED: Create event with minimal required fields first
+    // ✅ CRITICAL FIX: Enhanced event data with proper eventType/type handling
+    const finalEventType = eventType || type || 'pageview';
+    const finalType = type || eventType || 'pageview';
+
     const eventData = {
-      // Core required fields
-      eventType: eventType,
-      type: type,
+      // Core required fields with proper mapping
+      eventType: finalEventType,
+      type: finalType,
       eventName: eventName,
       sessionId: sessionId.trim(),
       page: extractedPage.trim(),
@@ -189,7 +192,7 @@ router.post('/pageview', async (req, res) => {
       userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
       timestamp: timestamp ? new Date(timestamp) : new Date(),
       screenResolution: screenResolution || metadata.screenResolution || 'unknown',
-      language: normalizedLanguage, // ✅ FIXED: Use normalized language
+      language: normalizedLanguage,
       
       // UTM parameters
       utmSource: utm_source,
@@ -221,7 +224,8 @@ router.post('/pageview', async (req, res) => {
       sessionId: eventData.sessionId.substring(0, 20) + '...',
       page: eventData.page,
       eventType: eventData.eventType,
-      language: eventData.language // ✅ FIXED: Log normalized language
+      type: eventData.type,
+      language: eventData.language
     });
 
     // ✅ FIXED: Create and save with better error handling
@@ -233,7 +237,8 @@ router.post('/pageview', async (req, res) => {
     console.log('✅ Pageview tracked successfully:', {
       eventId: analyticsEvent._id,
       sessionId: sessionId.substring(0, 20) + '...',
-      page: extractedPage
+      page: extractedPage,
+      eventType: finalEventType
     });
 
     // ✅ FIXED: Always return proper JSON response
@@ -241,6 +246,7 @@ router.post('/pageview', async (req, res) => {
       success: true,
       message: 'Pageview tracked successfully',
       eventId: analyticsEvent._id,
+      eventType: finalEventType,
       timestamp: analyticsEvent.timestamp
     });
 
@@ -285,17 +291,20 @@ router.post('/pageview', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Track general analytics events with proper JSON responses
+// ✅ CRITICAL FIX: Enhanced event tracking with proper eventType handling
 router.post('/event', async (req, res) => {
   try {
     console.log('📊 Event request received:', {
       eventName: req.body.eventName,
       sessionId: req.body.sessionId?.substring(0, 20) + '...',
-      page: req.body.page
+      page: req.body.page,
+      eventType: req.body.eventType,
+      type: req.body.type
     });
 
     const {
       type = 'event',
+      eventType = type,
       sessionId,
       page,
       eventName,
@@ -308,16 +317,11 @@ router.post('/event', async (req, res) => {
       url,
       title,
       referrer,
-      language, // ✅ ADDED: Extract language
+      language,
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
-      ? language.split('-')[0] 
-      : language || 'en';
-
-    // ✅ ENHANCED: Better validation with helpful errors
+    // ✅ CRITICAL FIX: Enhanced validation with eventType awareness
     if (!sessionId || !eventName) {
       console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
       // ✅ FIXED: Always return JSON
@@ -329,10 +333,19 @@ router.post('/event', async (req, res) => {
       });
     }
 
+    // ✅ FIXED: Normalize language code
+    const normalizedLanguage = language && language.includes('-') 
+      ? language.split('-')[0] 
+      : language || 'en';
+
+    // ✅ CRITICAL FIX: Determine final eventType and type
+    const finalEventType = eventType || type || 'event';
+    const finalType = type || eventType || 'event';
+
     const event = new AnalyticsEvent({
-      // ✅ FIXED: Proper field mapping
-      eventType: type,
-      type: type,
+      // ✅ CRITICAL FIX: Proper field mapping with both eventType and type
+      eventType: finalEventType,
+      type: finalType,
       sessionId,
       page: page || req.get('Referer') || 'unknown',
       eventName,
@@ -345,7 +358,7 @@ router.post('/event', async (req, res) => {
       url: url || req.get('Referer') || 'unknown',
       title: title || 'Custom Event',
       referrer: referrer || req.get('Referer') || 'direct',
-      language: normalizedLanguage, // ✅ FIXED: Use normalized language
+      language: normalizedLanguage,
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-event',
@@ -354,20 +367,32 @@ router.post('/event', async (req, res) => {
           referer: req.get('Referer'),
           origin: req.get('Origin')
         },
-        eventData: eventData || {}
+        eventData: eventData || {},
+        fieldMapping: {
+          receivedEventType: eventType,
+          receivedType: type,
+          finalEventType: finalEventType,
+          finalType: finalType
+        }
       }
     });
 
     await event.save();
 
-    console.log('✅ Event tracked successfully:', eventName, event._id);
+    console.log('✅ Event tracked successfully:', {
+      eventName: eventName,
+      eventId: event._id,
+      eventType: finalEventType,
+      type: finalType
+    });
 
-    // ✅ FIXED: Always return valid JSON
+    // ✅ FIXED: Always return valid JSON with eventType info
     return res.json({
       success: true,
       message: 'Event tracked successfully',
       eventId: event._id,
       eventName: eventName,
+      eventType: finalEventType,
       timestamp: event.timestamp
     });
 
@@ -392,19 +417,20 @@ router.post('/event', async (req, res) => {
   }
 });
 
-// ✅ CRITICAL FIX: ADDED MISSING /track ENDPOINT
-// This is what the frontend is calling but was missing from main analytics routes
+// ✅ CRITICAL FIX: Enhanced /track endpoint with robust eventType handling
 router.post('/track', async (req, res) => {
   try {
     console.log('📊 Track request received (main route):', {
       eventName: req.body.eventName,
       sessionId: req.body.sessionId?.substring(0, 20) + '...',
+      eventType: req.body.eventType,
       type: req.body.type,
       page: req.body.page
     });
 
     const {
       type = 'event',
+      eventType = type,
       sessionId,
       page,
       eventName,
@@ -421,13 +447,14 @@ router.post('/track', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Enhanced validation to match frontend expectations
+    // ✅ CRITICAL FIX: Enhanced validation with better error messages
     if (!sessionId) {
       console.warn('⚠️ Track validation failed: Missing sessionId');
       return res.status(400).json({
         success: false,
         message: 'Missing required field: sessionId',
-        received: Object.keys(req.body)
+        received: Object.keys(req.body),
+        required: ['sessionId', 'eventName']
       });
     }
 
@@ -436,8 +463,15 @@ router.post('/track', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Missing required field: eventName',
-        received: Object.keys(req.body)
+        received: Object.keys(req.body),
+        required: ['sessionId', 'eventName']
       });
+    }
+
+    // ✅ CRITICAL FIX: Handle missing eventType/type gracefully
+    if (!eventType && !type) {
+      console.warn('⚠️ Track validation: Missing both eventType and type, using default');
+      // We'll use defaults above, so just log warning
     }
 
     // ✅ FIXED: Normalize language code
@@ -445,10 +479,14 @@ router.post('/track', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ FIXED: Create event structure that matches frontend payload
+    // ✅ CRITICAL FIX: Determine final eventType and type with proper fallbacks
+    const finalEventType = eventType || type || 'custom';
+    const finalType = type || eventType || 'custom';
+
+    // ✅ FIXED: Create event structure that handles both eventType and type
     const eventPayload = {
-      eventType: type,
-      type: type,
+      eventType: finalEventType,
+      type: finalType,
       sessionId: sessionId,
       page: page || url || req.get('Referer') || 'unknown',
       eventName: eventName,
@@ -470,6 +508,12 @@ router.post('/track', async (req, res) => {
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin')
+        },
+        fieldMapping: {
+          receivedEventType: eventType,
+          receivedType: type,
+          finalEventType: finalEventType,
+          finalType: finalType
         }
       }
     };
@@ -477,13 +521,18 @@ router.post('/track', async (req, res) => {
     console.log('🔧 Track event payload (main route):', {
       sessionId: sessionId?.substring(0, 20) + '...',
       eventName: eventPayload.eventName,
-      type: type
+      eventType: finalEventType,
+      type: finalType
     });
 
     const event = new AnalyticsEvent(eventPayload);
     await event.save();
 
-    console.log('✅ Track event processed successfully (main route):', eventName, event._id);
+    console.log('✅ Track event processed successfully (main route):', {
+      eventName: eventName,
+      eventId: event._id,
+      eventType: finalEventType
+    });
 
     // ✅ FIXED: Return consistent response format that frontend expects
     return res.status(201).json({ 
@@ -491,6 +540,7 @@ router.post('/track', async (req, res) => {
       message: 'Event tracked successfully',
       eventId: event._id,
       eventName: eventPayload.eventName,
+      eventType: finalEventType,
       timestamp: event.timestamp
     });
 
@@ -502,7 +552,17 @@ router.post('/track', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Event data validation failed',
-        error: error.message
+        error: error.message,
+        details: error.errors
+      });
+    }
+    
+    if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+      return res.status(500).json({
+        success: false,
+        message: 'Database error during event tracking',
+        error: error.message,
+        code: error.code
       });
     }
     
@@ -514,12 +574,14 @@ router.post('/track', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Track post-specific views with proper JSON responses
+// ✅ CRITICAL FIX: Enhanced post-specific views with proper eventType handling
 router.post('/postview', async (req, res) => {
   try {
     console.log('📊 Postview request received:', {
       postId: req.body.postId,
-      title: req.body.title?.substring(0, 50) + '...'
+      title: req.body.title?.substring(0, 50) + '...',
+      eventType: req.body.eventType,
+      type: req.body.type
     });
 
     const {
@@ -532,7 +594,9 @@ router.post('/postview', async (req, res) => {
       referrer,
       timestamp,
       sessionId,
-      language // ✅ ADDED: Extract language
+      language,
+      eventType = 'post_view',
+      type = 'post_view'
     } = req.body;
 
     if (!postId) {
@@ -548,10 +612,14 @@ router.post('/postview', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
+    // ✅ CRITICAL FIX: Determine final eventType and type
+    const finalEventType = eventType || type || 'post_view';
+    const finalType = type || eventType || 'post_view';
+
     const event = new AnalyticsEvent({
-      // ✅ FIXED: Proper field mapping
-      eventType: 'post_view',
-      type: 'post_view',
+      // ✅ CRITICAL FIX: Proper field mapping with both eventType and type
+      eventType: finalEventType,
+      type: finalType,
       sessionId: sessionId || `post_${postId}_${Date.now()}`,
       page: url || req.get('Referer') || 'direct',
       eventName: 'post_view',
@@ -559,7 +627,7 @@ router.post('/postview', async (req, res) => {
       url: url || req.get('Referer') || 'direct',
       referrer: referrer || 'direct',
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      language: normalizedLanguage, // ✅ FIXED: Use normalized language
+      language: normalizedLanguage,
       metadata: {
         ip: getClientIP(req),
         source: 'analytics-postview',
@@ -572,20 +640,31 @@ router.post('/postview', async (req, res) => {
           category,
           readTime,
           referrer: referrer || 'direct'
+        },
+        fieldMapping: {
+          receivedEventType: eventType,
+          receivedType: type,
+          finalEventType: finalEventType,
+          finalType: finalType
         }
       }
     });
 
     await event.save();
 
-    console.log('✅ Post view tracked successfully:', postId);
+    console.log('✅ Post view tracked successfully:', {
+      postId: postId,
+      eventId: event._id,
+      eventType: finalEventType
+    });
 
     // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: 'Post view tracked successfully',
       eventId: event._id,
-      postId: postId
+      postId: postId,
+      eventType: finalEventType
     });
 
   } catch (error) {
@@ -602,7 +681,7 @@ router.post('/postview', async (req, res) => {
 // ✅ FIXED: Get basic analytics stats with proper JSON responses
 router.get('/stats', async (req, res) => {
   try {
-    const { days = 30, type } = req.query;
+    const { days = 30, type, eventType } = req.query;
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
@@ -619,19 +698,23 @@ router.get('/stats', async (req, res) => {
 
     console.log('📊 Fetching analytics stats for last', days, 'days');
 
-    // Build match query
+    // Build match query - support both type and eventType
     const matchQuery = {
       timestamp: { $gte: startDate }
     };
 
+    // ✅ ENHANCED: Support both type and eventType filters
     if (type) {
       matchQuery.type = type;
+    }
+    if (eventType) {
+      matchQuery.eventType = eventType;
     }
 
     // Total events
     const totalEvents = await AnalyticsEvent.countDocuments(matchQuery);
 
-    // Events by type
+    // Events by type (support both type and eventType)
     const eventsByType = await AnalyticsEvent.aggregate([
       { $match: matchQuery },
       {
@@ -643,6 +726,27 @@ router.get('/stats', async (req, res) => {
       },
       {
         $project: {
+          eventType: '$_id',
+          count: 1,
+          uniqueSessions: { $size: '$uniqueSessions' }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Events by eventType
+    const eventsByEventType = await AnalyticsEvent.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: '$eventType',
+          count: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
+        }
+      },
+      {
+        $project: {
+          eventType: '$_id',
           count: 1,
           uniqueSessions: { $size: '$uniqueSessions' }
         }
@@ -654,10 +758,13 @@ router.get('/stats', async (req, res) => {
     const uniqueSessions = await AnalyticsEvent.distinct('sessionId', matchQuery);
     const uniqueSessionsCount = uniqueSessions.length;
 
-    // Page views (specific type)
+    // Page views (support both type and eventType)
     const pageViews = await AnalyticsEvent.countDocuments({
       ...matchQuery,
-      type: 'pageview'
+      $or: [
+        { type: 'pageview' },
+        { eventType: 'pageview' }
+      ]
     });
 
     // Recent activity (last 24 hours)
@@ -676,6 +783,7 @@ router.get('/stats', async (req, res) => {
         pageViews,
         uniqueSessions: uniqueSessionsCount,
         eventsByType,
+        eventsByEventType,
         recentActivity24h: recentActivity,
         period: `${days} days`,
         dateRange: {
@@ -717,7 +825,7 @@ router.get('/dashboard', async (req, res) => {
 
     console.log('📊 Fetching dashboard analytics for last', days, 'days');
 
-    // Event type summary
+    // Event type summary (support both type and eventType)
     const eventSummary = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -727,6 +835,30 @@ router.get('/dashboard', async (req, res) => {
       {
         $group: {
           _id: '$type',
+          count: { $sum: 1 },
+          uniqueSessions: { $addToSet: '$sessionId' }
+        }
+      },
+      {
+        $project: {
+          eventType: '$_id',
+          count: 1,
+          uniqueSessions: { $size: '$uniqueSessions' }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    // EventType summary
+    const eventTypeSummary = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$eventType',
           count: { $sum: 1 },
           uniqueSessions: { $addToSet: '$sessionId' }
         }
@@ -770,12 +902,15 @@ router.get('/dashboard', async (req, res) => {
       { $sort: { date: 1 } }
     ]);
 
-    // Top pages
+    // Top pages (support both type and eventType for pageview)
     const topPages = await AnalyticsEvent.aggregate([
       {
         $match: {
-          type: 'pageview',
-          timestamp: { $gte: startDate }
+          timestamp: { $gte: startDate },
+          $or: [
+            { type: 'pageview' },
+            { eventType: 'pageview' }
+          ]
         }
       },
       {
@@ -814,7 +949,13 @@ router.get('/dashboard', async (req, res) => {
           totalEvents: { $sum: 1 },
           uniqueSessions: { $addToSet: '$sessionId' },
           pageViews: {
-            $sum: { $cond: [{ $eq: ['$type', 'pageview'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ['$type', 'pageview'] }, { $eq: ['$eventType', 'pageview'] }] },
+                1,
+                0
+              ]
+            }
           }
         }
       },
@@ -845,6 +986,7 @@ router.get('/dashboard', async (req, res) => {
         campaignsTracked: campaignPerformance.length
       },
       eventSummary,
+      eventTypeSummary,
       dailyTrend,
       topPages,
       campaignPerformance,
@@ -910,7 +1052,13 @@ router.get('/utm-report', async (req, res) => {
           totalEvents: { $sum: 1 },
           uniqueSessions: { $addToSet: '$sessionId' },
           pageViews: {
-            $sum: { $cond: [{ $eq: ['$type', 'pageview'] }, 1, 0] }
+            $sum: {
+              $cond: [
+                { $or: [{ $eq: ['$type', 'pageview'] }, { $eq: ['$eventType', 'pageview'] }] },
+                1,
+                0
+              ]
+            }
           }
         }
       },
@@ -1009,7 +1157,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Bulk events endpoint with proper JSON responses
+// ✅ CRITICAL FIX: Enhanced bulk events endpoint with proper eventType handling
 router.post('/bulk', async (req, res) => {
   try {
     const { events } = req.body;
@@ -1038,29 +1186,37 @@ router.post('/bulk', async (req, res) => {
 
     events.forEach((event, index) => {
       if (!event.sessionId || (!event.page && !event.eventName)) {
-        errors.push(`Event ${index}: Missing required fields`);
+        errors.push(`Event ${index}: Missing required fields (sessionId and eventName or page)`);
       } else {
         // Add timestamp if not provided
         if (!event.timestamp) {
           event.timestamp = new Date();
         }
-        // Ensure proper field mapping
-        if (!event.eventType && event.type) {
-          event.eventType = event.type;
-        }
-        if (!event.type && event.eventType) {
-          event.type = event.eventType;
-        }
+        
+        // ✅ CRITICAL FIX: Enhanced field mapping for eventType and type
+        const finalEventType = event.eventType || event.type || 'custom';
+        const finalType = event.type || event.eventType || 'custom';
+        
+        event.eventType = finalEventType;
+        event.type = finalType;
+        
         // ✅ FIXED: Normalize language code for bulk events
         if (event.language && event.language.includes('-')) {
           event.language = event.language.split('-')[0];
         }
-        // Add metadata
+        
+        // Add metadata with field mapping info
         event.metadata = {
           ...event.metadata,
           source: 'bulk-upload',
           ip: getClientIP(req),
-          bulkIndex: index
+          bulkIndex: index,
+          fieldMapping: {
+            receivedEventType: event.eventType,
+            receivedType: event.type,
+            finalEventType: finalEventType,
+            finalType: finalType
+          }
         };
         validEvents.push(event);
       }
@@ -1076,6 +1232,8 @@ router.post('/bulk', async (req, res) => {
     }
 
     const savedEvents = await AnalyticsEvent.insertMany(validEvents, { ordered: false });
+
+    console.log(`✅ Bulk events processed: ${savedEvents.length} successful`);
 
     // ✅ FIXED: Always return JSON
     return res.json({

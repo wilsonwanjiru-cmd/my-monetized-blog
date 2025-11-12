@@ -186,13 +186,15 @@ export const blogAPI = {
     getStats: () => apiRequest('/api/newsletter/stats')
   },
   
-  // ✅ ENHANCED: Analytics endpoints with better error handling and fallbacks
+  // ✅ CRITICAL FIX: Enhanced Analytics endpoints with proper eventType support
   analytics: {
-    // Track custom events
+    // Track custom events - CRITICAL FIX: Ensure eventType is included
     trackEvent: (eventData) => apiRequest('/api/analytics/track', {
       method: 'POST',
       body: JSON.stringify({
-        // ✅ FIXED: Ensure consistent parameter naming
+        // ✅ FIXED: Include both eventType and type for backend compatibility
+        eventType: eventData.eventType || eventData.type || 'custom',
+        type: eventData.type || eventData.eventType || 'custom',
         ...eventData,
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
@@ -202,11 +204,13 @@ export const blogAPI = {
       })
     }),
     
-    // Track page views
+    // Track page views - CRITICAL FIX: Ensure eventType is included
     trackPageView: (pageData) => apiRequest('/api/analytics/pageview', {
       method: 'POST',
       body: JSON.stringify({
-        // ✅ FIXED: Ensure consistent parameter naming
+        // ✅ FIXED: Include both eventType and type for backend compatibility
+        eventType: 'pageview',
+        type: 'pageview',
         ...pageData,
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
@@ -219,10 +223,13 @@ export const blogAPI = {
     // Get analytics stats
     getStats: (days = 30) => apiRequest(`/api/analytics/stats?days=${days}`),
     
-    // Post-specific analytics
+    // Post-specific analytics - CRITICAL FIX: Ensure eventType is included
     trackPostView: (postId, data = {}) => apiRequest('/api/analytics/postview', {
       method: 'POST',
       body: JSON.stringify({
+        // ✅ FIXED: Include both eventType and type for backend compatibility
+        eventType: 'post_view',
+        type: 'post_view',
         postId,
         timestamp: new Date().toISOString(),
         url: window.location.href,
@@ -238,10 +245,23 @@ export const blogAPI = {
     // ✅ ADDED: Health check for analytics
     health: () => apiRequest('/api/analytics/health'),
     
+    // ✅ ADDED: Database status check
+    dbStatus: () => apiRequest('/api/analytics/db-status'),
+    
+    // ✅ ADDED: Analytics status endpoint
+    status: () => apiRequest('/api/analytics/status'),
+    
     // ✅ ADDED: Bulk events for offline sync
     trackBulk: (events) => apiRequest('/api/analytics/bulk', {
       method: 'POST',
-      body: JSON.stringify({ events })
+      body: JSON.stringify({ 
+        events: events.map(event => ({
+          // ✅ FIXED: Ensure each event in bulk has eventType
+          eventType: event.eventType || event.type || 'custom',
+          type: event.type || event.eventType || 'custom',
+          ...event
+        }))
+      })
     }),
     
     // ✅ ADDED: Get dashboard data
@@ -255,7 +275,22 @@ export const blogAPI = {
       if (medium) url += `&medium=${encodeURIComponent(medium)}`;
       if (campaign) url += `&campaign=${encodeURIComponent(campaign)}`;
       return apiRequest(url);
-    }
+    },
+    
+    // ✅ ADDED: Alternative event endpoint for compatibility
+    trackEventAlt: (eventData) => apiRequest('/api/analytics/event', {
+      method: 'POST',
+      body: JSON.stringify({
+        eventType: eventData.eventType || eventData.type || 'custom',
+        type: eventData.type || eventData.eventType || 'custom',
+        ...eventData,
+        timestamp: new Date().toISOString(),
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        url: window.location.href,
+        referrer: document.referrer
+      })
+    })
   },
   
   // Consent endpoints
@@ -297,11 +332,13 @@ export const apiUtils = {
     }
   },
   
-  // Test analytics endpoints specifically
+  // Test analytics endpoints specifically - CRITICAL FIX: Updated test data
   testAnalyticsEndpoint: async () => {
     try {
       const testData = {
         eventType: 'test_event',
+        type: 'test_event',
+        eventName: 'api_test_event',
         sessionId: `test_session_${Date.now()}`,
         url: '/test',
         utm_source: 'api_test',
@@ -508,7 +545,7 @@ export const fetchRelatedPosts = async (postId, options = {}) => {
   }
 };
 
-// ✅ ENHANCED: Track post view with multiple fallback strategies
+// ✅ CRITICAL FIX: Enhanced Track post view with proper eventType support
 export const trackPostView = async (postId, additionalData = {}) => {
   const trackingData = {
     postId,
@@ -523,11 +560,17 @@ export const trackPostView = async (postId, additionalData = {}) => {
   const endpoints = [
     // Primary endpoint
     () => blogAPI.posts.trackView(postId),
-    // Analytics postview endpoint
-    () => blogAPI.analytics.trackPostView(postId, trackingData),
-    // Generic analytics track endpoint as last resort
+    // Analytics postview endpoint with proper eventType
+    () => blogAPI.analytics.trackPostView(postId, {
+      ...trackingData,
+      eventType: 'post_view', // ✅ Ensure eventType is set
+      type: 'post_view'
+    }),
+    // Generic analytics track endpoint as last resort with proper eventType
     () => blogAPI.analytics.trackEvent({
       eventType: 'post_view',
+      type: 'post_view',
+      eventName: 'post_view',
       sessionId: `post_${postId}_${Date.now()}`,
       postId,
       ...trackingData
@@ -548,6 +591,56 @@ export const trackPostView = async (postId, additionalData = {}) => {
   // If all endpoints fail, log but don't throw to avoid breaking the user experience
   console.error('❌ All post view tracking endpoints failed');
   return { success: false, message: 'Tracking failed but continuing' };
+};
+
+// ✅ NEW: Enhanced track function with eventType support
+export const trackEvent = async (eventData) => {
+  try {
+    // Ensure eventType is present
+    const dataWithEventType = {
+      eventType: eventData.eventType || eventData.type || 'custom',
+      type: eventData.type || eventData.eventType || 'custom',
+      ...eventData,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      url: window.location.href,
+      referrer: document.referrer
+    };
+
+    // Try track endpoint first, then fallback to event endpoint
+    try {
+      return await blogAPI.analytics.trackEvent(dataWithEventType);
+    } catch (error) {
+      console.warn('⚠️ Track endpoint failed, trying event endpoint:', error.message);
+      return await blogAPI.analytics.trackEventAlt(dataWithEventType);
+    }
+  } catch (error) {
+    console.error('❌ Event tracking failed:', error);
+    throw error;
+  }
+};
+
+// ✅ NEW: Enhanced page view tracking with eventType support
+export const trackPageView = async (pageData = {}) => {
+  try {
+    const dataWithEventType = {
+      eventType: 'pageview',
+      type: 'pageview',
+      eventName: 'page_view',
+      ...pageData,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      url: window.location.href,
+      referrer: document.referrer
+    };
+
+    return await blogAPI.analytics.trackPageView(dataWithEventType);
+  } catch (error) {
+    console.error('❌ Page view tracking failed:', error);
+    throw error;
+  }
 };
 
 // ✅ Cache utilities for performance
@@ -675,7 +768,7 @@ export const apiConfig = {
   }
 };
 
-// ✅ Enhanced analytics utilities
+// ✅ Enhanced analytics utilities with eventType support
 export const analyticsUtils = {
   // Test analytics connection
   testAnalytics: async () => {
@@ -711,12 +804,47 @@ export const analyticsUtils = {
     }
   },
 
-  // Queue events for offline processing
+  // Get analytics database status
+  getAnalyticsDbStatus: async () => {
+    try {
+      const response = await blogAPI.analytics.dbStatus();
+      return {
+        connected: true,
+        data: response
+      };
+    } catch (error) {
+      return {
+        connected: false,
+        error: error.message
+      };
+    }
+  },
+
+  // Get analytics overall status
+  getAnalyticsStatus: async () => {
+    try {
+      const response = await blogAPI.analytics.status();
+      return {
+        operational: true,
+        data: response
+      };
+    } catch (error) {
+      return {
+        operational: false,
+        error: error.message
+      };
+    }
+  },
+
+  // Queue events for offline processing with eventType support
   queueEvent: (eventData) => {
     if (typeof localStorage !== 'undefined') {
       try {
         const queue = JSON.parse(localStorage.getItem('analyticsQueue') || '[]');
         queue.push({
+          // ✅ FIXED: Ensure eventType is included in queued events
+          eventType: eventData.eventType || eventData.type || 'custom',
+          type: eventData.type || eventData.eventType || 'custom',
           ...eventData,
           queuedAt: new Date().toISOString()
         });
@@ -731,7 +859,7 @@ export const analyticsUtils = {
     return false;
   },
 
-  // Process queued events
+  // Process queued events with eventType support
   processQueuedEvents: async () => {
     if (typeof localStorage !== 'undefined') {
       try {
@@ -782,12 +910,19 @@ export const initializeAPI = async () => {
     if (health.connected) {
       console.log('✅ API initialized successfully');
       
-      // Test analytics specifically
+      // Test analytics specifically with enhanced checks
       const analyticsHealth = await analyticsUtils.testAnalytics();
-      if (analyticsHealth.connected) {
-        console.log('✅ Analytics API is working');
+      const analyticsDbStatus = await analyticsUtils.getAnalyticsDbStatus();
+      const analyticsStatus = await analyticsUtils.getAnalyticsStatus();
+      
+      if (analyticsHealth.connected && analyticsDbStatus.connected && analyticsStatus.operational) {
+        console.log('✅ Analytics API is fully operational');
       } else {
-        console.warn('⚠️ Analytics API has issues:', analyticsHealth.error);
+        console.warn('⚠️ Analytics API has issues:', {
+          health: analyticsHealth.connected,
+          database: analyticsDbStatus.connected,
+          status: analyticsStatus.operational
+        });
       }
 
       // Process any queued analytics events
