@@ -1,9 +1,13 @@
-// frontend/src/components/AdSense.js
+// frontend/src/components/AdSense.js - OPTIMIZED VERSION
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
-// Global tracking for script and ad initialization
-window._adSenseScriptLoaded = false;
-window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
+// Global tracking for script and ad initialization - SINGLE SOURCE OF TRUTH
+if (typeof window !== 'undefined') {
+  window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
+  window._adSenseScriptLoading = window._adSenseScriptLoading || false;
+  window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
+  window._adSenseGlobalPush = window._adSenseGlobalPush || [];
+}
 
 const AdSense = ({ 
   slot, 
@@ -14,9 +18,8 @@ const AdSense = ({
   layoutKey = '',
   adStyle = {},
   fallbackContent = null,
-  currentPath = window.location.pathname
+  currentPath = typeof window !== 'undefined' ? window.location.pathname : '/'
 }) => {
-  // ✅ FIXED: Removed unused adLoaded state
   const [adError, setAdError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [hasConsent, setHasConsent] = useState(null);
@@ -26,15 +29,22 @@ const AdSense = ({
   const adInitializedRef = useRef(false);
   const adElementRef = useRef(null);
 
-  // Enhanced environment detection
   const isProduction = process.env.NODE_ENV === 'production' || 
-                      window.location.hostname === 'wilsonmuita.com' ||
-                      window.location.hostname === 'www.wilsonmuita.com';
+                      (typeof window !== 'undefined' && (
+                        window.location.hostname === 'wilsonmuita.com' ||
+                        window.location.hostname === 'www.wilsonmuita.com'
+                      ));
 
-  // Enhanced EEA user detection with multiple fallbacks
+  // Enhanced EEA user detection
   const checkIfEEAUser = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
     try {
-      // Method 1: Check timezone
+      // Check stored preference first
+      const storedEEA = localStorage.getItem('is_eea_user');
+      if (storedEEA !== null) return storedEEA === 'true';
+      
+      // Timezone detection
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const eeaTimezones = [
         'Europe/', 'GB', 'UK', 'London', 'Berlin', 'Paris', 'Rome', 'Madrid',
@@ -44,41 +54,34 @@ const AdSense = ({
       
       const isEEATimezone = eeaTimezones.some(tz => timezone.includes(tz));
       
-      // Method 2: Check browser language
+      // Browser language detection
       const browserLang = (navigator.language || navigator.userLanguage || '').toLowerCase();
       const eeaLanguages = ['de', 'fr', 'it', 'es', 'nl', 'pl', 'sv', 'no', 'da', 'fi', 'pt', 'cs', 'hu', 'ro'];
-      
       const isEEALanguage = eeaLanguages.some(lang => browserLang.startsWith(lang));
       
-      // Method 3: Check stored consent preference (most reliable)
-      const storedConsent = localStorage.getItem('cookieConsent');
-      const wasEEAUser = localStorage.getItem('is_eea_user') === 'true';
-      
-      // Method 4: Check GDPR consent string if available
-      const hasGDPRConsent = localStorage.getItem('gdpr_consent') !== null;
-      
-      return isEEATimezone || isEEALanguage || wasEEAUser || storedConsent !== null || hasGDPRConsent;
+      return isEEATimezone || isEEALanguage;
     } catch (error) {
-      console.warn('Error detecting user location:', error);
       return false;
     }
   }, []);
 
-  // FIXED: Enhanced consent status checking with simplified logic
+  // Consent status checking
   const checkConsentStatus = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    
     const consent = localStorage.getItem('cookieConsent');
     const adsenseConsent = localStorage.getItem('adsense_consent');
     const userIsEEA = checkIfEEAUser();
     
     setIsEEAUser(userIsEEA);
     
-    // CRITICAL FIX: If user has explicitly denied consent, don't load ads
+    // If user explicitly denied consent, don't load ads
     if (consent === 'false' || adsenseConsent === 'denied') {
       setHasConsent(false);
       return false;
     }
     
-    // If user has given consent or doesn't need consent, load ads
+    // If user gave consent or doesn't need consent, load ads
     if (consent === 'true' || adsenseConsent === 'granted') {
       setHasConsent(true);
       return true;
@@ -95,53 +98,71 @@ const AdSense = ({
     return null;
   }, [checkIfEEAUser]);
 
-  // FIXED: Load AdSense script with global flag to prevent multiple loading
+  // ✅ FIXED: Global AdSense script loading with proper synchronization
   const loadAdSenseScript = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+
     // Check if script is already loaded globally
     if (window._adSenseScriptLoaded) {
       console.log('✅ AdSense script already loaded (global check)');
       return true;
     }
 
-    // Check if script is already loaded
-    if (window.adsbygoogle) {
-      window._adSenseScriptLoaded = true;
-      console.log('✅ AdSense script already loaded (window.adsbygoogle check)');
-      return true;
-    }
-
-    // Check if script tag already exists
+    // Check if script is already in DOM
     const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
     if (existingScript) {
       window._adSenseScriptLoaded = true;
-      console.log('✅ AdSense script tag already exists');
+      console.log('✅ AdSense script tag already exists in DOM');
       return true;
     }
+
+    // Prevent multiple simultaneous loading attempts
+    if (window._adSenseScriptLoading) {
+      console.log('⏳ AdSense script loading in progress, waiting...');
+      return false;
+    }
+
+    window._adSenseScriptLoading = true;
 
     try {
       const script = document.createElement('script');
       script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
       script.async = true;
       script.crossOrigin = 'anonymous';
+      
       script.onload = () => {
         window._adSenseScriptLoaded = true;
+        window._adSenseScriptLoading = false;
         console.log('✅ AdSense script loaded successfully');
+        
+        // Process any queued ad pushes
+        if (window._adSenseGlobalPush && window._adSenseGlobalPush.length > 0) {
+          console.log(`📢 Processing ${window._adSenseGlobalPush.length} queued ad pushes`);
+          window._adSenseGlobalPush.forEach(pushFn => pushFn());
+          window._adSenseGlobalPush = [];
+        }
       };
+      
       script.onerror = (error) => {
+        window._adSenseScriptLoading = false;
         console.error('❌ Failed to load AdSense script:', error);
         setAdError(true);
         setAdStatus('error');
       };
+      
       document.head.appendChild(script);
       return true;
     } catch (error) {
+      window._adSenseScriptLoading = false;
       console.error('❌ Error loading AdSense script:', error);
       return false;
     }
   }, []);
 
-  // FIXED: Robust AdSense loading with prevention of repeated initialization
+  // ✅ FIXED: Robust ad loading with global slot tracking
   const loadAd = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
     // Prevent multiple initializations for the same slot
     if (adInitializedRef.current) {
       console.log(`🔄 AdSense: Ad for slot ${slot} already initialized, skipping`);
@@ -160,7 +181,7 @@ const AdSense = ({
       return;
     }
 
-    // CRITICAL FIX: Don't load ads if consent is explicitly denied
+    // Don't load ads if consent is explicitly denied
     if (hasConsent === false) {
       console.log('🔒 AdSense: Skipping ad load - consent denied');
       return;
@@ -172,11 +193,10 @@ const AdSense = ({
       return;
     }
 
-    // 🚨 CRITICAL FIX: Updated excluded paths - REMOVED '/contact' from exclusions
-    // Only exclude essential pages where ads shouldn't appear
-    const excludedPaths = ['/privacy', '/disclaimer']; // Removed '/contact' and '/about'
-    if (excludedPaths.includes(window.location.pathname)) {
-      console.log('🚫 AdSense: Skipping ad load - excluded page');
+    // CRITICAL FIX: Updated excluded paths - only essential pages
+    const excludedPaths = ['/privacy', '/disclaimer'];
+    if (excludedPaths.includes(currentPath)) {
+      console.log('🚫 AdSense: Skipping ad load - excluded page:', currentPath);
       return;
     }
 
@@ -186,7 +206,7 @@ const AdSense = ({
 
     // Load AdSense script first
     const scriptLoaded = loadAdSenseScript();
-    if (!scriptLoaded) {
+    if (!scriptLoaded && !window._adSenseScriptLoaded) {
       setAdError(true);
       setAdStatus('error');
       window._adSenseInitializedSlots.delete(slot);
@@ -194,54 +214,63 @@ const AdSense = ({
       return;
     }
 
-    // Check if the script is ready, push the ad request
     const pushAd = () => {
       try {
         console.log(`📢 AdSense: Loading ad for slot ${slot}`);
+        
+        // Use global push array to ensure proper sequencing
         (window.adsbygoogle = window.adsbygoogle || []).push({});
+        
         setAdStatus('pushed');
+        
+        // Set a timeout to detect if ad fails to load
+        setTimeout(() => {
+          if (adStatus === 'pushed') {
+            const adElement = adElementRef.current;
+            if (adElement && adElement.offsetHeight === 0) {
+              console.warn(`⚠️ AdSense: Ad slot ${slot} may have failed to load`);
+              handleAdError();
+            }
+          }
+        }, 3000);
+        
       } catch (e) {
         console.error('❌ AdSense push error:', e);
-        setAdError(true);
-        setAdStatus('error');
-        window._adSenseInitializedSlots.delete(slot);
-        adInitializedRef.current = false;
+        handleAdError();
       }
     };
 
-    // Use a timeout to ensure the script is loaded
-    const timer = setTimeout(() => {
-      if (window.adsbygoogle) {
-        pushAd();
-      } else {
-        console.log('⏳ AdSense script not loaded yet');
-        setAdError(true);
-        setAdStatus('error');
-        window._adSenseInitializedSlots.delete(slot);
-        adInitializedRef.current = false;
-        
-        // Retry logic
-        if (retryCount < maxRetries) {
-          setTimeout(() => {
-            setRetryCount(prev => prev + 1);
-          }, 2000 * (retryCount + 1));
+    // Wait for script to be ready
+    if (window.adsbygoogle && window._adSenseScriptLoaded) {
+      pushAd();
+    } else {
+      // Script not ready yet, queue the push
+      console.log('⏳ AdSense script not ready, queuing ad push for slot:', slot);
+      
+      if (!window._adSenseGlobalPush) {
+        window._adSenseGlobalPush = [];
+      }
+      window._adSenseGlobalPush.push(pushAd);
+      
+      // Fallback: try again after delay
+      const timer = setTimeout(() => {
+        if (window.adsbygoogle && !adInitializedRef.current) {
+          pushAd();
         }
-      }
-    }, 1500); // Increased delay to ensure DOM readiness
+      }, 2000);
 
-    // Cleanup function to clear the timeout if the component unmounts
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [slot, isEEAUser, hasConsent, retryCount, loadAdSenseScript]);
+      return () => clearTimeout(timer);
+    }
+  }, [slot, isEEAUser, hasConsent, currentPath, loadAdSenseScript, adStatus]);
 
-  // ✅ FIXED: Removed handleAdLoad since adLoaded state was removed
-  // Handle ad error event
   const handleAdError = useCallback(() => {
     console.error(`❌ AdSense: Ad failed to load for slot ${slot}`);
     setAdError(true);
     setAdStatus('error');
-    window._adSenseInitializedSlots.delete(slot);
+    
+    if (slot) {
+      window._adSenseInitializedSlots.delete(slot);
+    }
     adInitializedRef.current = false;
     
     if (retryCount < maxRetries) {
@@ -251,15 +280,13 @@ const AdSense = ({
     }
   }, [slot, retryCount]);
 
-  // ✅ FIXED: Effect for consent management - removed unused consentStatus variable
+  // Consent management
   useEffect(() => {
     checkConsentStatus();
     
-    // Listen for consent changes from ConsentManager
     const handleConsentChange = () => {
       console.log('🔄 AdSense: Consent change detected');
       checkConsentStatus();
-      // Reset initialization state when consent changes
       adInitializedRef.current = false;
       if (slot) {
         window._adSenseInitializedSlots.delete(slot);
@@ -273,39 +300,32 @@ const AdSense = ({
     };
   }, [checkConsentStatus, slot]);
 
-  // FIXED: Effect for ad loading with prevention of repeated calls
+  // Ad loading effect
   useEffect(() => {
-    // Reset states when slot or path changes
     if (!adInitializedRef.current) {
-      // ✅ FIXED: Removed setAdLoaded(false) since adLoaded state was removed
       setAdError(false);
       setRetryCount(0);
       setAdStatus('idle');
     }
 
-    // CRITICAL FIX: Only load ads if we have consent or user doesn't need consent
     if (hasConsent === false) {
       console.log('🔒 AdSense: Not loading ad - consent denied');
       return;
     }
 
-    // Load ad after a short delay to ensure DOM is ready
     const cleanup = loadAd();
-    
     return cleanup;
-  }, [slot, currentPath, loadAd, hasConsent]);
+  }, [slot, currentPath, loadAd, hasConsent, retryCount]);
 
-  // Add event listeners for ad callbacks
+  // Event listeners for ad element
   useEffect(() => {
     const adElement = adElementRef.current;
     if (adElement) {
-      // ✅ FIXED: Removed load event listener since adLoaded state was removed
       adElement.addEventListener('error', handleAdError);
     }
 
     return () => {
       if (adElement) {
-        // ✅ FIXED: Removed load event listener cleanup
         adElement.removeEventListener('error', handleAdError);
       }
     };
@@ -321,10 +341,10 @@ const AdSense = ({
   }, [slot]);
 
   // =======================================================================
-  // RENDER LOGIC WITH CONSENT MANAGEMENT
+  // RENDER LOGIC
   // =======================================================================
 
-  // Show consent required message for EEA users without consent decision
+  // Show consent required message for EEA users without consent
   if (isEEAUser && hasConsent === null) {
     return (
       <div className={`ad-container consent-required ${className}`} data-ad-status="consent-required">
@@ -339,52 +359,20 @@ const AdSense = ({
           fontFamily: 'Arial, sans-serif',
           margin: '10px 0'
         }}>
-          <div style={{ 
-            fontSize: '32px', 
-            marginBottom: '12px',
-            opacity: 0.8
-          }}>
-            🍪
-          </div>
-          <p style={{ 
-            fontWeight: 'bold', 
-            marginBottom: '8px',
-            fontSize: '15px',
-            color: '#856404'
-          }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.8 }}>🍪</div>
+          <p style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '15px' }}>
             Consent Required for Ads
           </p>
-          <p style={{ 
-            marginBottom: '12px',
-            lineHeight: '1.4',
-            fontSize: '14px'
-          }}>
+          <p style={{ marginBottom: '12px', lineHeight: '1.4', fontSize: '14px' }}>
             We need your consent to show personalized ads in your region.
-            Please check the consent banner at the bottom of the page.
-          </p>
-          <p style={{ 
-            fontSize: '12px', 
-            color: '#997404',
-            fontStyle: 'italic',
-            marginBottom: '0'
-          }}>
-            This message appears for visitors from the European Economic Area
           </p>
         </div>
-        <div className="ad-label" style={{ 
-          textAlign: 'center', 
-          fontSize: '11px', 
-          color: '#666',
-          marginTop: '8px',
-          fontWeight: 'bold'
-        }}>
-          Advertisement
-        </div>
+        <div className="ad-label">Advertisement</div>
       </div>
     );
   }
 
-  // Show consent denied message for EEA users who refused consent
+  // Show consent denied message
   if (isEEAUser && hasConsent === false) {
     return (
       <div className={`ad-container consent-denied ${className}`} data-ad-status="consent-denied">
@@ -399,47 +387,12 @@ const AdSense = ({
           fontFamily: 'Arial, sans-serif',
           margin: '10px 0'
         }}>
-          <div style={{ 
-            fontSize: '32px', 
-            marginBottom: '12px',
-            opacity: 0.8
-          }}>
-            🔒
-          </div>
-          <p style={{ 
-            fontWeight: 'bold', 
-            marginBottom: '8px',
-            fontSize: '15px',
-            color: '#721c24'
-          }}>
+          <div style={{ fontSize: '32px', marginBottom: '12px', opacity: 0.8 }}>🔒</div>
+          <p style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '15px' }}>
             Ads Disabled by Your Choice
           </p>
-          <p style={{ 
-            marginBottom: '12px',
-            lineHeight: '1.4',
-            fontSize: '14px'
-          }}>
-            You've chosen not to consent to personalized advertising.
-            Thank you for your privacy preference.
-          </p>
-          <p style={{ 
-            fontSize: '12px', 
-            color: '#8c2531',
-            fontStyle: 'italic',
-            marginBottom: '0'
-          }}>
-            You can change your consent in our privacy settings
-          </p>
         </div>
-        <div className="ad-label" style={{ 
-          textAlign: 'center', 
-          fontSize: '11px', 
-          color: '#666',
-          marginTop: '8px',
-          fontWeight: 'bold'
-        }}>
-          Advertisement
-        </div>
+        <div className="ad-label">Advertisement</div>
       </div>
     );
   }
@@ -447,15 +400,11 @@ const AdSense = ({
   // Show development placeholder or fallback for errors
   if (!isProduction || adError) {
     if (fallbackContent) {
-      return (
-        <div className={`ad-container fallback-content ${className}`}>
-          {fallbackContent}
-        </div>
-      );
+      return <div className={`ad-container fallback-content ${className}`}>{fallbackContent}</div>;
     }
 
     return (
-      <div className={`ad-container ${adError ? 'ad-error' : 'ad-placeholder'} ${className}`} data-ad-status={adError ? 'error' : 'placeholder'}>
+      <div className={`ad-container ${adError ? 'ad-error' : 'ad-placeholder'} ${className}`}>
         <div style={{ 
           background: adError ? 
             'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)' : 
@@ -466,93 +415,20 @@ const AdSense = ({
           textAlign: 'center',
           color: adError ? '#721c24' : '#555',
           fontSize: '14px',
-          fontFamily: 'Arial, sans-serif',
           margin: '10px 0'
         }}>
-          <div style={{ 
-            fontSize: '48px', 
-            marginBottom: '10px',
-            opacity: 0.7
-          }}>
+          <div style={{ fontSize: '48px', marginBottom: '10px', opacity: 0.7 }}>
             {adError ? '❌' : '🎯'}
           </div>
-          <p style={{ 
-            fontWeight: 'bold', 
-            marginBottom: '8px',
-            fontSize: '16px',
-            color: adError ? '#721c24' : '#333'
-          }}>
+          <p style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '16px' }}>
             {adError ? 'Ad Failed to Load' : 'AdSense Advertisement'}
           </p>
-          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-            <strong>Slot:</strong> {slot || 'Not provided'}
-          </p>
-          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-            <strong>Format:</strong> {format}
-          </p>
-          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-            <strong>Status:</strong> 
-            <span style={{ 
-              color: adError ? '#dc3545' : '#28a745',
-              fontWeight: 'bold',
-              marginLeft: '5px'
-            }}>
-              {adError ? 'Error' : 'Placeholder'}
-            </span>
-          </p>
-          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-            <strong>Consent:</strong> 
-            <span style={{ 
-              color: hasConsent === true ? '#28a745' : hasConsent === false ? '#dc3545' : '#6c757d',
-              fontWeight: 'bold',
-              marginLeft: '5px'
-            }}>
-              {hasConsent === true ? 'Granted' : hasConsent === false ? 'Denied' : 'Not Required'}
-            </span>
-          </p>
-          <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-            <strong>Region:</strong> 
-            <span style={{ 
-              color: isEEAUser ? '#dc3545' : '#28a745',
-              fontWeight: 'bold',
-              marginLeft: '5px'
-            }}>
-              {isEEAUser ? 'EEA/UK' : 'Non-EEA'}
-            </span>
-          </p>
-          {adError && retryCount > 0 && (
-            <p style={{ marginBottom: '4px', fontSize: '14px' }}>
-              <strong>Retries:</strong> {retryCount}/{maxRetries}
-            </p>
-          )}
-          <p style={{ 
-            marginTop: '12px', 
-            fontSize: '12px', 
-            color: adError ? '#8c2531' : '#888',
-            fontStyle: 'italic'
-          }}>
-            {adError ? 
-              'Ad failed to load. This might be due to network issues or ad blocker.' : 
-              'This ad would be displayed in production'}
-          </p>
+          <p><strong>Slot:</strong> {slot || 'Not provided'}</p>
+          <p><strong>Status:</strong> {adError ? 'Error' : 'Placeholder'}</p>
         </div>
-        <div className="ad-label" style={{ 
-          textAlign: 'center', 
-          fontSize: '11px', 
-          color: '#666',
-          marginTop: '8px',
-          fontWeight: 'bold'
-        }}>
-          Advertisement
-        </div>
+        <div className="ad-label">Advertisement</div>
       </div>
     );
-  }
-
-  // CRITICAL FIX: Don't render anything in production if consent is denied
-  if (isProduction && hasConsent === false) {
-    console.log('🔒 AdSense: Not rendering ad - consent denied in production');
-    return null;
   }
 
   // Don't render anything in production if conditions aren't met
@@ -560,7 +436,7 @@ const AdSense = ({
     return null;
   }
 
-  // Render actual AdSense ad with key to prevent re-renders
+  // Render actual AdSense ad
   return (
     <div className={`ad-container ${className}`} data-ad-slot={slot} data-ad-status={adStatus}>
       <ins
@@ -579,21 +455,11 @@ const AdSense = ({
         data-full-width-responsive={responsive ? 'true' : 'false'}
         data-ad-layout={layout}
         data-ad-layout-key={layoutKey}
-        data-ad-status={adStatus}
-        key={`${slot}-${currentPath}-${retryCount}`} // CRITICAL: This helps React identify unique ad instances
+        key={`${slot}-${currentPath}-${retryCount}`}
       />
       
-      <div className="ad-label" style={{ 
-        textAlign: 'center', 
-        fontSize: '11px', 
-        color: '#666',
-        marginTop: '8px',
-        fontWeight: 'bold'
-      }}>
-        Advertisement
-      </div>
+      <div className="ad-label">Advertisement</div>
       
-      {/* Enhanced fallback for ad blockers and noscript */}
       <noscript>
         <div style={{ 
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
@@ -605,26 +471,8 @@ const AdSense = ({
           color: 'white'
         }}>
           <div style={{ fontSize: '32px', marginBottom: '10px' }}>🔒</div>
-          <p style={{ 
-            fontWeight: 'bold', 
-            marginBottom: '8px',
-            fontSize: '16px'
-          }}>
+          <p style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '16px' }}>
             JavaScript Required for Ads
-          </p>
-          <p style={{ 
-            marginBottom: '12px',
-            fontSize: '14px',
-            opacity: 0.9
-          }}>
-            Please enable JavaScript to view advertisements and support our blog
-          </p>
-          <p style={{ 
-            fontSize: '12px',
-            opacity: 0.7,
-            fontStyle: 'italic'
-          }}>
-            Your support helps us create more quality content
           </p>
         </div>
       </noscript>
@@ -632,25 +480,16 @@ const AdSense = ({
   );
 };
 
-// Ad Units Configuration with ALL your actual ad slot IDs
+// Ad Units Configuration
 export const AdUnits = {
-  // Header ad - Your existing header ad
   HEADER: '1529123561',
-  
-  // In-article ad - Your new in-article ad slot
   IN_ARTICLE: '8087712926',
-  
-  // Sidebar ad - Your new sidebar ad slot
   SIDEBAR: '5976732519',
-  
-  // Footer ad - Your new footer ad slot
   FOOTER: '2835386242',
-  
-  // Between posts ad - Your new between-posts ad slot
   BETWEEN_POSTS: '6583059564'
 };
 
-// Enhanced consent helper functions
+// ✅ FIXED: Enhanced consent helper functions with missing getContent method
 export const consentHelper = {
   setConsent: (granted) => {
     localStorage.setItem('cookieConsent', granted ? 'true' : 'false');
@@ -687,6 +526,13 @@ export const consentHelper = {
   },
   
   getConsent: () => {
+    return localStorage.getItem('cookieConsent');
+  },
+  
+  // ✅ CRITICAL FIX: Added missing getContent method
+  getContent: () => {
+    // This might be a typo in other files - return same as getConsent for now
+    // If you need separate content consent, implement specific logic here
     return localStorage.getItem('cookieConsent');
   },
   

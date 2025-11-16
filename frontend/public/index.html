@@ -45,10 +45,11 @@
     <!-- ✅ Facebook Meta Tags -->
     <meta property="fb:app_id" content="" />
     
-    <!-- ✅ Critical Preconnect for Performance -->
+    <!-- ✅ Critical Preconnect for Performance (Keep these for AdSense optimization) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://pagead2.googlesyndication.com">
+    <link rel="preconnect" href="https://googleads.g.doubleclick.net">
     <link rel="preconnect" href="https://api.wilsonmuita.com">
     
     <!-- ✅ FIXED: Safer config.js preload approach -->
@@ -160,9 +161,8 @@
       })(window, document, "clarity", "script", "tmnk4u8wvm");
     </script>
 
-    <!-- ✅ CRITICAL FIX: Google AdSense with correct URL (fixed missing .com) -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673"
-     crossorigin="anonymous"></script>
+    <!-- ❌ CRITICAL FIX: REMOVED Duplicate AdSense Script - Now handled by AdSense.js component -->
+    <!-- The AdSense script will be loaded dynamically by the React component to prevent duplicates -->
 
     <title>Wilson Muita - Technology, Programming & Web Development Blog</title>
 
@@ -441,10 +441,9 @@
         }
       });
 
-      // Initialize AdSense after page load
+      // ✅ UPDATED: AdSense initialization comment - now handled by React component
       window.addEventListener('load', function() {
-        // AdSense initialization is handled by the AdSense component
-        console.log('🚀 Page loaded, AdSense components will initialize');
+        console.log('🚀 Page loaded - AdSense will be managed by React components');
       });
     </script>
 
@@ -558,32 +557,9 @@
         }
       });
 
-      // AdSense fallback initialization
-      let adsenseRetryCount = 0;
-      const maxAdsenseRetries = 3;
-      
-      function initializeAdSenseFallback() {
-        if (adsenseRetryCount >= maxAdsenseRetries) return;
-        
-        setTimeout(() => {
-          if (window.adsbygoogle && Array.isArray(window.adsbygoogle)) {
-            try {
-              window.adsbygoogle.push({});
-              console.log('✅ AdSense fallback initialization successful');
-            } catch (e) {
-              adsenseRetryCount++;
-              if (adsenseRetryCount < maxAdsenseRetries) {
-                initializeAdSenseFallback();
-              }
-            }
-          }
-        }, 2000 * (adsenseRetryCount + 1)); // Exponential backoff
-      }
-
-      // Start AdSense fallback after page load
-      window.addEventListener('load', function() {
-        setTimeout(initializeAdSenseFallback, 1000);
-      });
+      // ✅ UPDATED: Remove AdSense fallback initialization since it's now handled by React component
+      // The AdSense component will handle all AdSense initialization
+      console.log('🔧 AdSense management delegated to React components');
     })();
     </script>
 

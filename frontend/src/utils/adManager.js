@@ -1,46 +1,50 @@
 // frontend/src/utils/adManager.js
-class AdManager {
+// Central AdSense management to prevent duplicates
+
+class AdSenseManager {
   constructor() {
-    this.initializedSlots = new Set();
-    this.maxRetries = 2;
-    this.retryDelays = [1000, 3000, 5000]; // Progressive delays
+    this.loadedSlots = new Set();
+    this.scriptLoaded = false;
+    this.scriptLoading = false;
+    this.init();
   }
 
-  initializeAd(slotId) {
-    // Check if already initialized
-    if (this.initializedSlots.has(slotId)) {
-      console.log(`AdSense: Slot ${slotId} already initialized, skipping`);
-      return false;
+  init() {
+    if (typeof window === 'undefined') return;
+    
+    // Initialize global variables
+    window._adSenseLoadedSlots = window._adSenseLoadedSlots || new Set();
+    window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
+  }
+
+  // Check if slot is already loaded
+  isSlotLoaded(slot) {
+    return this.loadedSlots.has(slot) || 
+           (window._adSenseLoadedSlots && window._adSenseLoadedSlots.has(slot));
+  }
+
+  // Mark slot as loaded
+  markSlotLoaded(slot) {
+    this.loadedSlots.add(slot);
+    if (window._adSenseLoadedSlots) {
+      window._adSenseLoadedSlots.add(slot);
     }
-
-    // Mark as initialized
-    this.initializedSlots.add(slotId);
-    console.log(`AdSense: Initializing slot ${slotId}`);
-    return true;
   }
 
-  canRetry(slotId, retryCount) {
-    return retryCount < this.maxRetries;
+  // Clear all loaded slots (useful for page navigation)
+  clearSlots() {
+    this.loadedSlots.clear();
+    if (window._adSenseLoadedSlots) {
+      window._adSenseLoadedSlots.clear();
+    }
   }
 
-  getRetryDelay(retryCount) {
-    return this.retryDelays[retryCount] || 5000;
-  }
-
-  resetSlot(slotId) {
-    this.initializedSlots.delete(slotId);
-  }
-
-  // Clear all on page navigation
-  clearAll() {
-    this.initializedSlots.clear();
+  // Get all loaded slots for debugging
+  getLoadedSlots() {
+    return Array.from(this.loadedSlots);
   }
 }
 
 // Singleton instance
-export const adManager = new AdManager();
-
-// Initialize on page load
-if (typeof window !== 'undefined') {
-  window.adManager = adManager;
-}
+const adSenseManager = new AdSenseManager();
+export default adSenseManager;

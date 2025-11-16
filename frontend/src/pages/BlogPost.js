@@ -6,7 +6,7 @@ import 'react-lazy-load-image-component/src/effects/blur.css';
 import Layout from '../components/Layout';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
-import AdSense, { AdUnits } from '../components/AdSense';
+import AdSenseWrapper from '../components/AdSenseWrapper';
 import { blogAPI, trackPostView } from '../utils/api';
 import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams, getCurrentSessionId } from '../utils/utmTracker';
 import './BlogPost.css';
@@ -751,9 +751,9 @@ const BlogPost = () => {
           </div>
         )}
 
-        {/* AD AFTER FEATURED IMAGE */}
-        <AdSense 
-          slot={AdUnits.IN_ARTICLE}
+        {/* ✅ FIXED: Using AdSenseWrapper to prevent duplicate script loading */}
+        <AdSenseWrapper 
+          position="in-article"
           format="autorelaxed"
           responsive={false}
           className="ad-in-article"
@@ -898,9 +898,9 @@ const BlogPost = () => {
           </aside>
         )}
 
-        {/* AD BEFORE CONTENT */}
-        <AdSense 
-          slot={AdUnits.HEADER}
+        {/* ✅ FIXED: Using AdSenseWrapper for header ad */}
+        <AdSenseWrapper 
+          position="header"
           format="fluid"
           layout="in-article"
           className="ad-before-content"
@@ -913,9 +913,9 @@ const BlogPost = () => {
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
 
-        {/* AD AFTER CONTENT */}
-        <AdSense 
-          slot={AdUnits.FOOTER}
+        {/* ✅ FIXED: Using AdSenseWrapper for footer ad */}
+        <AdSenseWrapper 
+          position="footer"
           format="auto"
           responsive={true}
           className="ad-after-content"
@@ -958,9 +958,9 @@ const BlogPost = () => {
           <NewsletterSignup source="blog_post" location="post_bottom" />
         </section>
 
-        {/* AD BEFORE RELATED POSTS */}
-        <AdSense 
-          slot={AdUnits.BETWEEN_POSTS}
+        {/* ✅ FIXED: Using AdSenseWrapper for between posts ad */}
+        <AdSenseWrapper 
+          position="between-posts"
           format="auto"
           responsive={true}
           className="ad-between-sections"
