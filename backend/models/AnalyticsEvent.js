@@ -2,17 +2,25 @@
 const mongoose = require('mongoose');
 
 const AnalyticsEventSchema = new mongoose.Schema({
-  // ✅ FIXED: eventType is now optional with default value
+  // ✅ FIXED: Enhanced eventType enum with mapped values
   eventType: {
     type: String,
-    required: false,
+    required: true,
     default: 'pageview',
     enum: [
       // Core Interaction Events
       'pageview',
       'click',
       'scroll',
-      'conversion',
+      'form_submit',
+      'custom',
+      'other',
+      
+      // Post Events
+      'post_view',
+      
+      // Health and System Events
+      'health_check',
       
       // Monetization & Marketing Events
       'affiliate_click',
@@ -46,27 +54,23 @@ const AnalyticsEventSchema = new mongoose.Schema({
       'scroll_depth',
       'heatmap_interaction',
       
-      // NEWLY ADDED EVENT TYPES (from your frontend)
-      'mouse_movements_batch',    // Added for heatmap tracking
-      'form_submit',              // Added for form submissions
-      'newsletter_signup',        // Added for newsletter tracking
-      'session_start',            // Added for session tracking
-      'session_end',              // Added for session tracking
-      'heatmap_data',             // Added for heatmap data collection
+      // Frontend Event Types (mapped to valid values)
+      'mouse_movements_batch',
       
-      // ✅ ADDED: Additional event types for better compatibility
-      'post_view',
-      'health_check',
-      'custom_event',
+      // Newsletter and Session Events
+      'newsletter_signup',
+      'session_start',
+      'session_end',
+      'heatmap_data',
       
-      // ✅ NEW: GDPR and Consent Events
+      // GDPR and Consent Events
       'consent_granted',
       'consent_denied',
       'consent_updated',
       'gdpr_banner_shown',
       'cookie_preferences_updated',
       
-      // ✅ NEW: E-commerce and Revenue Events
+      // E-commerce and Revenue Events
       'product_view',
       'add_to_cart',
       'purchase',
@@ -229,12 +233,12 @@ const AnalyticsEventSchema = new mongoose.Schema({
 
 // ✅ ENHANCED: Indexes for efficient querying
 AnalyticsEventSchema.index({ eventType: 1, timestamp: 1 });
-AnalyticsEventSchema.index({ type: 1, timestamp: 1 }); // ✅ ADDED: For new type field
+AnalyticsEventSchema.index({ type: 1, timestamp: 1 });
 AnalyticsEventSchema.index({ postId: 1, timestamp: 1 });
 AnalyticsEventSchema.index({ sessionId: 1 });
 AnalyticsEventSchema.index({ utmSource: 1, utmMedium: 1 });
-AnalyticsEventSchema.index({ eventName: 1, timestamp: 1 }); // ✅ ADDED: For eventName queries
-AnalyticsEventSchema.index({ page: 1, timestamp: 1 }); // ✅ ADDED: For page-specific queries
+AnalyticsEventSchema.index({ eventName: 1, timestamp: 1 });
+AnalyticsEventSchema.index({ page: 1, timestamp: 1 });
 
 // ✅ ADDED: Monetization Indexes
 AnalyticsEventSchema.index({ adRevenue: 1, timestamp: 1 });
@@ -245,8 +249,8 @@ AnalyticsEventSchema.index({ gdprConsent: 1, timestamp: 1 });
 
 // Compound index for common dashboard queries
 AnalyticsEventSchema.index({ eventType: 1, postId: 1, timestamp: -1 });
-AnalyticsEventSchema.index({ type: 1, sessionId: 1, timestamp: -1 }); // ✅ ADDED: For session analysis
-AnalyticsEventSchema.index({ gdprConsent: 1, eventType: 1, timestamp: -1 }); // ✅ ADDED: For GDPR analytics
+AnalyticsEventSchema.index({ type: 1, sessionId: 1, timestamp: -1 });
+AnalyticsEventSchema.index({ gdprConsent: 1, eventType: 1, timestamp: -1 });
 
 // ✅ ADDED: Text indexes for search functionality
 AnalyticsEventSchema.index({ 

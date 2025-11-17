@@ -1,4 +1,4 @@
-// frontend/src/components/AdSense.js - OPTIMIZED VERSION
+// frontend/src/components/AdSense.js - OPTIMIZED VERSION WITH HOTFIX
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
 // Global tracking for script and ad initialization - SINGLE SOURCE OF TRUTH
@@ -159,9 +159,17 @@ const AdSense = ({
     }
   }, []);
 
-  // ✅ FIXED: Robust ad loading with global slot tracking
+  // ✅ FIXED: Robust ad loading with global slot tracking AND HOTFIX INTEGRATION
   const loadAd = useCallback(() => {
     if (typeof window === 'undefined') return;
+
+    // 🔧 HOTFIX INTEGRATION: Check with global hotfix first
+    if (typeof window !== 'undefined' && window._adSenseHotfix) {
+      if (!window._adSenseHotfix.trackSlot(slot)) {
+        console.log(`🔧 AdSense Hotfix: Blocking duplicate slot ${slot}`);
+        return;
+      }
+    }
 
     // Prevent multiple initializations for the same slot
     if (adInitializedRef.current) {
@@ -218,6 +226,14 @@ const AdSense = ({
       try {
         console.log(`📢 AdSense: Loading ad for slot ${slot}`);
         
+        // 🔧 HOTFIX INTEGRATION: Enhanced push with hotfix protection
+        if (typeof window !== 'undefined' && window._adSenseHotfix) {
+          if (!window._adSenseHotfix.trackSlot(slot)) {
+            console.log(`🔧 AdSense Hotfix: Blocking push for duplicate slot ${slot}`);
+            return;
+          }
+        }
+        
         // Use global push array to ensure proper sequencing
         (window.adsbygoogle = window.adsbygoogle || []).push({});
         
@@ -273,6 +289,11 @@ const AdSense = ({
     }
     adInitializedRef.current = false;
     
+    // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
+    if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
+      window._adSenseHotfix.slots.delete(slot);
+    }
+    
     if (retryCount < maxRetries) {
       setTimeout(() => {
         setRetryCount(prev => prev + 1);
@@ -290,6 +311,11 @@ const AdSense = ({
       adInitializedRef.current = false;
       if (slot) {
         window._adSenseInitializedSlots.delete(slot);
+        
+        // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
+        if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
+          window._adSenseHotfix.slots.delete(slot);
+        }
       }
     };
     
@@ -336,6 +362,11 @@ const AdSense = ({
     return () => {
       if (slot && adInitializedRef.current) {
         window._adSenseInitializedSlots.delete(slot);
+        
+        // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
+        if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
+          window._adSenseHotfix.slots.delete(slot);
+        }
       }
     };
   }, [slot]);
@@ -425,6 +456,7 @@ const AdSense = ({
           </p>
           <p><strong>Slot:</strong> {slot || 'Not provided'}</p>
           <p><strong>Status:</strong> {adError ? 'Error' : 'Placeholder'}</p>
+          <p><strong>Hotfix Active:</strong> {typeof window !== 'undefined' && window._adSenseHotfix ? '✅ Yes' : '❌ No'}</p>
         </div>
         <div className="ad-label">Advertisement</div>
       </div>
@@ -604,4 +636,4 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-export default AdSense;
+export default AdSense;;

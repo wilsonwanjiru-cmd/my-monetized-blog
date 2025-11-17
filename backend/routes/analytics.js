@@ -3,7 +3,36 @@ const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 
-// ✅ ADDED: Utility function to get client IP (moved to top to avoid reference errors)
+// ✅ ADDED: Event type mapping function to handle enum validation
+function mapEventType(eventType) {
+  const eventTypeMap = {
+    // Core events
+    'pageview': 'pageview',
+    'click': 'click',
+    'scroll': 'scroll',
+    'form_submit': 'form_submit',
+    
+    // Mouse and interaction events
+    'mouse_movements_batch': 'custom',
+    'scroll_depth': 'scroll',
+    'scroll_milestone': 'scroll',
+    
+    // Custom events
+    'event': 'custom',
+    'custom': 'custom',
+    'other': 'other',
+    
+    // Post events
+    'post_view': 'post_view',
+    
+    // Health and system events
+    'health_check': 'health_check'
+  };
+  
+  return eventTypeMap[eventType] || 'custom';
+}
+
+// ✅ ADDED: Utility function to get client IP
 function getClientIP(req) {
   try {
     return req.ip || 
@@ -32,7 +61,6 @@ router.get('/db-status', async (req, res) => {
     const count = await AnalyticsEvent.countDocuments();
     const recentEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       database: {
@@ -45,7 +73,6 @@ router.get('/db-status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Database status check failed:', error);
-    // ✅ FIXED: Always return JSON even for errors
     return res.status(500).json({
       success: false,
       message: 'Database connection failed',
@@ -57,7 +84,6 @@ router.get('/db-status', async (req, res) => {
 // ✅ ENHANCED: Test endpoint to verify analytics routes are working
 router.get('/test', (req, res) => {
   try {
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: 'Analytics routes are working correctly!',
@@ -66,7 +92,7 @@ router.get('/test', (req, res) => {
       endpoints: {
         pageview: 'POST /api/analytics/pageview',
         event: 'POST /api/analytics/event',
-        track: 'POST /api/analytics/track', // ✅ ADDED: Track endpoint
+        track: 'POST /api/analytics/track',
         stats: 'GET /api/analytics/stats',
         dashboard: 'GET /api/analytics/dashboard',
         health: 'GET /api/analytics/health',
@@ -76,7 +102,6 @@ router.get('/test', (req, res) => {
     });
   } catch (error) {
     console.error('❌ Test endpoint error:', error);
-    // ✅ FIXED: Always return JSON even for errors
     return res.status(500).json({
       success: false,
       message: 'Test endpoint failed',
@@ -85,7 +110,7 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ CRITICAL FIX: Enhanced pageview tracking with better eventType handling
+// ✅ FIXED: Enhanced pageview tracking with event type mapping
 router.post('/pageview', async (req, res) => {
   let analyticsEvent;
   
@@ -99,7 +124,6 @@ router.post('/pageview', async (req, res) => {
       timestamp: new Date().toISOString()
     });
 
-    // ✅ CRITICAL FIX: Extract fields with enhanced eventType handling
     const { 
       sessionId, 
       page, 
@@ -122,10 +146,9 @@ router.post('/pageview', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ CRITICAL FIX: Enhanced validation with eventType awareness
+    // ✅ FIXED: Enhanced validation
     if (!sessionId) {
       console.error('❌ Validation failed: Missing sessionId');
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: sessionId',
@@ -135,7 +158,6 @@ router.post('/pageview', async (req, res) => {
 
     if (!page && !url) {
       console.error('❌ Validation failed: Missing both page and url');
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: page or url',
@@ -143,7 +165,7 @@ router.post('/pageview', async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Smart page extraction with fallbacks
+    // ✅ FIXED: Smart page extraction
     let extractedPage = page;
     
     if (!extractedPage && url) {
@@ -160,7 +182,6 @@ router.post('/pageview', async (req, res) => {
     // ✅ FIXED: Check if AnalyticsEvent model is properly connected
     if (!AnalyticsEvent || typeof AnalyticsEvent !== 'function') {
       console.error('❌ AnalyticsEvent model not properly initialized');
-      // ✅ FIXED: Always return JSON
       return res.status(500).json({
         success: false,
         message: 'Analytics service not properly configured',
@@ -168,13 +189,13 @@ router.post('/pageview', async (req, res) => {
       });
     }
 
-    // ✅ FIXED: Normalize language code to prevent MongoDB errors
+    // ✅ FIXED: Normalize language code
     const normalizedLanguage = language && language.includes('-') 
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ CRITICAL FIX: Enhanced event data with proper eventType/type handling
-    const finalEventType = eventType || type || 'pageview';
+    // ✅ FIXED: Use event type mapping to ensure valid enum values
+    const finalEventType = mapEventType(eventType || type || 'pageview');
     const finalType = type || eventType || 'pageview';
 
     const eventData = {
@@ -230,8 +251,6 @@ router.post('/pageview', async (req, res) => {
 
     // ✅ FIXED: Create and save with better error handling
     analyticsEvent = new AnalyticsEvent(eventData);
-    
-    // Test save operation
     await analyticsEvent.save();
     
     console.log('✅ Pageview tracked successfully:', {
@@ -241,7 +260,6 @@ router.post('/pageview', async (req, res) => {
       eventType: finalEventType
     });
 
-    // ✅ FIXED: Always return proper JSON response
     return res.status(200).json({ 
       success: true,
       message: 'Pageview tracked successfully',
@@ -260,7 +278,7 @@ router.post('/pageview', async (req, res) => {
       keyValue: error.keyValue
     });
     
-    // ✅ FIXED: More specific error handling with proper JSON responses
+    // ✅ FIXED: More specific error handling
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -279,19 +297,16 @@ router.post('/pageview', async (req, res) => {
       });
     }
     
-    // Generic error response
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({ 
       success: false,
       message: 'Internal server error',
       error: error.message,
-      // Only include stack in development
       ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
     });
   }
 });
 
-// ✅ CRITICAL FIX: Enhanced event tracking with proper eventType handling
+// ✅ FIXED: Enhanced event tracking with event type mapping
 router.post('/event', async (req, res) => {
   try {
     console.log('📊 Event request received:', {
@@ -321,10 +336,9 @@ router.post('/event', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ CRITICAL FIX: Enhanced validation with eventType awareness
+    // ✅ FIXED: Enhanced validation
     if (!sessionId || !eventName) {
       console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: sessionId and eventName are required',
@@ -338,12 +352,11 @@ router.post('/event', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ CRITICAL FIX: Determine final eventType and type
-    const finalEventType = eventType || type || 'event';
+    // ✅ FIXED: Use event type mapping to ensure valid enum values
+    const finalEventType = mapEventType(eventType || type || 'event');
     const finalType = type || eventType || 'event';
 
     const event = new AnalyticsEvent({
-      // ✅ CRITICAL FIX: Proper field mapping with both eventType and type
       eventType: finalEventType,
       type: finalType,
       sessionId,
@@ -386,7 +399,6 @@ router.post('/event', async (req, res) => {
       type: finalType
     });
 
-    // ✅ FIXED: Always return valid JSON with eventType info
     return res.json({
       success: true,
       message: 'Event tracked successfully',
@@ -399,8 +411,6 @@ router.post('/event', async (req, res) => {
   } catch (error) {
     console.error('❌ Analytics event tracking error:', error);
     
-    // Enhanced error response
-    // ✅ FIXED: Always return JSON
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -417,7 +427,7 @@ router.post('/event', async (req, res) => {
   }
 });
 
-// ✅ CRITICAL FIX: Enhanced /track endpoint with robust eventType handling
+// ✅ FIXED: Enhanced /track endpoint with event type mapping
 router.post('/track', async (req, res) => {
   try {
     console.log('📊 Track request received (main route):', {
@@ -447,7 +457,7 @@ router.post('/track', async (req, res) => {
       ...otherFields
     } = req.body;
 
-    // ✅ CRITICAL FIX: Enhanced validation with better error messages
+    // ✅ FIXED: Enhanced validation with better error messages
     if (!sessionId) {
       console.warn('⚠️ Track validation failed: Missing sessionId');
       return res.status(400).json({
@@ -458,20 +468,16 @@ router.post('/track', async (req, res) => {
       });
     }
 
-    if (!eventName) {
-      console.warn('⚠️ Track validation failed: Missing eventName');
+    // ✅ FIXED: Handle missing eventName by using eventType
+    const finalEventName = eventName || eventType;
+    if (!finalEventName) {
+      console.warn('⚠️ Track validation failed: Missing both eventName and eventType');
       return res.status(400).json({
         success: false,
-        message: 'Missing required field: eventName',
+        message: 'Missing required field: eventName or eventType',
         received: Object.keys(req.body),
         required: ['sessionId', 'eventName']
       });
-    }
-
-    // ✅ CRITICAL FIX: Handle missing eventType/type gracefully
-    if (!eventType && !type) {
-      console.warn('⚠️ Track validation: Missing both eventType and type, using default');
-      // We'll use defaults above, so just log warning
     }
 
     // ✅ FIXED: Normalize language code
@@ -479,17 +485,16 @@ router.post('/track', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ CRITICAL FIX: Determine final eventType and type with proper fallbacks
-    const finalEventType = eventType || type || 'custom';
+    // ✅ FIXED: Use event type mapping to ensure valid enum values
+    const finalEventType = mapEventType(eventType || type || 'custom');
     const finalType = type || eventType || 'custom';
 
-    // ✅ FIXED: Create event structure that handles both eventType and type
     const eventPayload = {
       eventType: finalEventType,
       type: finalType,
       sessionId: sessionId,
       page: page || url || req.get('Referer') || 'unknown',
-      eventName: eventName,
+      eventName: finalEventName,
       eventData: eventData || {},
       userAgent: userAgent || req.get('User-Agent'),
       timestamp: timestamp ? new Date(timestamp) : new Date(),
@@ -513,7 +518,8 @@ router.post('/track', async (req, res) => {
           receivedEventType: eventType,
           receivedType: type,
           finalEventType: finalEventType,
-          finalType: finalType
+          finalType: finalType,
+          finalEventName: finalEventName
         }
       }
     };
@@ -529,12 +535,11 @@ router.post('/track', async (req, res) => {
     await event.save();
 
     console.log('✅ Track event processed successfully (main route):', {
-      eventName: eventName,
+      eventName: finalEventName,
       eventId: event._id,
       eventType: finalEventType
     });
 
-    // ✅ FIXED: Return consistent response format that frontend expects
     return res.status(201).json({ 
       success: true,
       message: 'Event tracked successfully',
@@ -547,7 +552,6 @@ router.post('/track', async (req, res) => {
   } catch (error) {
     console.error('❌ Track route error (main):', error);
     
-    // ✅ FIXED: Better error response
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -574,7 +578,7 @@ router.post('/track', async (req, res) => {
   }
 });
 
-// ✅ CRITICAL FIX: Enhanced post-specific views with proper eventType handling
+// ✅ FIXED: Enhanced post-specific views with event type mapping
 router.post('/postview', async (req, res) => {
   try {
     console.log('📊 Postview request received:', {
@@ -600,7 +604,6 @@ router.post('/postview', async (req, res) => {
     } = req.body;
 
     if (!postId) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing required field: postId'
@@ -612,12 +615,11 @@ router.post('/postview', async (req, res) => {
       ? language.split('-')[0] 
       : language || 'en';
 
-    // ✅ CRITICAL FIX: Determine final eventType and type
-    const finalEventType = eventType || type || 'post_view';
+    // ✅ FIXED: Use event type mapping
+    const finalEventType = mapEventType(eventType || type || 'post_view');
     const finalType = type || eventType || 'post_view';
 
     const event = new AnalyticsEvent({
-      // ✅ CRITICAL FIX: Proper field mapping with both eventType and type
       eventType: finalEventType,
       type: finalType,
       sessionId: sessionId || `post_${postId}_${Date.now()}`,
@@ -658,7 +660,6 @@ router.post('/postview', async (req, res) => {
       eventType: finalEventType
     });
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: 'Post view tracked successfully',
@@ -669,7 +670,6 @@ router.post('/postview', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error tracking post view:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to track post view',
@@ -678,14 +678,13 @@ router.post('/postview', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get basic analytics stats with proper JSON responses
+// ✅ FIXED: Get basic analytics stats
 router.get('/stats', async (req, res) => {
   try {
     const { days = 30, type, eventType } = req.query;
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -698,12 +697,10 @@ router.get('/stats', async (req, res) => {
 
     console.log('📊 Fetching analytics stats for last', days, 'days');
 
-    // Build match query - support both type and eventType
     const matchQuery = {
       timestamp: { $gte: startDate }
     };
 
-    // ✅ ENHANCED: Support both type and eventType filters
     if (type) {
       matchQuery.type = type;
     }
@@ -711,10 +708,8 @@ router.get('/stats', async (req, res) => {
       matchQuery.eventType = eventType;
     }
 
-    // Total events
     const totalEvents = await AnalyticsEvent.countDocuments(matchQuery);
 
-    // Events by type (support both type and eventType)
     const eventsByType = await AnalyticsEvent.aggregate([
       { $match: matchQuery },
       {
@@ -734,7 +729,6 @@ router.get('/stats', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Events by eventType
     const eventsByEventType = await AnalyticsEvent.aggregate([
       { $match: matchQuery },
       {
@@ -754,11 +748,9 @@ router.get('/stats', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Unique sessions
     const uniqueSessions = await AnalyticsEvent.distinct('sessionId', matchQuery);
     const uniqueSessionsCount = uniqueSessions.length;
 
-    // Page views (support both type and eventType)
     const pageViews = await AnalyticsEvent.countDocuments({
       ...matchQuery,
       $or: [
@@ -767,7 +759,6 @@ router.get('/stats', async (req, res) => {
       ]
     });
 
-    // Recent activity (last 24 hours)
     const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentActivity = await AnalyticsEvent.countDocuments({
       timestamp: { $gte: last24Hours }
@@ -775,7 +766,6 @@ router.get('/stats', async (req, res) => {
 
     console.log('✅ Analytics stats fetched successfully');
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       data: {
@@ -796,7 +786,6 @@ router.get('/stats', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error fetching analytics stats:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch analytics stats',
@@ -805,14 +794,13 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get comprehensive analytics for dashboard with proper JSON responses
+// ✅ FIXED: Get comprehensive analytics for dashboard
 router.get('/dashboard', async (req, res) => {
   try {
     const { days = 30 } = req.query;
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -825,7 +813,6 @@ router.get('/dashboard', async (req, res) => {
 
     console.log('📊 Fetching dashboard analytics for last', days, 'days');
 
-    // Event type summary (support both type and eventType)
     const eventSummary = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -849,7 +836,6 @@ router.get('/dashboard', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // EventType summary
     const eventTypeSummary = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -873,7 +859,6 @@ router.get('/dashboard', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Daily trend
     const dailyTrend = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -902,7 +887,6 @@ router.get('/dashboard', async (req, res) => {
       { $sort: { date: 1 } }
     ]);
 
-    // Top pages (support both type and eventType for pageview)
     const topPages = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -931,7 +915,6 @@ router.get('/dashboard', async (req, res) => {
       { $limit: 10 }
     ]);
 
-    // UTM campaign performance
     const campaignPerformance = await AnalyticsEvent.aggregate([
       {
         $match: {
@@ -975,7 +958,6 @@ router.get('/dashboard', async (req, res) => {
 
     console.log('✅ Dashboard analytics fetched successfully');
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       period: `${days} days`,
@@ -995,7 +977,6 @@ router.get('/dashboard', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Dashboard analytics error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch dashboard analytics',
@@ -1004,14 +985,13 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get UTM parameters report with proper JSON responses
+// ✅ FIXED: Get UTM parameters report
 router.get('/utm-report', async (req, res) => {
   try {
     const { source, medium, campaign, days = 30 } = req.query;
     const daysInt = parseInt(days);
     
     if (isNaN(daysInt) || daysInt < 1 || daysInt > 365) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Invalid days parameter. Must be between 1 and 365.'
@@ -1029,7 +1009,6 @@ router.get('/utm-report', async (req, res) => {
       ]
     };
 
-    // Add filters if provided
     if (source) matchQuery.utmSource = source;
     if (medium) matchQuery.utmMedium = medium;
     if (campaign) matchQuery.utmCampaign = campaign;
@@ -1082,7 +1061,6 @@ router.get('/utm-report', async (req, res) => {
 
     console.log('✅ UTM report fetched successfully');
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       report: utmReport,
@@ -1093,7 +1071,6 @@ router.get('/utm-report', async (req, res) => {
 
   } catch (error) {
     console.error('❌ UTM report error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch UTM report',
@@ -1102,16 +1079,14 @@ router.get('/utm-report', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Health check for analytics API with proper JSON responses
+// ✅ FIXED: Health check for analytics API
 router.get('/health', async (req, res) => {
   try {
-    // Test database connection
     const eventCount = await AnalyticsEvent.countDocuments();
     const recentEvents = await AnalyticsEvent.countDocuments({
       timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
     });
     
-    // Test database write capability
     const testEvent = new AnalyticsEvent({
       eventType: 'health_check',
       type: 'health_check',
@@ -1128,7 +1103,6 @@ router.get('/health', async (req, res) => {
     await testEvent.save();
     await AnalyticsEvent.deleteOne({ _id: testEvent._id });
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       status: 'healthy',
@@ -1146,7 +1120,6 @@ router.get('/health', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Analytics health check error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       status: 'unhealthy',
@@ -1157,13 +1130,12 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// ✅ CRITICAL FIX: Enhanced bulk events endpoint with proper eventType handling
+// ✅ FIXED: Enhanced bulk events endpoint with event type mapping
 router.post('/bulk', async (req, res) => {
   try {
     const { events } = req.body;
 
     if (!events || !Array.isArray(events)) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Missing or invalid events array'
@@ -1171,7 +1143,6 @@ router.post('/bulk', async (req, res) => {
     }
 
     if (events.length > 1000) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'Too many events in bulk request. Maximum 1000 events allowed.'
@@ -1180,7 +1151,6 @@ router.post('/bulk', async (req, res) => {
 
     console.log(`📊 Processing bulk events: ${events.length} events`);
 
-    // Validate each event
     const validEvents = [];
     const errors = [];
 
@@ -1188,24 +1158,21 @@ router.post('/bulk', async (req, res) => {
       if (!event.sessionId || (!event.page && !event.eventName)) {
         errors.push(`Event ${index}: Missing required fields (sessionId and eventName or page)`);
       } else {
-        // Add timestamp if not provided
         if (!event.timestamp) {
           event.timestamp = new Date();
         }
         
-        // ✅ CRITICAL FIX: Enhanced field mapping for eventType and type
-        const finalEventType = event.eventType || event.type || 'custom';
+        // ✅ FIXED: Use event type mapping for bulk events
+        const finalEventType = mapEventType(event.eventType || event.type || 'custom');
         const finalType = event.type || event.eventType || 'custom';
         
         event.eventType = finalEventType;
         event.type = finalType;
         
-        // ✅ FIXED: Normalize language code for bulk events
         if (event.language && event.language.includes('-')) {
           event.language = event.language.split('-')[0];
         }
         
-        // Add metadata with field mapping info
         event.metadata = {
           ...event.metadata,
           source: 'bulk-upload',
@@ -1223,7 +1190,6 @@ router.post('/bulk', async (req, res) => {
     });
 
     if (errors.length > 0 && validEvents.length === 0) {
-      // ✅ FIXED: Always return JSON
       return res.status(400).json({
         success: false,
         message: 'All events failed validation',
@@ -1235,7 +1201,6 @@ router.post('/bulk', async (req, res) => {
 
     console.log(`✅ Bulk events processed: ${savedEvents.length} successful`);
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: `Successfully processed ${savedEvents.length} events`,
@@ -1246,7 +1211,6 @@ router.post('/bulk', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Bulk events error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to process bulk events',
@@ -1255,13 +1219,12 @@ router.post('/bulk', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Endpoint to check if analytics is working with proper JSON responses
+// ✅ FIXED: Endpoint to check if analytics is working
 router.get('/status', async (req, res) => {
   try {
     const eventCount = await AnalyticsEvent.countDocuments();
     const lastEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
     
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       status: 'operational',
@@ -1274,7 +1237,7 @@ router.get('/status', async (req, res) => {
       features: {
         pageview_tracking: true,
         event_tracking: true,
-        track_tracking: true, // ✅ ADDED: Track endpoint
+        track_tracking: true,
         post_analytics: true,
         utm_tracking: true,
         dashboard: true,
@@ -1289,7 +1252,6 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Status endpoint error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       status: 'degraded',
@@ -1300,20 +1262,18 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Cleanup old events endpoint with proper JSON responses
+// ✅ FIXED: Cleanup old events endpoint
 router.delete('/cleanup', async (req, res) => {
   try {
-    // Simple authentication check (you might want to enhance this)
     const { authorization } = req.headers;
     if (!authorization || authorization !== `Bearer ${process.env.ADMIN_TOKEN}`) {
-      // ✅ FIXED: Always return JSON
       return res.status(401).json({
         success: false,
         message: 'Unauthorized: Admin token required'
       });
     }
 
-    const { days = 365 } = req.query; // Default keep 1 year
+    const { days = 365 } = req.query;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - parseInt(days));
 
@@ -1325,7 +1285,6 @@ router.delete('/cleanup', async (req, res) => {
 
     console.log(`✅ Cleanup completed: Deleted ${result.deletedCount} events`);
 
-    // ✅ FIXED: Always return JSON
     return res.json({
       success: true,
       message: `Successfully deleted ${result.deletedCount} events older than ${days} days`,
@@ -1335,7 +1294,6 @@ router.delete('/cleanup', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Cleanup error:', error);
-    // ✅ FIXED: Always return JSON
     return res.status(500).json({
       success: false,
       message: 'Failed to cleanup old events',

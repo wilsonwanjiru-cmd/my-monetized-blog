@@ -23,6 +23,9 @@ const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
+// ✅ ADDED: Trust proxy for Render deployment
+app.set('trust proxy', 1);
+
 // ✅ ENHANCED: CORS Configuration with better preflight handling
 const corsOptions = {
   origin: function (origin, callback) {
@@ -36,7 +39,8 @@ const corsOptions = {
       'https://my-monetized-blog-2.onrender.com',
       'http://localhost:3000',
       'http://localhost:3001',
-      'http://localhost:5173'
+      'http://localhost:5173',
+      'http://localhost:5000' // ✅ ADDED: for backend self-requests
     ];
     
     if (allowedOrigins.indexOf(origin) !== -1) {
@@ -187,11 +191,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// MongoDB connection with better error handling
+// ✅ UPDATED: MongoDB connection with deprecated options removed
 mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/monetized-blog', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+    // ❌ REMOVED: useNewUrlParser and useUnifiedTopology (deprecated in MongoDB Driver v4+)
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
   })
@@ -255,8 +258,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ CRITICAL FIX: Re-enable fallback analytics routes since main routes are missing /track endpoint
-// The main analytics routes in ./routes/analytics.js might not have the /track endpoint
+// ✅ UPDATED: Fallback analytics track route (temporary until main routes are confirmed working)
+// Keeping this as backup but it should eventually be removed once main routes are confirmed
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Track Route Hit:', {
@@ -368,7 +371,7 @@ app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   }
 });
 
-// ✅ ADDED: Debug endpoint to check which analytics routes are active
+// ✅ UPDATED: Debug endpoint to check which analytics routes are active
 app.get('/api/analytics/debug', (req, res) => {
   res.json({
     success: true,
@@ -378,13 +381,13 @@ app.get('/api/analytics/debug', (req, res) => {
       mainPageview: 'POST /api/analytics/pageview (via analyticsRoutes)',
       mainTrack: 'POST /api/analytics/track (via analyticsRoutes)',
       fallbackPageview: 'DISABLED - Using main route',
-      fallbackTrack: 'ENABLED - Fallback route active'
+      fallbackTrack: 'ENABLED - Fallback route active (temporary)'
     },
     status: {
       pageview: '✅ Working (using main routes)',
-      track: '✅ Working (using fallback route)'
+      track: '🔄 Working (fallback route active - check main routes)'
     },
-    recommendation: 'Check if main analytics routes have /track endpoint defined'
+    recommendation: 'Verify main analytics routes in backend/routes/analytics.js have /track endpoint'
   });
 });
 
@@ -507,9 +510,13 @@ const server = app.listen(PORT, () => {
   console.log('   - Server Rendering: EJS templates for blog pages');
   console.log('🔧 Analytics Configuration:');
   console.log('   - ✅ Pageview: Using main analytics routes');
-  console.log('   - ✅ Track: Using fallback route (main routes missing /track)');
+  console.log('   - 🔄 Track: Using fallback route (temporary)');
   console.log('   - ✅ Debug endpoint: /api/analytics/debug');
-  console.log('💡 Recommendation: Check backend/routes/analytics.js for missing /track route');
+  console.log('💡 Recommendation: Update backend/routes/analytics.js with proper /track endpoint');
+  console.log('🔧 Additional Fixes Applied:');
+  console.log('   - ✅ Added localhost:5000 to CORS allowed origins');
+  console.log('   - ✅ Removed deprecated MongoDB options');
+  console.log('   - ✅ Added trust proxy for Render deployment');
 });
 
 // Graceful shutdown handling
