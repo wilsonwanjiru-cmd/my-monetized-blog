@@ -52,8 +52,7 @@
     <link rel="preconnect" href="https://googleads.g.doubleclick.net">
     <link rel="preconnect" href="https://api.wilsonmuita.com">
     
-    <!-- ✅ FIXED: Safer config.js preload approach -->
-    <link rel="preload" href="%PUBLIC_URL%/config.js" as="script">
+    <!-- ✅ REMOVED: Problematic config.js preload to avoid browser warnings -->
     
     <!-- ✅ Google Fonts - Load without preload to avoid warnings -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -456,6 +455,13 @@
       
       // Override console.error for specific errors
       console.error = function(...args) {
+        // Suppress analytics 400 errors
+        if (args[0] && typeof args[0] === 'string' && 
+            args[0].includes('400 (Bad Request)') &&
+            args[0].includes('/api/analytics/')) {
+          return;
+        }
+        
         // Suppress analytics JSON parse errors
         if (args[0] && typeof args[0] === 'string' && 
             args[0].includes('Failed to execute') && 
@@ -488,6 +494,10 @@
           if (message.includes('net::ERR_NAME_NOT_RESOLVED') && 
               message.includes('googlesyndication')) {
             return; // Suppress DNS resolution errors for AdSense
+          }
+          if (message.includes('Blocking duplicate slot') ||
+              message.includes('Slot already tracked')) {
+            return; // Suppress AdSense duplicate slot warnings
           }
         }
         
@@ -524,6 +534,13 @@
         if (args[0] && typeof args[0] === 'string' && 
             args[0].includes('Event tracking failed') && 
             args[0].includes('Unexpected end of JSON input')) {
+          return;
+        }
+
+        // Suppress AdSense hotfix warnings
+        if (args[0] && typeof args[0] === 'string' && 
+            (args[0].includes('AdSense Hotfix:') || 
+             args[0].includes('Slot already tracked'))) {
           return;
         }
         

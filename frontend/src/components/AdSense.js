@@ -1,5 +1,8 @@
-// frontend/src/components/AdSense.js - OPTIMIZED VERSION WITH HOTFIX
+// frontend/src/components/AdSense.js - FIXED VERSION WITH DUPLICATE PREVENTION
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+
+// Import the enhanced hotfix
+import '../utils/adSenseHotfix';
 
 // Global tracking for script and ad initialization - SINGLE SOURCE OF TRUTH
 if (typeof window !== 'undefined') {
@@ -7,6 +10,7 @@ if (typeof window !== 'undefined') {
   window._adSenseScriptLoading = window._adSenseScriptLoading || false;
   window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
   window._adSenseGlobalPush = window._adSenseGlobalPush || [];
+  window._adSenseProcessedElements = window._adSenseProcessedElements || new WeakSet();
 }
 
 const AdSense = ({ 
@@ -28,6 +32,7 @@ const AdSense = ({
   const maxRetries = 2;
   const adInitializedRef = useRef(false);
   const adElementRef = useRef(null);
+  const componentIdRef = useRef(`ad-${slot}-${Math.random().toString(36).substr(2, 9)}`);
 
   const isProduction = process.env.NODE_ENV === 'production' || 
                       (typeof window !== 'undefined' && (
@@ -98,7 +103,7 @@ const AdSense = ({
     return null;
   }, [checkIfEEAUser]);
 
-  // ✅ FIXED: Global AdSense script loading with proper synchronization
+  // ✅ FIXED: Global AdSense script loading with duplicate prevention
   const loadAdSenseScript = useCallback(() => {
     if (typeof window === 'undefined') return false;
 
@@ -159,27 +164,80 @@ const AdSense = ({
     }
   }, []);
 
-  // ✅ FIXED: Robust ad loading with global slot tracking AND HOTFIX INTEGRATION
-  const loadAd = useCallback(() => {
-    if (typeof window === 'undefined') return;
-
-    // 🔧 HOTFIX INTEGRATION: Check with global hotfix first
-    if (typeof window !== 'undefined' && window._adSenseHotfix) {
-      if (!window._adSenseHotfix.trackSlot(slot)) {
-        console.log(`🔧 AdSense Hotfix: Blocking duplicate slot ${slot}`);
+  // ✅ FIXED: Wait for AdSense script to be ready
+  const waitForAdSenseScript = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (window._adSenseScriptLoaded) {
+        resolve();
         return;
       }
-    }
 
-    // Prevent multiple initializations for the same slot
+      let attempts = 0;
+      const maxAttempts = 10;
+      const interval = setInterval(() => {
+        attempts++;
+        if (window._adSenseScriptLoaded) {
+          clearInterval(interval);
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          reject(new Error('AdSense script timeout'));
+        }
+      }, 500);
+    });
+  }, []);
+
+  // ✅ CRITICAL FIX: Safe ad push with duplicate element detection
+  const safeAdPush = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+
+    try {
+      const adElement = adElementRef.current;
+      if (!adElement) {
+        console.warn('❌ AdSense: No ad element found');
+        return false;
+      }
+
+      // CRITICAL: Check if this specific element already has ads
+      if (window._adSenseProcessedElements.has(adElement)) {
+        console.log('🚫 AdSense: Element already processed, skipping push');
+        return false;
+      }
+
+      // Check if element already has ads by Google's internal tracking
+      if (adElement.classList.contains('adsbygoogle-noablate')) {
+        console.log('🚫 AdSense: Element already has ads (noablate class)');
+        return false;
+      }
+
+      // Check if element has data-adsbygoogle-status attribute (set by Google after processing)
+      if (adElement.getAttribute('data-adsbygoogle-status')) {
+        console.log('🚫 AdSense: Element already processed (has status attribute)');
+        return false;
+      }
+
+      console.log(`📢 AdSense: Safe push for slot ${slot}`);
+      
+      // Mark element as processed before pushing
+      window._adSenseProcessedElements.add(adElement);
+      
+      // Use the global push method
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      
+      return true;
+    } catch (error) {
+      console.error('❌ AdSense: Safe push error:', error);
+      return false;
+    }
+  }, [slot]);
+
+  // ✅ ENHANCED: Robust ad loading with multiple duplicate protections
+  const loadAd = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    // Early returns for various conditions
     if (adInitializedRef.current) {
-      console.log(`🔄 AdSense: Ad for slot ${slot} already initialized, skipping`);
-      return;
-    }
-
-    // Global slot tracking to prevent duplicates across components
-    if (window._adSenseInitializedSlots.has(slot)) {
-      console.log(`🔄 AdSense: Slot ${slot} already initialized globally, skipping`);
+      console.log(`🔄 AdSense: Component ${slot} already initialized, skipping`);
       return;
     }
 
@@ -189,13 +247,11 @@ const AdSense = ({
       return;
     }
 
-    // Don't load ads if consent is explicitly denied
     if (hasConsent === false) {
       console.log('🔒 AdSense: Skipping ad load - consent denied');
       return;
     }
 
-    // Check if ads should be loaded based on consent and environment
     if (isEEAUser && hasConsent !== true) {
       console.log('🔒 AdSense: Skipping ad load - no consent for EEA user');
       return;
@@ -208,76 +264,61 @@ const AdSense = ({
       return;
     }
 
-    setAdStatus('loading');
-    adInitializedRef.current = true;
-    window._adSenseInitializedSlots.add(slot);
-
-    // Load AdSense script first
-    const scriptLoaded = loadAdSenseScript();
-    if (!scriptLoaded && !window._adSenseScriptLoaded) {
-      setAdError(true);
-      setAdStatus('error');
-      window._adSenseInitializedSlots.delete(slot);
-      adInitializedRef.current = false;
+    // 🔧 HOTFIX INTEGRATION: Check with global hotfix first
+    if (window._adSenseHotfix && !window._adSenseHotfix.trackSlot(slot)) {
+      console.log(`🔧 AdSense Hotfix: Blocking duplicate slot ${slot}`);
       return;
     }
 
-    const pushAd = () => {
-      try {
-        console.log(`📢 AdSense: Loading ad for slot ${slot}`);
-        
-        // 🔧 HOTFIX INTEGRATION: Enhanced push with hotfix protection
-        if (typeof window !== 'undefined' && window._adSenseHotfix) {
-          if (!window._adSenseHotfix.trackSlot(slot)) {
-            console.log(`🔧 AdSense Hotfix: Blocking push for duplicate slot ${slot}`);
-            return;
-          }
-        }
-        
-        // Use global push array to ensure proper sequencing
-        (window.adsbygoogle = window.adsbygoogle || []).push({});
-        
-        setAdStatus('pushed');
+    // Global slot tracking to prevent duplicates across components
+    if (window._adSenseInitializedSlots.has(slot)) {
+      console.log(`🔄 AdSense: Slot ${slot} already initialized globally, skipping`);
+      return;
+    }
+
+    try {
+      setAdStatus('loading');
+      adInitializedRef.current = true;
+      window._adSenseInitializedSlots.add(slot);
+
+      // Load AdSense script
+      const scriptLoaded = loadAdSenseScript();
+      if (!scriptLoaded && !window._adSenseScriptLoaded) {
+        throw new Error('AdSense script failed to load');
+      }
+
+      // Wait for script to be ready
+      await waitForAdSenseScript();
+
+      // Wait a bit for DOM to be fully ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      console.log(`📢 AdSense: Loading ad for slot ${slot}`);
+      
+      // Use safe ad push with duplicate protection
+      const pushSuccess = safeAdPush();
+      
+      if (pushSuccess) {
+        setAdStatus('loaded');
         
         // Set a timeout to detect if ad fails to load
         setTimeout(() => {
-          if (adStatus === 'pushed') {
-            const adElement = adElementRef.current;
-            if (adElement && adElement.offsetHeight === 0) {
-              console.warn(`⚠️ AdSense: Ad slot ${slot} may have failed to load`);
-              handleAdError();
-            }
+          const adElement = adElementRef.current;
+          if (adElement && adElement.offsetHeight === 0 && adStatus === 'loaded') {
+            console.warn(`⚠️ AdSense: Ad slot ${slot} may have failed to load`);
+            handleAdError();
           }
         }, 3000);
-        
-      } catch (e) {
-        console.error('❌ AdSense push error:', e);
-        handleAdError();
+      } else {
+        setAdStatus('duplicate');
+        console.log('🔄 AdSense: Ad push prevented (duplicate element)');
       }
-    };
-
-    // Wait for script to be ready
-    if (window.adsbygoogle && window._adSenseScriptLoaded) {
-      pushAd();
-    } else {
-      // Script not ready yet, queue the push
-      console.log('⏳ AdSense script not ready, queuing ad push for slot:', slot);
       
-      if (!window._adSenseGlobalPush) {
-        window._adSenseGlobalPush = [];
-      }
-      window._adSenseGlobalPush.push(pushAd);
-      
-      // Fallback: try again after delay
-      const timer = setTimeout(() => {
-        if (window.adsbygoogle && !adInitializedRef.current) {
-          pushAd();
-        }
-      }, 2000);
-
-      return () => clearTimeout(timer);
+    } catch (error) {
+      console.error(`❌ AdSense: Error loading ad for slot ${slot}:`, error);
+      handleAdError();
     }
-  }, [slot, isEEAUser, hasConsent, currentPath, loadAdSenseScript, adStatus]);
+  }, [slot, isEEAUser, hasConsent, currentPath, loadAdSenseScript, waitForAdSenseScript, safeAdPush, adStatus]);
 
   const handleAdError = useCallback(() => {
     console.error(`❌ AdSense: Ad failed to load for slot ${slot}`);
@@ -290,8 +331,13 @@ const AdSense = ({
     adInitializedRef.current = false;
     
     // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
-    if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
-      window._adSenseHotfix.slots.delete(slot);
+    if (window._adSenseHotfix) {
+      window._adSenseHotfix.clearSlot(slot);
+    }
+    
+    // Clear from processed elements
+    if (adElementRef.current) {
+      window._adSenseProcessedElements.delete(adElementRef.current);
     }
     
     if (retryCount < maxRetries) {
@@ -313,8 +359,8 @@ const AdSense = ({
         window._adSenseInitializedSlots.delete(slot);
         
         // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
-        if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
-          window._adSenseHotfix.slots.delete(slot);
+        if (window._adSenseHotfix) {
+          window._adSenseHotfix.clearSlot(slot);
         }
       }
     };
@@ -326,22 +372,44 @@ const AdSense = ({
     };
   }, [checkConsentStatus, slot]);
 
-  // Ad loading effect
+  // Ad loading effect - FIXED: Only load when all conditions are met
   useEffect(() => {
+    // Reset state when dependencies change
     if (!adInitializedRef.current) {
       setAdError(false);
       setRetryCount(0);
       setAdStatus('idle');
     }
 
+    // Don't load if consent is denied
     if (hasConsent === false) {
       console.log('🔒 AdSense: Not loading ad - consent denied');
       return;
     }
 
-    const cleanup = loadAd();
-    return cleanup;
-  }, [slot, currentPath, loadAd, hasConsent, retryCount]);
+    // Don't load if we don't have consent decision for EEA users
+    if (isEEAUser && hasConsent !== true) {
+      console.log('🔒 AdSense: Not loading ad - no consent for EEA user');
+      return;
+    }
+
+    // Load the ad
+    loadAd();
+
+    // Cleanup function
+    return () => {
+      if (slot && adInitializedRef.current) {
+        window._adSenseInitializedSlots.delete(slot);
+        if (window._adSenseHotfix) {
+          window._adSenseHotfix.clearSlot(slot);
+        }
+        if (adElementRef.current) {
+          window._adSenseProcessedElements.delete(adElementRef.current);
+        }
+        adInitializedRef.current = false;
+      }
+    };
+  }, [slot, currentPath, hasConsent, isEEAUser, retryCount, loadAd]);
 
   // Event listeners for ad element
   useEffect(() => {
@@ -356,20 +424,6 @@ const AdSense = ({
       }
     };
   }, [handleAdError]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (slot && adInitializedRef.current) {
-        window._adSenseInitializedSlots.delete(slot);
-        
-        // 🔧 HOTFIX INTEGRATION: Also clear from hotfix tracking
-        if (typeof window !== 'undefined' && window._adSenseHotfix && window._adSenseHotfix.slots) {
-          window._adSenseHotfix.slots.delete(slot);
-        }
-      }
-    };
-  }, [slot]);
 
   // =======================================================================
   // RENDER LOGIC
@@ -429,7 +483,7 @@ const AdSense = ({
   }
 
   // Show development placeholder or fallback for errors
-  if (!isProduction || adError) {
+  if (!isProduction || adError || adStatus === 'duplicate') {
     if (fallbackContent) {
       return <div className={`ad-container fallback-content ${className}`}>{fallbackContent}</div>;
     }
@@ -449,14 +503,15 @@ const AdSense = ({
           margin: '10px 0'
         }}>
           <div style={{ fontSize: '48px', marginBottom: '10px', opacity: 0.7 }}>
-            {adError ? '❌' : '🎯'}
+            {adError ? '❌' : adStatus === 'duplicate' ? '🔄' : '🎯'}
           </div>
           <p style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: '16px' }}>
-            {adError ? 'Ad Failed to Load' : 'AdSense Advertisement'}
+            {adError ? 'Ad Failed to Load' : adStatus === 'duplicate' ? 'Ad Already Loaded' : 'AdSense Advertisement'}
           </p>
           <p><strong>Slot:</strong> {slot || 'Not provided'}</p>
-          <p><strong>Status:</strong> {adError ? 'Error' : 'Placeholder'}</p>
+          <p><strong>Status:</strong> {adError ? 'Error' : adStatus === 'duplicate' ? 'Duplicate Prevented' : 'Placeholder'}</p>
           <p><strong>Hotfix Active:</strong> {typeof window !== 'undefined' && window._adSenseHotfix ? '✅ Yes' : '❌ No'}</p>
+          <p><strong>Component ID:</strong> {componentIdRef.current}</p>
         </div>
         <div className="ad-label">Advertisement</div>
       </div>
@@ -470,7 +525,12 @@ const AdSense = ({
 
   // Render actual AdSense ad
   return (
-    <div className={`ad-container ${className}`} data-ad-slot={slot} data-ad-status={adStatus}>
+    <div 
+      className={`ad-container ${className}`} 
+      data-ad-slot={slot} 
+      data-ad-status={adStatus}
+      data-component-id={componentIdRef.current}
+    >
       <ins
         ref={adElementRef}
         className="adsbygoogle"
@@ -487,7 +547,7 @@ const AdSense = ({
         data-full-width-responsive={responsive ? 'true' : 'false'}
         data-ad-layout={layout}
         data-ad-layout-key={layoutKey}
-        key={`${slot}-${currentPath}-${retryCount}`}
+        key={`${slot}-${currentPath}-${retryCount}-${componentIdRef.current}`}
       />
       
       <div className="ad-label">Advertisement</div>
@@ -521,14 +581,24 @@ export const AdUnits = {
   BETWEEN_POSTS: '6583059564'
 };
 
-// ✅ FIXED: Enhanced consent helper functions with missing getContent method
+// Enhanced consent helper functions
 export const consentHelper = {
   setConsent: (granted) => {
     localStorage.setItem('cookieConsent', granted ? 'true' : 'false');
     localStorage.setItem('adsense_consent', granted ? 'granted' : 'denied');
-    localStorage.setItem('is_eea_user', 'true'); // Mark as EEA user once they make a choice
+    localStorage.setItem('is_eea_user', 'true');
     
-    // Dispatch event to notify all AdSense components
+    // Clear all tracking when consent changes
+    if (window._adSenseHotfix) {
+      window._adSenseHotfix.clearAllSlots();
+    }
+    if (window._adSenseInitializedSlots) {
+      window._adSenseInitializedSlots.clear();
+    }
+    if (window._adSenseProcessedElements) {
+      window._adSenseProcessedElements = new WeakSet();
+    }
+    
     const consentEvent = new CustomEvent('consentChanged', {
       detail: { granted }
     });
@@ -536,12 +606,10 @@ export const consentHelper = {
     
     console.log(`🔄 AdSense: Consent ${granted ? 'granted' : 'denied'}`);
     
-    // Update Google CMP if available
     if (window.googlefc && window.googlefc.call) {
       window.googlefc.call(granted);
     }
     
-    // Reload ads if consent was granted
     if (granted) {
       setTimeout(() => {
         window.location.reload();
@@ -553,6 +621,17 @@ export const consentHelper = {
     localStorage.removeItem('cookieConsent');
     localStorage.removeItem('adsense_consent');
     localStorage.removeItem('is_eea_user');
+    
+    if (window._adSenseHotfix) {
+      window._adSenseHotfix.clearAllSlots();
+    }
+    if (window._adSenseInitializedSlots) {
+      window._adSenseInitializedSlots.clear();
+    }
+    if (window._adSenseProcessedElements) {
+      window._adSenseProcessedElements = new WeakSet();
+    }
+    
     window.dispatchEvent(new Event('consentChanged'));
     console.log('🔄 AdSense: Consent cleared');
   },
@@ -561,10 +640,7 @@ export const consentHelper = {
     return localStorage.getItem('cookieConsent');
   },
   
-  // ✅ CRITICAL FIX: Added missing getContent method
   getContent: () => {
-    // This might be a typo in other files - return same as getConsent for now
-    // If you need separate content consent, implement specific logic here
     return localStorage.getItem('cookieConsent');
   },
   
@@ -578,7 +654,6 @@ export const consentHelper = {
     }
   },
   
-  // Initialize AdSense consent management
   initialize: () => {
     const consent = localStorage.getItem('cookieConsent');
     const isEEA = consentHelper.isEEAUser();
@@ -627,6 +702,20 @@ const adStyles = `
 .consent-required:hover, .consent-denied:hover {
   opacity: 1;
 }
+
+.ad-placeholder {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; }
+  100% { opacity: 0.8; }
+}
+
+.adsbygoogle[data-ad-status="filled"] {
+  border: 1px solid #e2e8f0;
+}
 `;
 
 // Inject styles
@@ -636,4 +725,4 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-export default AdSense;;
+export default AdSense;

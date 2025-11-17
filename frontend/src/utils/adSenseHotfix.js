@@ -1,71 +1,92 @@
 // frontend/src/utils/adSenseHotfix.js
-// Emergency fix for AdSense 400 errors and duplicate initialization
+// Enhanced AdSense Hotfix with better duplicate prevention
 
-if (typeof window !== 'undefined') {
-  // Enhanced global AdSense management
-  window._adSenseHotfix = {
-    initialized: false,
-    slots: new Set(),
-    queue: [],
+class AdSenseHotfix {
+  constructor() {
+    this.slots = new Set();
+    this.scriptLoaded = false;
+    this.scriptLoading = false;
+    this.pushQueue = [];
+    this.initialized = false;
+    this.init();
+  }
+
+  init() {
+    if (this.initialized) return;
     
-    init: function() {
-      if (this.initialized) return;
-      
-      console.log('🔧 AdSense Hotfix: Initializing global management');
-      this.initialized = true;
-      
-      // Override the global push method to prevent duplicates
-      const originalPush = window.adsbygoogle && window.adsbygoogle.push;
-      if (window.adsbygoogle && typeof originalPush === 'function') {
-        window.adsbygoogle.push = function(...args) {
-          try {
-            // Check if this is an ad config object
-            if (args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])) {
-              const adConfig = args[0];
-              if (adConfig && window._adSenseHotfix.slots.has(adConfig.slot)) {
-                console.log(`🔄 AdSense Hotfix: Skipping duplicate slot ${adConfig.slot}`);
-                return;
-              }
-              
-              if (adConfig && adConfig.slot) {
-                window._adSenseHotfix.slots.add(adConfig.slot);
-                console.log(`✅ AdSense Hotfix: Tracking slot ${adConfig.slot}`);
-              }
-            }
-            
-            // Call original push method
-            return originalPush.apply(this, args);
-          } catch (error) {
-            console.warn('AdSense Hotfix: Push error', error);
-          }
-        };
+    console.log('🔧 AdSense Hotfix: Initializing global management');
+    this.initialized = true;
+    
+    // Initialize global ad queue
+    window.adsbygoogle = window.adsbygoogle || [];
+    
+    // Override push method to intercept ad requests
+    const originalPush = window.adsbygoogle.push;
+    window.adsbygoogle.push = (adConfig) => {
+      if (adConfig && typeof adConfig === 'object') {
+        const slot = this.extractSlotFromConfig(adConfig);
+        if (slot && this.slots.has(slot)) {
+          console.log(`🔧 AdSense Hotfix: Blocking push for duplicate slot ${slot}`);
+          return;
+        }
+        
+        if (slot) {
+          this.slots.add(slot);
+          console.log(`🔧 AdSense Hotfix: Tracking new slot ${slot}`);
+        }
       }
-    },
+      
+      originalPush.call(window.adsbygoogle, adConfig);
+    };
+  }
+
+  extractSlotFromConfig(config) {
+    if (config.dataAdSlot) return config.dataAdSlot;
+    if (config.adSlot) return config.adSlot;
     
-    trackSlot: function(slot) {
-      if (!slot) return false;
-      if (this.slots.has(slot)) {
-        console.log(`🔄 AdSense Hotfix: Slot ${slot} already tracked`);
-        return false;
-      }
-      this.slots.add(slot);
-      return true;
-    },
-    
-    clearSlots: function() {
-      this.slots.clear();
-      console.log('🔄 AdSense Hotfix: Cleared all slot tracking');
+    // Extract from ins element if it exists
+    if (config.element && config.element.getAttribute) {
+      return config.element.getAttribute('data-ad-slot');
     }
-  };
+    
+    return null;
+  }
 
-  // Initialize when DOM is ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      window._adSenseHotfix.init();
-    });
-  } else {
-    window._adSenseHotfix.init();
+  trackSlot(slot) {
+    if (!slot) return true;
+    
+    if (this.slots.has(slot)) {
+      console.log(`🔄 AdSense Hotfix: Slot ${slot} already tracked`);
+      return false;
+    }
+    
+    this.slots.add(slot);
+    console.log(`✅ AdSense Hotfix: Tracking slot ${slot}`);
+    return true;
+  }
+
+  clearSlot(slot) {
+    if (slot) {
+      this.slots.delete(slot);
+      console.log(`🧹 AdSense Hotfix: Cleared slot ${slot}`);
+    }
+  }
+
+  clearAllSlots() {
+    console.log('🔄 AdSense Hotfix: Cleared all slot tracking');
+    this.slots.clear();
+  }
+
+  reset() {
+    console.log('🔄 AdSense Hotfix: Cleared previous slot tracking');
+    this.slots.clear();
+    this.initialized = false;
   }
 }
 
-export const adSenseHotfix = window._adSenseHotfix;
+// Initialize global instance
+if (typeof window !== 'undefined') {
+  window._adSenseHotfix = new AdSenseHotfix();
+}
+
+export default AdSenseHotfix;
