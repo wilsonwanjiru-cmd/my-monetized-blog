@@ -1,4 +1,6 @@
-// frontend/src/pages/BlogPost.js
+// frontend/src/pages/BlogPost.js - ENHANCED VERSION
+// Comprehensive BlogPost with AdSense fixes and enhanced features
+
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -6,7 +8,7 @@ import 'react-lazy-load-image-component/src/effects/blur.css';
 import Layout from '../components/Layout';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
-import AdSenseWrapper from '../components/AdSenseWrapper';
+import AdSense, { AdUnits } from '../components/AdSense';
 import { blogAPI, trackPostView } from '../utils/api';
 import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams, getCurrentSessionId } from '../utils/utmTracker';
 import './BlogPost.css';
@@ -22,7 +24,11 @@ const BlogPost = () => {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [tableOfContents, setTableOfContents] = useState([]);
   const [activeHeading, setActiveHeading] = useState('');
+  const [estimatedReadingTime, setEstimatedReadingTime] = useState(5);
+  const [socialShareCount, setSocialShareCount] = useState(0);
   const contentRef = useRef(null);
+  const postViewTrackedRef = useRef(false);
+  const scrollListenersRef = useRef([]);
 
   // Enhanced post fetching with error handling and analytics
   const fetchPost = useCallback(async () => {
@@ -45,6 +51,15 @@ const BlogPost = () => {
       }
 
       setPost(postData);
+
+      // Calculate reading time if not provided
+      if (postData.content && !postData.readTime) {
+        const wordCount = postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length;
+        const readingTime = Math.max(1, Math.ceil(wordCount / 200)); // 200 words per minute
+        setEstimatedReadingTime(readingTime);
+      } else {
+        setEstimatedReadingTime(postData.readTime || 5);
+      }
 
       // Update document head for SEO
       updateMetaTags(postData);
@@ -76,7 +91,7 @@ const BlogPost = () => {
           postSlug: postData.slug,
           postTitle: postData.title,
           category: postData.category,
-          readTime: postData.readTime,
+          readTime: postData.readTime || estimatedReadingTime,
           timestamp: new Date().toISOString()
         }
       });
@@ -101,19 +116,21 @@ const BlogPost = () => {
     } finally {
       setLoading(false);
     }
-  }, [slug]);
+  }, [slug, estimatedReadingTime]);
 
-  // Track post view for analytics
+  // Enhanced post view tracking with duplicate prevention
   const trackPostViewHandler = async (postData) => {
-    if (viewTracked || !postData) return;
+    if (postViewTrackedRef.current || !postData) return;
 
     try {
+      postViewTrackedRef.current = true;
+
       // Use the helper function with fallback mechanism
       await trackPostView(postData._id, {
         title: postData.title,
         slug: postData.slug,
         category: postData.category,
-        readTime: postData.readTime
+        readTime: postData.readTime || estimatedReadingTime
       });
       
       // Track custom event
@@ -126,7 +143,7 @@ const BlogPost = () => {
           postSlug: postData.slug,
           postTitle: postData.title,
           category: postData.category,
-          readTime: postData.readTime,
+          readTime: postData.readTime || estimatedReadingTime,
           author: postData.author,
           sessionId: getCurrentSessionId(),
           timestamp: new Date().toISOString()
@@ -145,18 +162,23 @@ const BlogPost = () => {
   // Generate table of contents from headings
   const generateTableOfContents = () => {
     const contentElement = document.querySelector('.post-content');
-    if (!contentElement) return;
+    if (!contentElement) {
+      // Retry after a short delay if content isn't ready
+      setTimeout(generateTableOfContents, 200);
+      return;
+    }
 
     const headings = contentElement.querySelectorAll('h2, h3');
     const toc = [];
 
     headings.forEach((heading, index) => {
-      const id = `section-${index + 1}`;
+      // Generate a safe ID for the heading
+      const id = heading.id || `section-${index + 1}-${Date.now()}`;
       heading.id = id;
       
       toc.push({
         id: id,
-        text: heading.textContent,
+        text: heading.textContent || `Section ${index + 1}`,
         level: heading.tagName.toLowerCase(),
         element: heading
       });
@@ -165,7 +187,7 @@ const BlogPost = () => {
     setTableOfContents(toc);
   };
 
-  // Initialize reading progress tracking
+  // Enhanced reading progress tracking
   const initializeReadingProgress = () => {
     const handleScroll = () => {
       const contentElement = document.querySelector('.post-content');
@@ -187,21 +209,52 @@ const BlogPost = () => {
 
       // Update active heading in table of contents
       updateActiveHeading();
+
+      // Track reading progress milestones
+      trackReadingMilestones(progress);
     };
 
     window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    scrollListenersRef.current.push(() => window.removeEventListener('scroll', handleScroll));
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  };
+
+  // Track reading milestones for analytics
+  const trackReadingMilestones = (progress) => {
+    const milestones = [25, 50, 75, 90, 100];
+    const currentMilestone = milestones.find(milestone => progress >= milestone);
+    
+    if (currentMilestone && !postViewTrackedRef.current[`milestone_${currentMilestone}`]) {
+      postViewTrackedRef.current[`milestone_${currentMilestone}`] = true;
+      
+      trackCustomEvent('reading_progress', {
+        medium: 'content',
+        campaign: 'blog_post',
+        content: 'reading_milestone',
+        metadata: {
+          postId: post?._id,
+          milestone: currentMilestone,
+          progress: Math.round(progress),
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
   };
 
   // Update active heading in table of contents
   const updateActiveHeading = () => {
-    const headings = tableOfContents.map(item => item.element);
+    if (tableOfContents.length === 0) return;
+
+    const headings = tableOfContents.map(item => item.element).filter(Boolean);
     const scrollPosition = window.scrollY + 100;
 
     let currentActive = '';
     
     for (let i = headings.length - 1; i >= 0; i--) {
-      if (headings[i].offsetTop <= scrollPosition) {
+      if (headings[i] && headings[i].offsetTop <= scrollPosition) {
         currentActive = headings[i].id;
         break;
       }
@@ -210,7 +263,7 @@ const BlogPost = () => {
     setActiveHeading(currentActive);
   };
 
-  // Scroll to section
+  // Enhanced scroll to section with smooth animation
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -221,6 +274,9 @@ const BlogPost = () => {
         top: elementPosition,
         behavior: 'smooth'
       });
+
+      // Update URL hash without page jump
+      window.history.replaceState(null, null, `#${sectionId}`);
 
       trackCustomEvent('toc_click', {
         medium: 'content',
@@ -236,7 +292,7 @@ const BlogPost = () => {
     }
   };
 
-  // Scroll to top
+  // Enhanced scroll to top
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
@@ -254,7 +310,7 @@ const BlogPost = () => {
     });
   };
 
-  // Enhanced meta tags update
+  // Enhanced meta tags update with fallbacks
   const updateMetaTags = (postData) => {
     const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
     const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
@@ -305,38 +361,47 @@ const BlogPost = () => {
 
     // Canonical URL
     updateMetaTag('canonical', postData.canonicalUrl || postUrl, 'rel', 'link');
+
+    // Additional meta tags for better SEO
+    updateMetaTag('robots', 'index, follow, max-image-preview:large');
   };
 
-  // Helper function to update meta tags
+  // Enhanced helper function to update meta tags
   const updateMetaTag = (name, content, attribute = 'name', tagName = 'meta') => {
-    let metaTag;
-    
-    if (tagName === 'link') {
-      metaTag = document.querySelector(`link[${attribute}="${name}"]`);
-    } else {
-      metaTag = document.querySelector(`${tagName}[${attribute}="${name}"]`);
-    }
-    
-    if (!metaTag) {
-      metaTag = document.createElement(tagName);
+    if (!content) return;
+
+    try {
+      let metaTag;
+      
       if (tagName === 'link') {
-        metaTag.setAttribute('rel', attribute);
-        metaTag.setAttribute('href', content);
+        metaTag = document.querySelector(`link[${attribute}="${name}"]`);
       } else {
-        metaTag.setAttribute(attribute, name);
-        metaTag.setAttribute('content', content);
+        metaTag = document.querySelector(`${tagName}[${attribute}="${name}"]`);
       }
-      document.head.appendChild(metaTag);
-    } else {
-      if (tagName === 'link') {
-        metaTag.setAttribute('href', content);
+      
+      if (!metaTag) {
+        metaTag = document.createElement(tagName);
+        if (tagName === 'link') {
+          metaTag.setAttribute('rel', attribute);
+          metaTag.setAttribute('href', content);
+        } else {
+          metaTag.setAttribute(attribute, name);
+          metaTag.setAttribute('content', content);
+        }
+        document.head.appendChild(metaTag);
       } else {
-        metaTag.setAttribute('content', content);
+        if (tagName === 'link') {
+          metaTag.setAttribute('href', content);
+        } else {
+          metaTag.setAttribute('content', content);
+        }
       }
+    } catch (error) {
+      console.warn('Failed to update meta tag:', name, error);
     }
   };
 
-  // Add JSON-LD structured data
+  // Enhanced JSON-LD structured data
   const addStructuredData = (postData) => {
     const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
     const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
@@ -346,6 +411,8 @@ const BlogPost = () => {
     if (existingScript) {
       existingScript.remove();
     }
+
+    const wordCount = postData.content ? postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length : 0;
 
     const structuredData = {
       "@context": "https://schema.org",
@@ -379,32 +446,43 @@ const BlogPost = () => {
         "@type": "WebPage",
         "@id": `${siteUrl}/blog/${postData.slug}`
       },
-      "wordCount": postData.content ? postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length : 0,
-      "timeRequired": `PT${postData.readTime || 5}M`,
+      "wordCount": wordCount,
+      "timeRequired": `PT${postData.readTime || estimatedReadingTime}M`,
       "articleSection": postData.category || 'Technology',
       "keywords": postData.tags?.join(', ') || '',
       "inLanguage": "en-US"
     };
 
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.id = 'blog-post-structured-data';
-    script.text = JSON.stringify(structuredData);
-    document.head.appendChild(script);
+    try {
+      const script = document.createElement('script');
+      script.type = 'application/ld+json';
+      script.id = 'blog-post-structured-data';
+      script.text = JSON.stringify(structuredData);
+      document.head.appendChild(script);
+    } catch (error) {
+      console.warn('Failed to add structured data:', error);
+    }
   };
 
-  // Process content images for responsive behavior and better SEO
+  // Enhanced content image processing
   const processContentImages = (postData) => {
-    const contentImages = document.querySelectorAll('.post-content img');
+    const contentElement = document.querySelector('.post-content');
+    if (!contentElement) {
+      setTimeout(() => processContentImages(postData), 200);
+      return;
+    }
+
+    const contentImages = contentElement.querySelectorAll('img');
     
     contentImages.forEach((img, index) => {
       // Apply robust responsive image CSS
       img.style.maxWidth = '100%';
       img.style.height = 'auto';
       img.style.display = 'block';
+      img.style.margin = '20px auto';
       
       // Add CSS class for additional responsive control
-      img.classList.add('responsive-image');
+      img.classList.add('responsive-image', 'content-image');
       
       // Ensure alt text is meaningful
       if (!img.getAttribute('alt') || img.getAttribute('alt') === '') {
@@ -418,18 +496,19 @@ const BlogPost = () => {
         img.setAttribute('loading', 'lazy');
       }
 
-      // Better width/height attributes for layout stability
-      if (!img.getAttribute('width') && !img.getAttribute('height')) {
-        // Remove any inline styles that might force dimensions
-        img.style.width = '';
-        img.style.height = '';
+      // Add decoding attribute for better performance
+      if (!img.getAttribute('decoding')) {
+        img.setAttribute('decoding', 'async');
       }
 
-      // Handle image container overflow
+      // Handle image container
       const parent = img.parentElement;
-      if (parent && parent.style) {
-        parent.style.overflow = 'hidden';
-        parent.style.borderRadius = '8px';
+      if (parent && parent.tagName !== 'FIGURE') {
+        // Wrap image in figure element for better semantics
+        const figure = document.createElement('figure');
+        figure.className = 'content-image-container';
+        parent.insertBefore(figure, img);
+        figure.appendChild(img);
       }
 
       // Track image views
@@ -449,17 +528,35 @@ const BlogPost = () => {
         });
       });
 
-      // Handle image errors gracefully
+      // Enhanced image error handling
       img.addEventListener('error', () => {
         console.warn(`❌ Image failed to load: ${img.src}`);
-        img.style.display = 'none';
+        img.style.opacity = '0.5';
+        img.style.filter = 'grayscale(100%)';
+        img.alt = 'Image failed to load';
+        
+        // Create retry button
+        const retryButton = document.createElement('button');
+        retryButton.textContent = 'Retry Image';
+        retryButton.className = 'image-retry-button';
+        retryButton.onclick = () => {
+          img.src = img.src + '?retry=' + Date.now();
+        };
+        
+        img.parentNode.appendChild(retryButton);
       });
     });
   };
 
-  // Enhance content links with UTM tracking
+  // Enhanced content links with UTM tracking
   const enhanceContentLinks = (postData) => {
-    const contentLinks = document.querySelectorAll('.post-content a[href^="http"]');
+    const contentElement = document.querySelector('.post-content');
+    if (!contentElement) {
+      setTimeout(() => enhanceContentLinks(postData), 200);
+      return;
+    }
+
+    const contentLinks = contentElement.querySelectorAll('a[href^="http"]');
     
     contentLinks.forEach(link => {
       const originalHref = link.getAttribute('href');
@@ -480,8 +577,8 @@ const BlogPost = () => {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
 
-        // Add click tracking
-        link.addEventListener('click', () => {
+        // Add click tracking with enhanced analytics
+        const clickHandler = () => {
           trackCustomEvent('outbound_link_click', {
             medium: 'content',
             campaign: 'outbound_link',
@@ -490,21 +587,26 @@ const BlogPost = () => {
               postId: postData._id,
               originalUrl: originalHref,
               trackedUrl: trackedUrl,
-              linkText: link.textContent,
+              linkText: link.textContent?.substring(0, 100),
               isAffiliate: link.classList.contains('affiliate-link'),
               timestamp: new Date().toISOString()
             }
           });
-        });
+        };
+
+        link.addEventListener('click', clickHandler);
+        scrollListenersRef.current.push(() => link.removeEventListener('click', clickHandler));
       }
     });
   };
 
-  // Handle social sharing
+  // Enhanced social sharing with analytics
   const handleSocialShare = (platform) => {
+    if (!post) return;
+
     const postUrl = encodeURIComponent(window.location.href);
-    const postTitle = encodeURIComponent(post?.title || '');
-    const shareText = encodeURIComponent(`Check out this article: ${post?.title}`);
+    const postTitle = encodeURIComponent(post.title || '');
+    const shareText = encodeURIComponent(`Check out this article: ${post.title}`);
 
     let shareUrl = '';
     switch (platform) {
@@ -530,30 +632,50 @@ const BlogPost = () => {
       campaign: 'social_share',
       content: platform,
       metadata: {
-        postId: post?._id,
+        postId: post._id,
         platform: platform,
         url: postUrl,
         timestamp: new Date().toISOString()
       }
     });
 
-    window.open(shareUrl, '_blank', 'width=600,height=400');
+    // Update share count
+    setSocialShareCount(prev => prev + 1);
+
+    // Open share window
+    const shareWindow = window.open(shareUrl, '_blank', 'width=600,height=400,menubar=no,toolbar=no,resizable=yes,scrollbars=yes');
+    
+    // Track if share was successful
+    if (shareWindow) {
+      trackCustomEvent('social_share_success', {
+        medium: 'social',
+        campaign: 'social_share',
+        content: platform,
+        metadata: {
+          postId: post._id,
+          platform: platform,
+          timestamp: new Date().toISOString()
+        }
+      });
+    }
   };
 
-  // Copy URL to clipboard
+  // Enhanced copy URL to clipboard
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
       
       // Show feedback
-      const button = document.querySelector('.share-button.copy');
-      if (button) {
+      const buttons = document.querySelectorAll('.share-button.copy');
+      buttons.forEach(button => {
         const originalText = button.innerHTML;
         button.innerHTML = '✅ Copied!';
+        button.style.backgroundColor = '#28a745';
         setTimeout(() => {
           button.innerHTML = originalText;
+          button.style.backgroundColor = '';
         }, 2000);
-      }
+      });
 
       trackCustomEvent('url_copied', {
         medium: 'content',
@@ -567,12 +689,43 @@ const BlogPost = () => {
       });
     } catch (err) {
       console.error('Failed to copy URL:', err);
+      
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = window.location.href;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
     }
   };
 
-  // Print article
+  // Enhanced print article functionality
   const printArticle = () => {
+    // Add print-specific styles
+    const printStyle = document.createElement('style');
+    printStyle.innerHTML = `
+      @media print {
+        .no-print, .social-sharing, .table-of-contents, .scroll-to-top, .reading-progress {
+          display: none !important;
+        }
+        body {
+          font-size: 12pt;
+          line-height: 1.4;
+        }
+        .post-content {
+          max-width: 100% !important;
+        }
+      }
+    `;
+    document.head.appendChild(printStyle);
+    
     window.print();
+    
+    // Clean up print styles
+    setTimeout(() => {
+      document.head.removeChild(printStyle);
+    }, 1000);
     
     trackCustomEvent('print_article', {
       medium: 'content',
@@ -585,37 +738,57 @@ const BlogPost = () => {
     });
   };
 
+  // Enhanced cleanup function
+  const cleanup = () => {
+    // Reset document title
+    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
+    document.title = siteName;
+    
+    // Remove structured data script
+    const existingScript = document.getElementById('blog-post-structured-data');
+    if (existingScript) {
+      existingScript.remove();
+    }
+    
+    // Cleanup scroll listeners
+    scrollListenersRef.current.forEach(cleanup => cleanup());
+    scrollListenersRef.current = [];
+    
+    // Reset tracking refs
+    postViewTrackedRef.current = false;
+  };
+
   // Main useEffect for component lifecycle
   useEffect(() => {
     // Initialize UTM tracking
     initUTMTracking();
 
+    // Reset state when slug changes
+    setPost(null);
+    setLoading(true);
+    setError(null);
+    setViewTracked(false);
+    setReadingProgress(0);
+    setShowScrollTop(false);
+    setTableOfContents([]);
+    setActiveHeading('');
+    postViewTrackedRef.current = false;
+
     // Fetch post data
     fetchPost();
 
     // Set up scroll listeners
-    const cleanupScroll = initializeReadingProgress();
+    initializeReadingProgress();
 
     // Cleanup function
-    return () => {
-      // Reset document title
-      const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
-      document.title = siteName;
-      
-      // Remove structured data script
-      const existingScript = document.getElementById('blog-post-structured-data');
-      if (existingScript) {
-        existingScript.remove();
-      }
-      
-      // Cleanup scroll listeners
-      if (cleanupScroll) cleanupScroll();
-    };
-  }, [fetchPost]);
+    return cleanup;
+  }, [fetchPost, slug]);
 
   // Update active heading when table of contents changes
   useEffect(() => {
-    updateActiveHeading();
+    if (tableOfContents.length > 0) {
+      updateActiveHeading();
+    }
   }, [tableOfContents]);
 
   // Enhanced loading state with skeleton UI
@@ -636,11 +809,28 @@ const BlogPost = () => {
             <div className="skeleton skeleton-tags"></div>
           </div>
 
+          {/* Table of Contents Skeleton */}
+          <div className="toc-skeleton">
+            <div className="skeleton skeleton-toc-title"></div>
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="skeleton skeleton-toc-item"></div>
+            ))}
+          </div>
+
           {/* Content Skeleton */}
           <div className="post-content-skeleton">
             {[...Array(8)].map((_, index) => (
               <div key={index} className="skeleton skeleton-line"></div>
             ))}
+          </div>
+
+          {/* Author Bio Skeleton */}
+          <div className="author-bio-skeleton">
+            <div className="skeleton skeleton-avatar"></div>
+            <div className="skeleton skeleton-author-info">
+              <div className="skeleton skeleton-author-name"></div>
+              <div className="skeleton skeleton-author-bio"></div>
+            </div>
           </div>
         </div>
       </Layout>
@@ -675,6 +865,9 @@ const BlogPost = () => {
               🔄 Try Again
             </button>
           </div>
+          <div className="error-help">
+            <p>If the problem persists, please <a href="/contact">contact me</a>.</p>
+          </div>
         </div>
       </Layout>
     );
@@ -704,6 +897,14 @@ const BlogPost = () => {
               🏠 Go Home
             </button>
           </div>
+          <div className="error-suggestions">
+            <h3>Popular Articles:</h3>
+            <ul>
+              <li><Link to="/blog/top-20-remote-jobs-that-pay-well-in-2025-no-degree-required-how-to-get-hired">Top 20 Remote Jobs That Pay Well in 2025</Link></li>
+              <li><Link to="/blog/mastering-react-hooks-complete-guide">Mastering React Hooks: Complete Guide</Link></li>
+              <li><Link to="/blog/nodejs-best-practices-2025">Node.js Best Practices for 2025</Link></li>
+            </ul>
+          </div>
         </div>
       </Layout>
     );
@@ -714,6 +915,7 @@ const BlogPost = () => {
     <Layout 
       title={post.title} 
       description={post.metaDescription || post.excerpt}
+      canonicalUrl={`/blog/${post.slug}`}
     >
       <div className="blog-post-container">
         {/* READING PROGRESS BAR */}
@@ -721,6 +923,7 @@ const BlogPost = () => {
           <div 
             className="reading-progress-bar" 
             style={{ width: `${readingProgress}%` }}
+            aria-label={`Reading progress: ${Math.round(readingProgress)}%`}
           ></div>
         </div>
 
@@ -746,17 +949,31 @@ const BlogPost = () => {
               placeholderSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PC9zdmc+"
               onError={(e) => {
                 e.target.style.display = 'none';
+                console.warn('Featured image failed to load:', post.featuredImage);
+              }}
+              onLoad={() => {
+                console.log('Featured image loaded successfully');
               }}
             />
+            {post.imageCaption && (
+              <figcaption className="image-caption">{post.imageCaption}</figcaption>
+            )}
           </div>
         )}
 
-        {/* ✅ FIXED: Using AdSenseWrapper to prevent duplicate script loading */}
-        <AdSenseWrapper 
-          position="in-article"
-          format="autorelaxed"
-          responsive={false}
+        {/* ✅ FIXED: Using enhanced AdSense component with proper slot management */}
+        <AdSense 
+          slot={AdUnits.IN_ARTICLE}
+          format="fluid"
+          layout="in-article"
+          responsive={true}
           className="ad-in-article"
+          currentPath={window.location.pathname}
+          fallbackContent={
+            <div className="ad-fallback">
+              <p>Advertisement</p>
+            </div>
+          }
         />
 
         {/* POST HEADER */}
@@ -767,19 +984,19 @@ const BlogPost = () => {
             </Link>
           </div>
 
-          <h1 className="post-title">
+          <h1 className="post-title" itemProp="headline">
             {post.title}
           </h1>
 
           <div className="post-meta">
             <span className="post-meta-item">
               <span className="meta-icon">👤</span>
-              By {post.author || 'Wilson Muita'}
+              By <span itemProp="author">{post.author || 'Wilson Muita'}</span>
             </span>
             {post.publishedAt && (
               <>
                 <span className="meta-separator">•</span>
-                <span className="post-meta-item">
+                <span className="post-meta-item" itemProp="datePublished">
                   <span className="meta-icon">📅</span>
                   {new Date(post.publishedAt).toLocaleDateString('en-US', {
                     year: 'numeric',
@@ -792,7 +1009,7 @@ const BlogPost = () => {
             <span className="meta-separator">•</span>
             <span className="post-meta-item">
               <span className="meta-icon">⏱️</span>
-              {post.readTime || 5} min read
+              {post.readTime || estimatedReadingTime} min read
             </span>
             {post.views !== undefined && (
               <>
@@ -808,7 +1025,7 @@ const BlogPost = () => {
           {/* CATEGORY & TAGS */}
           <div className="post-categories">
             {post.category && (
-              <span className="category-tag">
+              <span className="category-tag" itemProp="articleSection">
                 {post.category}
               </span>
             )}
@@ -816,6 +1033,7 @@ const BlogPost = () => {
               <span
                 key={tag}
                 className="tag"
+                itemProp="keywords"
               >
                 #{tag}
               </span>
@@ -874,13 +1092,18 @@ const BlogPost = () => {
               Print
             </button>
           </div>
+          {socialShareCount > 0 && (
+            <div className="share-count">
+              Shared {socialShareCount} time{socialShareCount !== 1 ? 's' : ''}
+            </div>
+          )}
         </header>
 
         {/* TABLE OF CONTENTS */}
         {tableOfContents.length > 0 && (
           <aside className="table-of-contents">
             <h3 className="toc-title">📑 Table of Contents</h3>
-            <nav className="toc-nav">
+            <nav className="toc-nav" aria-label="Table of Contents">
               {tableOfContents.map((item) => (
                 <a
                   key={item.id}
@@ -898,28 +1121,40 @@ const BlogPost = () => {
           </aside>
         )}
 
-        {/* ✅ FIXED: Using AdSenseWrapper for header ad */}
-        <AdSenseWrapper 
-          position="header"
+        {/* ✅ FIXED: Using enhanced AdSense component for header ad */}
+        <AdSense 
+          slot={AdUnits.HEADER}
           format="fluid"
           layout="in-article"
+          responsive={true}
           className="ad-before-content"
+          currentPath={window.location.pathname}
         />
 
         {/* POST CONTENT */}
-        <section 
+        <article 
           ref={contentRef}
           className="post-content"
+          itemProp="articleBody"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
 
-        {/* ✅ FIXED: Using AdSenseWrapper for footer ad */}
-        <AdSenseWrapper 
-          position="footer"
+        {/* ✅ FIXED: Using enhanced AdSense component for footer ad */}
+        <AdSense 
+          slot={AdUnits.FOOTER}
           format="auto"
           responsive={true}
           className="ad-after-content"
+          currentPath={window.location.pathname}
         />
+
+        {/* READING PROGRESS SUMMARY */}
+        <div className="reading-summary">
+          <p>
+            You've read {Math.round(readingProgress)}% of this article. 
+            {readingProgress >= 90 && " Thanks for reading!"}
+          </p>
+        </div>
 
         {/* AUTHOR BIO */}
         <section className="author-bio">
@@ -942,6 +1177,9 @@ const BlogPost = () => {
               <Link to="/about" className="author-link">
                 Learn More About Me →
               </Link>
+              <a href="https://twitter.com/WilsonMuita" className="author-link" target="_blank" rel="noopener noreferrer">
+                Follow on Twitter
+              </a>
             </div>
           </div>
         </section>
@@ -958,18 +1196,43 @@ const BlogPost = () => {
           <NewsletterSignup source="blog_post" location="post_bottom" />
         </section>
 
-        {/* ✅ FIXED: Using AdSenseWrapper for between posts ad */}
-        <AdSenseWrapper 
-          position="between-posts"
+        {/* ✅ FIXED: Using enhanced AdSense component for between posts ad */}
+        <AdSense 
+          slot={AdUnits.BETWEEN_POSTS}
           format="auto"
           responsive={true}
           className="ad-between-sections"
+          currentPath={window.location.pathname}
         />
 
         {/* RELATED POSTS */}
         {post && (
           <RelatedPosts post={post} />
         )}
+
+        {/* POST FOOTER ACTIONS */}
+        <footer className="post-footer">
+          <div className="post-actions">
+            <button
+              onClick={scrollToTop}
+              className="post-action-button"
+            >
+              ↑ Back to Top
+            </button>
+            <Link
+              to="/blog"
+              className="post-action-button"
+            >
+              📚 Browse More Articles
+            </Link>
+            <button
+              onClick={printArticle}
+              className="post-action-button"
+            >
+              🖨️ Print Article
+            </button>
+          </div>
+        </footer>
       </div>
     </Layout>
   );
