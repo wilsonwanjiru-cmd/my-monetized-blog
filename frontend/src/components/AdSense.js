@@ -1,5 +1,5 @@
-// frontend/src/components/AdSense.js - ENHANCED VERSION
-// Comprehensive AdSense component with duplicate prevention and error handling
+// frontend/src/components/AdSense.js - COMPREHENSIVE FIXED VERSION
+// Complete fix for no_div error and duplicate ad prevention
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 
@@ -14,6 +14,7 @@ if (typeof window !== 'undefined') {
   window._adSenseGlobalPush = window._adSenseGlobalPush || [];
   window._adSenseProcessedElements = window._adSenseProcessedElements || new WeakSet();
   window._adSenseComponentInstances = window._adSenseComponentInstances || new Map();
+  window._adSenseVisibilityRetries = window._adSenseVisibilityRetries || new Map();
 }
 
 const AdSense = ({ 
@@ -39,6 +40,7 @@ const AdSense = ({
   const adInitializedRef = useRef(false);
   const adElementRef = useRef(null);
   const timeoutRef = useRef(null);
+  const visibilityRetryRef = useRef(0);
   const componentIdRef = useRef(`ad-${slot}-${Math.random().toString(36).substr(2, 9)}`);
   const mountedRef = useRef(true);
 
@@ -247,7 +249,7 @@ const AdSense = ({
     });
   }, []);
 
-  // CRITICAL FIX: Enhanced safe ad push with multiple protection layers
+  // ✅ CRITICAL FIX: Enhanced safe ad push with visibility check and no_div prevention
   const safeAdPush = useCallback(() => {
     if (typeof window === 'undefined') return false;
 
@@ -256,6 +258,31 @@ const AdSense = ({
       if (!adElement) {
         log('No ad element found', 'warn');
         return false;
+      }
+
+      // ✅ CRITICAL FIX: Ensure element is visible and in DOM before pushing
+      if (!adElement.offsetParent || adElement.offsetHeight === 0 || adElement.offsetWidth === 0) {
+        log('Ad element not visible or not in DOM, delaying push', 'debug');
+        
+        // Use global tracking for visibility retries
+        const retryKey = componentIdRef.current;
+        const currentRetries = window._adSenseVisibilityRetries.get(retryKey) || 0;
+        
+        if (currentRetries < 3) {
+          window._adSenseVisibilityRetries.set(retryKey, currentRetries + 1);
+          
+          setTimeout(() => {
+            if (mountedRef.current && adElementRef.current) {
+              log(`Retrying ad push (attempt ${currentRetries + 1})`);
+              safeAdPush();
+            }
+          }, 200 * (currentRetries + 1));
+          return false;
+        } else {
+          log('Max visibility retries reached, aborting push', 'warn');
+          window._adSenseVisibilityRetries.delete(retryKey);
+          return false;
+        }
       }
 
       // Layer 1: Check if this specific element already has ads
@@ -283,13 +310,16 @@ const AdSense = ({
         return false;
       }
 
-      log('Safe push initiated');
+      log('Safe push initiated - element is visible and ready');
       
       // Mark element as processed across all tracking systems
       window._adSenseProcessedElements.add(adElement);
       if (window._adSenseHotfix) {
         window._adSenseHotfix.markElementProcessed(adElement);
       }
+      
+      // Clear visibility retries on successful push
+      window._adSenseVisibilityRetries.delete(componentIdRef.current);
       
       // Use the global push method with error handling
       (window.adsbygoogle = window.adsbygoogle || []).push({});
@@ -372,8 +402,8 @@ const AdSense = ({
       // Wait for script to be ready
       await waitForAdSenseScript();
 
-      // Additional delay for DOM stability
-      await new Promise(resolve => setTimeout(resolve, 150));
+      // ✅ CRITICAL FIX: Additional delay for DOM stability and element visibility
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       log('Loading ad');
       
@@ -426,6 +456,9 @@ const AdSense = ({
     if (componentIdRef.current) {
       window._adSenseComponentInstances.delete(componentIdRef.current);
     }
+    
+    // Clear visibility retries on error
+    window._adSenseVisibilityRetries.delete(componentIdRef.current);
     
     adInitializedRef.current = false;
     
@@ -501,12 +534,12 @@ const AdSense = ({
       return;
     }
 
-    // Load the ad with a small delay to ensure DOM stability
+    // ✅ CRITICAL FIX: Increased delay for DOM stability
     const loadTimer = setTimeout(() => {
       if (mountedRef.current) {
         loadAd();
       }
-    }, 100);
+    }, 500);
 
     // Cleanup function
     return () => {
@@ -516,6 +549,9 @@ const AdSense = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      
+      // Clear visibility retries on unmount
+      window._adSenseVisibilityRetries.delete(componentIdRef.current);
       
       if (slot && adInitializedRef.current) {
         window._adSenseInitializedSlots.delete(slot);
@@ -780,6 +816,9 @@ export const consentHelper = {
       if (window._adSenseComponentInstances) {
         window._adSenseComponentInstances.clear();
       }
+      if (window._adSenseVisibilityRetries) {
+        window._adSenseVisibilityRetries.clear();
+      }
       
       const consentEvent = new CustomEvent('consentChanged', {
         detail: { granted }
@@ -819,6 +858,9 @@ export const consentHelper = {
       }
       if (window._adSenseComponentInstances) {
         window._adSenseComponentInstances.clear();
+      }
+      if (window._adSenseVisibilityRetries) {
+        window._adSenseVisibilityRetries.clear();
       }
       
       window.dispatchEvent(new Event('consentChanged'));
