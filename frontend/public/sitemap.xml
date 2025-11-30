@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" 
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
+  
+  <!-- Essential Static Pages -->
+  <url>
+    <loc>https://wilsonmuita.com/</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://wilsonmuita.com/blog</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://wilsonmuita.com/about</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://wilsonmuita.com/contact</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://wilsonmuita.com/privacy</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://wilsonmuita.com/disclaimer</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <!-- Blog Posts - Add at least 20-30 of your most important posts -->
+  <url>
+    <loc>https://wilsonmuita.com/blog/top-10-passive-income-streams-that-will-make-you-money-while-you-sleep-in-2025</loc>
+    <lastmod>2025-01-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <news:news>
+      <news:publication>
+        <news:name>Wilson Muita</news:name>
+        <news:language>en</news:language>
+      </news:publication>
+      <news:publication_date>2025-01-21</news:publication_date>
+      <news:title>Top 10 Passive Income Streams That Will Make You Money While You Sleep in 2025</news:title>
+    </news:news>
+  </url>
+  
+  <!-- Add more blog posts here following the same format -->
+  <!-- You need to manually add at least 20-30 of your most important blog post URLs -->
+  
+</urlset>
