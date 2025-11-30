@@ -194,7 +194,6 @@ app.get('/api/health', (req, res) => {
 // ✅ UPDATED: MongoDB connection with deprecated options removed
 mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/monetized-blog', {
-    // ❌ REMOVED: useNewUrlParser and useUnifiedTopology (deprecated in MongoDB Driver v4+)
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000,
   })
@@ -239,10 +238,10 @@ if (process.env.NODE_ENV === 'production') {
   }));
 
   // ✅ FIXED: Use proper regex pattern instead of '*' to avoid PathError
-  app.get(/^(?!\/api|\/sitemap\.xml|\/robots\.txt|\/rss\.xml|\/video-sitemap\.xml|\/blog).*$/, (req, res, next) => {
+  app.get(/^(?!\/api|\/sitemap\.xml|\/robots\.txt|\/rss\.xml|\/video-sitemap\.xml|\/blog|\/image-sitemap\.xml|\/sitemap-index\.xml|\/sitemap-posts\.xml).*$/, (req, res, next) => {
     // This regex matches all routes EXCEPT:
     // - /api/* (API routes)
-    // - /sitemap.xml
+    // - /sitemap.xml and other sitemap variations
     // - /robots.txt  
     // - /rss.xml
     // - /video-sitemap.xml
@@ -259,7 +258,6 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // ✅ UPDATED: Fallback analytics track route (temporary until main routes are confirmed working)
-// Keeping this as backup but it should eventually be removed once main routes are confirmed
 app.post('/api/analytics/track', cors(corsOptions), async (req, res) => {
   try {
     console.log('🔍 Fallback Track Route Hit:', {
@@ -517,6 +515,11 @@ const server = app.listen(PORT, () => {
   console.log('   - ✅ Added localhost:5000 to CORS allowed origins');
   console.log('   - ✅ Removed deprecated MongoDB options');
   console.log('   - ✅ Added trust proxy for Render deployment');
+  console.log('🔧 Sitemap Routes:');
+  console.log('   - ✅ Main sitemap: /sitemap.xml');
+  console.log('   - ✅ Posts sitemap: /sitemap-posts.xml');
+  console.log('   - ✅ Image sitemap: /image-sitemap.xml');
+  console.log('   - ✅ Sitemap index: /sitemap-index.xml');
 });
 
 // Graceful shutdown handling
