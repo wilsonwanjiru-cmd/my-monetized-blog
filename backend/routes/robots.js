@@ -1,36 +1,42 @@
-// routes/robots.txt
+// backend/routes/robots.js
 const express = require('express');
 const router = express.Router();
 
+// Robots.txt route
 router.get('/robots.txt', (req, res) => {
-  // ✅ UPDATED: Use environment variable for site URL with fallback
   const siteUrl = process.env.SITE_URL || 'https://wilsonmuita.com';
   
-  const robots = `# robots.txt for ${siteUrl}
+  const robotsTxt = `# robots.txt for ${siteUrl}
 # Generated automatically - Do not edit manually
 
 User-agent: *
 Allow: /
-Disallow: /admin/
-Disallow: /api/
-Disallow: /private/
-Disallow: /tmp/
-Disallow: /cgi-bin/
 
-# Allow bots to access essential resources
+# Essential directories to allow
 Allow: /css/
 Allow: /js/
 Allow: /images/
 Allow: /fonts/
 Allow: /static/
+Allow: /public/
+
+# Directories to disallow
+Disallow: /admin/
+Disallow: /api/
+Disallow: /private/
+Disallow: /tmp/
+Disallow: /cgi-bin/
+Disallow: /backend/
+Disallow: /node_modules/
 
 # Crawl directives
 Crawl-delay: 1
 
-# SEO & Sitemap Configuration
+# Sitemap Configuration
 Sitemap: ${siteUrl}/sitemap.xml
+Sitemap: ${siteUrl}/sitemap-posts.xml
 Sitemap: ${siteUrl}/image-sitemap.xml
-Sitemap: ${siteUrl}/video-sitemap.xml
+Sitemap: ${siteUrl}/sitemap-index.xml
 
 # Search Engine Specific Directives
 
@@ -38,25 +44,19 @@ Sitemap: ${siteUrl}/video-sitemap.xml
 User-agent: Googlebot
 Allow: /
 Crawl-delay: 1
-Disallow: /admin/
-Disallow: /api/
 
 # Bingbot
 User-agent: Bingbot
 Allow: /
 Crawl-delay: 1
-Disallow: /admin/
-Disallow: /api/
 
-# Twitterbot
+# Social media bots
 User-agent: Twitterbot
 Allow: /
 
-# Facebook External Hit
 User-agent: facebookexternalhit
 Allow: /
 
-# Allow all social media bots
 User-agent: LinkedInBot
 Allow: /
 
@@ -76,7 +76,7 @@ Disallow: /
 User-agent: Anthropic-ai
 Disallow: /
 
-# Block scraping bots
+# Block aggressive scraping bots
 User-agent: MJ12bot
 Crawl-delay: 5
 
@@ -86,18 +86,25 @@ Crawl-delay: 5
 User-agent: SemrushBot
 Crawl-delay: 5
 
+User-agent: DotBot
+Crawl-delay: 5
+
+User-agent: MauiBot
+Disallow: /
+
 # Development and staging blocking
 User-agent: *
 Disallow: /staging/
 Disallow: /dev/
 Disallow: /test/
+Disallow: /localhost/
 
-# API rate limiting protection
-User-agent: *
+# API protection
 Disallow: /api/auth/
 Disallow: /api/admin/
+Disallow: /api/analytics/debug
 
-# Comment and form submission paths (protect from spam)
+# Form protection
 Disallow: /comments/post/
 Disallow: /contact/post/
 Disallow: /newsletter/submit/
@@ -107,18 +114,26 @@ Disallow: /search?
 Disallow: /filter?
 Disallow: /sort?
 Disallow: /page=
+Disallow: /?utm_
+Disallow: /?ref=
 
-# Allow AMP pages
+# Allow important pages
+Allow: /blog/
+Allow: /about/
+Allow: /contact/
+Allow: /privacy/
+Allow: /disclaimer/
+Allow: /categories/
+Allow: /tags/
+
+# AMP pages
 Allow: /amp/
-
-# Host directive
-Host: ${siteUrl.replace('https://', '')}
 
 # Thank you for respecting our robots.txt file!`;
 
   res.type('text/plain');
-  res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-  res.send(robots);
+  res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+  res.send(robotsTxt);
 });
 
 module.exports = router;
