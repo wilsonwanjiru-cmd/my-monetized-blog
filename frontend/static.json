@@ -4,5 +4,49 @@
       "source": "**",
       "destination": "/index.html"
     }
+  ],
+  "headers": {
+    "/sitemap.xml": {
+      "Content-Type": "application/xml"
+    },
+    "/robots.txt": {
+      "Content-Type": "text/plain"
+    },
+    "/image-sitemap.xml": {
+      "Content-Type": "application/xml"
+    },
+    "/sitemap-posts.xml": {
+      "Content-Type": "application/xml"
+    },
+    "/sitemap-index.xml": {
+      "Content-Type": "application/xml"
+    }
+  },
+  "redirects": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://api.wilsonmuita.com/sitemap.xml",
+      "status": 200
+    },
+    {
+      "source": "/image-sitemap.xml",
+      "destination": "https://api.wilsonmuita.com/image-sitemap.xml",
+      "status": 200
+    },
+    {
+      "source": "/sitemap-posts.xml",
+      "destination": "https://api.wilsonmuita.com/sitemap-posts.xml",
+      "status": 200
+    },
+    {
+      "source": "/sitemap-index.xml",
+      "destination": "https://api.wilsonmuita.com/sitemap-index.xml",
+      "status": 200
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "https://api.wilsonmuita.com/robots.txt",
+      "status": 200
+    }
   ]
 }
