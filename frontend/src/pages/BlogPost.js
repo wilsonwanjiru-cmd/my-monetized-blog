@@ -1,4 +1,4 @@
-// frontend/src/pages/BlogPost.js - ENHANCED VERSION
+// frontend/src/pages/BlogPost.js - ENHANCED VERSION WITH FIXED ERROR
 // Comprehensive BlogPost with AdSense fixes and enhanced features
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
@@ -27,8 +27,16 @@ const BlogPost = () => {
   const [estimatedReadingTime, setEstimatedReadingTime] = useState(5);
   const [socialShareCount, setSocialShareCount] = useState(0);
   const contentRef = useRef(null);
-  const postViewTrackedRef = useRef(false);
+  
+  // FIXED: Initialize as object with postViewTracked property instead of boolean
+  const postViewTrackedRef = useRef({ 
+    postViewTracked: false,
+    milestones: {}
+  });
+  
   const scrollListenersRef = useRef([]);
+  // Add milestones tracked ref to track reading milestones separately
+  const milestonesTrackedRef = useRef({});
 
   // Enhanced post fetching with error handling and analytics
   const fetchPost = useCallback(async () => {
@@ -120,10 +128,10 @@ const BlogPost = () => {
 
   // Enhanced post view tracking with duplicate prevention
   const trackPostViewHandler = async (postData) => {
-    if (postViewTrackedRef.current || !postData) return;
+    if (postViewTrackedRef.current.postViewTracked || !postData) return;
 
     try {
-      postViewTrackedRef.current = true;
+      postViewTrackedRef.current.postViewTracked = true;
 
       // Use the helper function with fallback mechanism
       await trackPostView(postData._id, {
@@ -155,6 +163,7 @@ const BlogPost = () => {
     } catch (error) {
       console.warn('Failed to track post view:', error);
       // Even if tracking fails, mark as tracked to avoid multiple attempts
+      postViewTrackedRef.current.postViewTracked = true;
       setViewTracked(true);
     }
   };
@@ -222,13 +231,13 @@ const BlogPost = () => {
     };
   };
 
-  // Track reading milestones for analytics
+  // Track reading milestones for analytics - FIXED VERSION
   const trackReadingMilestones = (progress) => {
     const milestones = [25, 50, 75, 90, 100];
     const currentMilestone = milestones.find(milestone => progress >= milestone);
     
-    if (currentMilestone && !postViewTrackedRef.current[`milestone_${currentMilestone}`]) {
-      postViewTrackedRef.current[`milestone_${currentMilestone}`] = true;
+    if (currentMilestone && !milestonesTrackedRef.current[`milestone_${currentMilestone}`]) {
+      milestonesTrackedRef.current[`milestone_${currentMilestone}`] = true;
       
       trackCustomEvent('reading_progress', {
         medium: 'content',
@@ -754,8 +763,12 @@ const BlogPost = () => {
     scrollListenersRef.current.forEach(cleanup => cleanup());
     scrollListenersRef.current = [];
     
-    // Reset tracking refs
-    postViewTrackedRef.current = false;
+    // Reset tracking refs - FIXED: Reset to initial object structure
+    postViewTrackedRef.current = { 
+      postViewTracked: false,
+      milestones: {}
+    };
+    milestonesTrackedRef.current = {};
   };
 
   // Main useEffect for component lifecycle
@@ -772,7 +785,13 @@ const BlogPost = () => {
     setShowScrollTop(false);
     setTableOfContents([]);
     setActiveHeading('');
-    postViewTrackedRef.current = false;
+    
+    // FIXED: Reset refs to proper initial values
+    postViewTrackedRef.current = { 
+      postViewTracked: false,
+      milestones: {}
+    };
+    milestonesTrackedRef.current = {};
 
     // Fetch post data
     fetchPost();
