@@ -205,7 +205,7 @@ const Layout = ({
                 
                 {/* NEW: Privacy & Consent Widget */}
                 <div className="sidebar-widget privacy-widget">
-                  <h3>🔒 Privacy First</h3>
+                  {/* <h3>🔒 Privacy First</h3>
                   <p>We respect your privacy and comply with GDPR. You can manage your cookie preferences at any time.</p>
                   <button 
                     className="sidebar-link manage-consent-btn"
@@ -217,7 +217,7 @@ const Layout = ({
                     }}
                   >
                     Manage Privacy Settings →
-                  </button>
+                  </button> */}
                 </div>
               </div>
             </aside>
@@ -258,7 +258,7 @@ const Layout = ({
                   Blog
                 </a>
                 {/* NEW: Consent Management Link */}
-                <button 
+                {/* <button 
                   className="footer-link manage-consent-footer"
                   onClick={() => {
                     localStorage.removeItem('adsense_consent');
@@ -273,7 +273,7 @@ const Layout = ({
                   }}
                 >
                   Cookie Preferences
-                </button>
+                </button> */}
               </div>
             </div>
             <div className="footer-section">
