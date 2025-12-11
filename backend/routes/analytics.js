@@ -3,17 +3,20 @@ const express = require('express');
 const router = express.Router();
 const AnalyticsEvent = require('../models/AnalyticsEvent');
 
-// ✅ ADDED: Event type mapping function to handle enum validation
+// ✅ UPDATED: Enhanced event type mapping function to handle enum validation
 function mapEventType(eventType) {
   const eventTypeMap = {
     // Core events
     'pageview': 'pageview',
+    'page_view': 'pageview',
     'click': 'click',
     'scroll': 'scroll',
+    'form_submit': 'form_submit',
     'form_submit': 'form_submit',
     
     // Mouse and interaction events
     'mouse_movements_batch': 'custom',
+    'mouse_movements': 'custom',
     'scroll_depth': 'scroll',
     'scroll_milestone': 'scroll',
     
@@ -22,30 +25,44 @@ function mapEventType(eventType) {
     'custom': 'custom',
     'other': 'other',
     
+    // Engagement events
+    'engagement': 'engagement',
+    'conversion': 'conversion',
+    'social': 'social',
+    'error': 'error',
+    'performance': 'performance',
+    'session': 'session',
+    
     // Post events
     'post_view': 'post_view',
+    'post': 'post_view',
     
     // Health and system events
-    'health_check': 'health_check'
+    'health_check': 'health_check',
+    'health': 'health_check'
   };
   
-  return eventTypeMap[eventType] || 'custom';
+  if (!eventType) return 'custom';
+  
+  const normalizedType = eventType.toLowerCase().trim();
+  return eventTypeMap[normalizedType] || 'custom';
 }
 
-// ✅ ADDED: Utility function to get client IP
+// ✅ UPDATED: Enhanced utility function to get client IP
 function getClientIP(req) {
   try {
     return req.ip || 
-           req.connection.remoteAddress || 
-           req.socket.remoteAddress ||
-           (req.connection.socket ? req.connection.socket.remoteAddress : null) ||
+           req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+           req.connection?.remoteAddress || 
+           req.socket?.remoteAddress ||
+           (req.connection?.socket ? req.connection.socket.remoteAddress : null) ||
            'unknown';
   } catch (error) {
     return 'unknown';
   }
 }
 
-// ✅ ADDED: Database connection check
+// ✅ UPDATED: Database connection check with more details
 router.get('/db-status', async (req, res) => {
   try {
     const mongoose = require('mongoose');
@@ -60,6 +77,7 @@ router.get('/db-status', async (req, res) => {
     // Test database operation
     const count = await AnalyticsEvent.countDocuments();
     const recentEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
+    const dbStats = await AnalyticsEvent.db.db.stats();
 
     return res.json({
       success: true,
@@ -67,7 +85,10 @@ router.get('/db-status', async (req, res) => {
         state: states[dbState],
         readyState: dbState,
         totalEvents: count,
-        lastEvent: recentEvent ? recentEvent.timestamp : null
+        lastEvent: recentEvent ? recentEvent.timestamp : null,
+        collections: dbStats.collections,
+        dataSize: `${Math.round(dbStats.dataSize / 1024 / 1024)}MB`,
+        indexSize: `${Math.round(dbStats.indexSize / 1024 / 1024)}MB`
       },
       timestamp: new Date().toISOString()
     });
@@ -76,7 +97,8 @@ router.get('/db-status', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Database connection failed',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -88,7 +110,7 @@ router.get('/test', (req, res) => {
       success: true,
       message: 'Analytics routes are working correctly!',
       timestamp: new Date().toISOString(),
-      version: '1.0.0',
+      version: '1.2.0',
       endpoints: {
         pageview: 'POST /api/analytics/pageview',
         event: 'POST /api/analytics/event',
@@ -97,7 +119,10 @@ router.get('/test', (req, res) => {
         dashboard: 'GET /api/analytics/dashboard',
         health: 'GET /api/analytics/health',
         status: 'GET /api/analytics/status',
-        dbStatus: 'GET /api/analytics/db-status'
+        dbStatus: 'GET /api/analytics/db-status',
+        utmReport: 'GET /api/analytics/utm-report',
+        bulk: 'POST /api/analytics/bulk',
+        cleanup: 'DELETE /api/analytics/cleanup'
       }
     });
   } catch (error) {
@@ -110,133 +135,181 @@ router.get('/test', (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced pageview tracking with event type mapping
+// ✅ CRITICAL FIX: Enhanced pageview tracking with BOTH snake_case and camelCase support
 router.post('/pageview', async (req, res) => {
   let analyticsEvent;
   
   try {
     console.log('📊 Pageview request received:', {
-      body: req.body,
-      headers: {
-        'content-type': req.headers['content-type'],
-        'user-agent': req.headers['user-agent']
-      },
+      bodyKeys: Object.keys(req.body),
+      contentType: req.headers['content-type'],
+      userAgent: req.headers['user-agent']?.substring(0, 100),
       timestamp: new Date().toISOString()
     });
 
+    // ✅ CRITICAL: Accept BOTH snake_case and camelCase
     const { 
+      // Core fields
       sessionId, 
       page, 
       url,
+      
+      // Event fields - both formats
       eventType = 'pageview',
+      event_type = eventType,
       eventName = 'page_view',
+      event_name = eventName,
       type = 'pageview',
-      metadata = {},
+      
+      // Content fields - both formats
       title,
       referrer,
       userAgent,
+      user_agent = userAgent,
       timestamp,
       screenResolution,
+      screen_resolution = screenResolution,
       language,
+      
+      // UTM parameters - BOTH FORMATS
       utm_source,
       utm_medium,
       utm_campaign,
       utm_content,
       utm_term,
+      utmSource,
+      utmMedium,
+      utmCampaign,
+      utmContent,
+      utmTerm,
+      
+      // Metadata
+      metadata = {},
+      
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Enhanced validation
-    if (!sessionId) {
+    // ✅ ENHANCED: Use camelCase OR snake_case (camelCase takes priority)
+    const finalSessionId = sessionId?.trim();
+    const finalPage = page?.trim();
+    const finalUrl = url;
+    const finalEventType = eventType || event_type || 'pageview';
+    const finalEventName = eventName || event_name || 'page_view';
+    const finalType = type || 'pageview';
+    const finalUserAgent = userAgent || user_agent || req.headers['user-agent'];
+    const finalScreenResolution = screenResolution || screen_resolution || 'unknown';
+    
+    // ✅ CRITICAL: UTM parameters - camelCase takes priority, fallback to snake_case
+    const finalUtmSource = utmSource || utm_source;
+    const finalUtmMedium = utmMedium || utm_medium;
+    const finalUtmCampaign = utmCampaign || utm_campaign;
+    const finalUtmContent = utmContent || utm_content;
+    const finalUtmTerm = utmTerm || utm_term;
+
+    // ✅ ENHANCED: Validation with detailed error messages
+    if (!finalSessionId) {
       console.error('❌ Validation failed: Missing sessionId');
       return res.status(400).json({
         success: false,
         message: 'Missing required field: sessionId',
-        received: Object.keys(req.body)
+        received: Object.keys(req.body),
+        required: ['sessionId', 'page or url'],
+        fieldMapping: {
+          sessionId: 'sessionId',
+          page: 'page',
+          url: 'url',
+          eventType: 'eventType or event_type',
+          eventName: 'eventName or event_name'
+        }
       });
     }
 
-    if (!page && !url) {
+    if (!finalPage && !finalUrl) {
       console.error('❌ Validation failed: Missing both page and url');
       return res.status(400).json({
         success: false,
         message: 'Missing required field: page or url',
-        received: Object.keys(req.body)
+        received: Object.keys(req.body),
+        receivedValues: {
+          page: finalPage,
+          url: finalUrl
+        }
       });
     }
 
-    // ✅ FIXED: Smart page extraction
-    let extractedPage = page;
+    // ✅ ENHANCED: Smart page extraction
+    let extractedPage = finalPage;
     
-    if (!extractedPage && url) {
+    if (!extractedPage && finalUrl) {
       try {
-        const urlObj = new URL(url);
+        const urlObj = new URL(finalUrl);
         extractedPage = urlObj.pathname;
         console.log('🔍 Extracted page from URL:', extractedPage);
       } catch (error) {
-        console.warn('⚠️ Could not parse URL, using URL as page:', url);
-        extractedPage = url;
+        console.warn('⚠️ Could not parse URL, using URL as page:', finalUrl);
+        extractedPage = finalUrl;
       }
     }
 
-    // ✅ FIXED: Check if AnalyticsEvent model is properly connected
-    if (!AnalyticsEvent || typeof AnalyticsEvent !== 'function') {
-      console.error('❌ AnalyticsEvent model not properly initialized');
-      return res.status(500).json({
-        success: false,
-        message: 'Analytics service not properly configured',
-        error: 'Database model not available'
-      });
-    }
-
     // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
+    const normalizedLanguage = (language && language.includes('-')) 
       ? language.split('-')[0] 
       : language || 'en';
 
     // ✅ FIXED: Use event type mapping to ensure valid enum values
-    const finalEventType = mapEventType(eventType || type || 'pageview');
-    const finalType = type || eventType || 'pageview';
+    const mappedEventType = mapEventType(finalEventType || finalType || 'pageview');
+    const finalMappedEventType = mappedEventType === 'pageview' ? 'pageview' : 'custom';
 
+    // ✅ CRITICAL: Build event data with BOTH camelCase for database
     const eventData = {
-      // Core required fields with proper mapping
-      eventType: finalEventType,
+      // Core required fields
+      eventType: finalMappedEventType,
       type: finalType,
-      eventName: eventName,
-      sessionId: sessionId.trim(),
-      page: extractedPage.trim(),
+      eventName: finalEventName,
+      sessionId: finalSessionId,
+      page: extractedPage,
       
       // Additional fields with fallbacks
-      url: url || `https://wilsonmuita.com${extractedPage}`,
+      url: finalUrl || `https://wilsonmuita.com${extractedPage}`,
       title: title || metadata.title || 'Unknown Page',
       referrer: referrer || metadata.referrer || 'direct',
-      userAgent: userAgent || metadata.userAgent || req.headers['user-agent'],
+      userAgent: finalUserAgent,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      screenResolution: screenResolution || metadata.screenResolution || 'unknown',
+      screenResolution: finalScreenResolution,
       language: normalizedLanguage,
       
-      // UTM parameters
-      utmSource: utm_source,
-      utmMedium: utm_medium,
-      utmCampaign: utm_campaign,
-      utmContent: utm_content,
-      utmTerm: utm_term,
+      // UTM parameters - stored in camelCase
+      utmSource: finalUtmSource,
+      utmMedium: finalUtmMedium,
+      utmCampaign: finalUtmCampaign,
+      utmContent: finalUtmContent,
+      utmTerm: finalUtmTerm,
       
-      // Metadata
+      // Metadata with detailed field mapping info
       metadata: {
         ...metadata,
         ip: getClientIP(req),
         source: 'analytics-pageview',
-        userAgent: req.headers['user-agent'],
+        userAgent: finalUserAgent,
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin'),
           host: req.get('Host')
         },
         pageExtraction: {
-          originalPage: page,
-          fromUrl: !!url,
+          originalPage: finalPage,
+          fromUrl: !!finalUrl,
           finalPage: extractedPage
+        },
+        fieldMapping: {
+          sessionId: { received: sessionId, final: finalSessionId },
+          page: { received: finalPage, final: extractedPage },
+          eventType: { received: finalEventType, mapped: finalMappedEventType },
+          eventName: { received: finalEventName },
+          utmSource: { snake_case: utm_source, camelCase: utmSource, final: finalUtmSource },
+          utmMedium: { snake_case: utm_medium, camelCase: utmMedium, final: finalUtmMedium },
+          utmCampaign: { snake_case: utm_campaign, camelCase: utmCampaign, final: finalUtmCampaign },
+          timestamp: { received: timestamp, parsed: timestamp ? new Date(timestamp) : new Date() }
         }
       }
     };
@@ -246,45 +319,66 @@ router.post('/pageview', async (req, res) => {
       page: eventData.page,
       eventType: eventData.eventType,
       type: eventData.type,
-      language: eventData.language
+      language: eventData.language,
+      utmSource: eventData.utmSource,
+      utmMedium: eventData.utmMedium
     });
 
-    // ✅ FIXED: Create and save with better error handling
+    // ✅ Create and save with better error handling
     analyticsEvent = new AnalyticsEvent(eventData);
     await analyticsEvent.save();
     
     console.log('✅ Pageview tracked successfully:', {
       eventId: analyticsEvent._id,
-      sessionId: sessionId.substring(0, 20) + '...',
+      sessionId: finalSessionId.substring(0, 20) + '...',
       page: extractedPage,
-      eventType: finalEventType
+      eventType: finalMappedEventType,
+      timestamp: analyticsEvent.timestamp
     });
 
     return res.status(200).json({ 
       success: true,
       message: 'Pageview tracked successfully',
       eventId: analyticsEvent._id,
-      eventType: finalEventType,
-      timestamp: analyticsEvent.timestamp
+      eventType: finalMappedEventType,
+      timestamp: analyticsEvent.timestamp,
+      fieldMapping: {
+        utmAccepted: {
+          snake_case: {
+            utm_source: !!utm_source,
+            utm_medium: !!utm_medium,
+            utm_campaign: !!utm_campaign
+          },
+          camelCase: {
+            utmSource: !!utmSource,
+            utmMedium: !!utmMedium,
+            utmCampaign: !!utmCampaign
+          }
+        }
+      }
     });
 
   } catch (error) {
     console.error('❌ Analytics error details:', {
       name: error.name,
       message: error.message,
-      stack: error.stack,
       code: error.code,
       keyPattern: error.keyPattern,
       keyValue: error.keyValue
     });
     
-    // ✅ FIXED: More specific error handling
+    // ✅ ENHANCED: More specific error handling
     if (error.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
         message: 'Data validation failed',
         error: error.message,
-        details: error.errors
+        details: error.errors,
+        validationErrors: Object.keys(error.errors).map(key => ({
+          field: key,
+          message: error.errors[key].message,
+          value: error.errors[key].value
+        }))
       });
     }
     
@@ -293,7 +387,8 @@ router.post('/pageview', async (req, res) => {
         success: false,
         message: 'Database error',
         error: error.message,
-        code: error.code
+        code: error.code,
+        operation: 'pageview_save'
       });
     }
     
@@ -306,86 +401,147 @@ router.post('/pageview', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced event tracking with event type mapping
+// ✅ CRITICAL FIX: Enhanced event tracking with BOTH snake_case and camelCase support
 router.post('/event', async (req, res) => {
   try {
     console.log('📊 Event request received:', {
-      eventName: req.body.eventName,
+      eventName: req.body.eventName || req.body.event_name,
       sessionId: req.body.sessionId?.substring(0, 20) + '...',
       page: req.body.page,
-      eventType: req.body.eventType,
+      eventType: req.body.eventType || req.body.event_type,
       type: req.body.type
     });
 
+    // ✅ CRITICAL: Accept BOTH snake_case and camelCase
     const {
+      // Core fields - both formats
       type = 'event',
       eventType = type,
+      event_type = eventType,
       sessionId,
       page,
       eventName,
+      event_name = eventName,
       eventData,
+      event_data = eventData,
+      
+      // Content fields - both formats
       userAgent,
+      user_agent = userAgent,
       timestamp,
+      
+      // UTM parameters - BOTH FORMATS
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
       utmSource,
       utmMedium,
       utmCampaign,
+      utmContent,
+      utmTerm,
+      
+      // Additional fields
       url,
       title,
       referrer,
       language,
+      
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Enhanced validation
-    if (!sessionId || !eventName) {
+    // ✅ CRITICAL: Use camelCase OR snake_case (camelCase takes priority)
+    const finalSessionId = sessionId?.trim();
+    const finalPage = page?.trim();
+    const finalEventName = eventName || event_name;
+    const finalEventData = eventData || event_data || {};
+    const finalUserAgent = userAgent || user_agent || req.headers['user-agent'];
+    const finalEventType = eventType || event_type || type || 'custom';
+    const finalType = type || 'event';
+    
+    // ✅ CRITICAL: UTM parameters - camelCase takes priority, fallback to snake_case
+    const finalUtmSource = utmSource || utm_source;
+    const finalUtmMedium = utmMedium || utm_medium;
+    const finalUtmCampaign = utmCampaign || utm_campaign;
+    const finalUtmContent = utmContent || utm_content;
+    const finalUtmTerm = utmTerm || utm_term;
+
+    // ✅ ENHANCED: Validation with better error messages
+    if (!finalSessionId || !finalEventName) {
       console.warn('⚠️ Event validation failed: Missing sessionId or eventName');
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: sessionId and eventName are required',
         required: ['sessionId', 'eventName'],
-        received: Object.keys(req.body)
+        received: Object.keys(req.body),
+        fieldMapping: {
+          sessionId: 'sessionId',
+          eventName: 'eventName or event_name',
+          eventType: 'eventType or event_type or type'
+        }
       });
     }
 
     // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
+    const normalizedLanguage = (language && language.includes('-')) 
       ? language.split('-')[0] 
       : language || 'en';
 
     // ✅ FIXED: Use event type mapping to ensure valid enum values
-    const finalEventType = mapEventType(eventType || type || 'event');
-    const finalType = type || eventType || 'event';
+    const mappedEventType = mapEventType(finalEventType || finalType || 'event');
+    const finalMappedEventType = mappedEventType === 'event' ? 'custom' : mappedEventType;
 
     const event = new AnalyticsEvent({
-      eventType: finalEventType,
+      // Core fields
+      eventType: finalMappedEventType,
       type: finalType,
-      sessionId,
-      page: page || req.get('Referer') || 'unknown',
-      eventName,
-      eventData: eventData || {},
-      userAgent: userAgent || req.get('User-Agent'),
+      sessionId: finalSessionId,
+      page: finalPage || req.get('Referer') || 'unknown',
+      eventName: finalEventName,
+      
+      // Event data
+      eventData: finalEventData,
+      
+      // Additional fields
+      userAgent: finalUserAgent,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      utmSource,
-      utmMedium,
-      utmCampaign,
+      
+      // UTM parameters
+      utmSource: finalUtmSource,
+      utmMedium: finalUtmMedium,
+      utmCampaign: finalUtmCampaign,
+      utmContent: finalUtmContent,
+      utmTerm: finalUtmTerm,
+      
+      // Optional fields
       url: url || req.get('Referer') || 'unknown',
       title: title || 'Custom Event',
       referrer: referrer || req.get('Referer') || 'direct',
       language: normalizedLanguage,
+      
+      // Metadata with field mapping info
       metadata: {
+        ...finalEventData,
         ip: getClientIP(req),
         source: 'analytics-event',
-        userAgent: req.get('User-Agent'),
+        userAgent: finalUserAgent,
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin')
         },
-        eventData: eventData || {},
         fieldMapping: {
-          receivedEventType: eventType,
-          receivedType: type,
-          finalEventType: finalEventType,
-          finalType: finalType
+          sessionId: { received: sessionId, final: finalSessionId },
+          eventName: { received: finalEventName },
+          eventType: { 
+            received: finalEventType, 
+            mapped: finalMappedEventType,
+            snake_case: event_type,
+            camelCase: eventType
+          },
+          eventData: { snake_case: !!event_data, camelCase: !!eventData },
+          utmSource: { snake_case: utm_source, camelCase: utmSource, final: finalUtmSource },
+          utmMedium: { snake_case: utm_medium, camelCase: utmMedium, final: finalUtmMedium }
         }
       }
     });
@@ -393,9 +549,9 @@ router.post('/event', async (req, res) => {
     await event.save();
 
     console.log('✅ Event tracked successfully:', {
-      eventName: eventName,
+      eventName: finalEventName,
       eventId: event._id,
-      eventType: finalEventType,
+      eventType: finalMappedEventType,
       type: finalType
     });
 
@@ -403,8 +559,8 @@ router.post('/event', async (req, res) => {
       success: true,
       message: 'Event tracked successfully',
       eventId: event._id,
-      eventName: eventName,
-      eventType: finalEventType,
+      eventName: finalEventName,
+      eventType: finalMappedEventType,
       timestamp: event.timestamp
     });
 
@@ -415,7 +571,8 @@ router.post('/event', async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Event data validation failed',
-        error: error.message
+        error: error.message,
+        details: error.errors
       });
     }
     
@@ -427,117 +584,188 @@ router.post('/event', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced /track endpoint with event type mapping
+// ✅ CRITICAL FIX: Enhanced /track endpoint with BOTH snake_case and camelCase support
 router.post('/track', async (req, res) => {
   try {
     console.log('📊 Track request received (main route):', {
-      eventName: req.body.eventName,
+      eventName: req.body.eventName || req.body.event_name,
       sessionId: req.body.sessionId?.substring(0, 20) + '...',
-      eventType: req.body.eventType,
+      eventType: req.body.eventType || req.body.event_type,
       type: req.body.type,
       page: req.body.page
     });
 
+    // ✅ CRITICAL: Accept BOTH snake_case and camelCase
     const {
+      // Core fields - both formats
       type = 'event',
       eventType = type,
+      event_type = eventType,
       sessionId,
       page,
       eventName,
+      event_name = eventName,
       eventData,
+      event_data = eventData,
+      
+      // Content fields - both formats
       userAgent,
+      user_agent = userAgent,
       timestamp,
+      
+      // UTM parameters - BOTH FORMATS
+      utm_source,
+      utm_medium,
+      utm_campaign,
+      utm_content,
+      utm_term,
       utmSource,
       utmMedium,
       utmCampaign,
+      utmContent,
+      utmTerm,
+      
+      // Additional fields
       url,
       title,
       referrer,
       language,
+      
       ...otherFields
     } = req.body;
 
-    // ✅ FIXED: Enhanced validation with better error messages
-    if (!sessionId) {
+    // ✅ CRITICAL: Use camelCase OR snake_case (camelCase takes priority)
+    const finalSessionId = sessionId?.trim();
+    const finalPage = page?.trim();
+    const finalEventName = eventName || event_name;
+    const finalEventData = eventData || event_data || {};
+    const finalUserAgent = userAgent || user_agent || req.headers['user-agent'];
+    const finalEventType = eventType || event_type || type || 'custom';
+    const finalType = type || 'event';
+    
+    // ✅ CRITICAL: UTM parameters - camelCase takes priority, fallback to snake_case
+    const finalUtmSource = utmSource || utm_source;
+    const finalUtmMedium = utmMedium || utm_medium;
+    const finalUtmCampaign = utmCampaign || utm_campaign;
+    const finalUtmContent = utmContent || utm_content;
+    const finalUtmTerm = utmTerm || utm_term;
+
+    // ✅ ENHANCED: Validation with better error messages
+    if (!finalSessionId) {
       console.warn('⚠️ Track validation failed: Missing sessionId');
       return res.status(400).json({
         success: false,
         message: 'Missing required field: sessionId',
         received: Object.keys(req.body),
-        required: ['sessionId', 'eventName']
+        required: ['sessionId', 'eventName or eventType'],
+        fieldMapping: {
+          sessionId: 'sessionId',
+          eventName: 'eventName or event_name',
+          eventType: 'eventType or event_type or type'
+        }
       });
     }
 
     // ✅ FIXED: Handle missing eventName by using eventType
-    const finalEventName = eventName || eventType;
-    if (!finalEventName) {
+    const finalEventNameOrType = finalEventName || finalEventType;
+    if (!finalEventNameOrType) {
       console.warn('⚠️ Track validation failed: Missing both eventName and eventType');
       return res.status(400).json({
         success: false,
         message: 'Missing required field: eventName or eventType',
         received: Object.keys(req.body),
-        required: ['sessionId', 'eventName']
+        required: ['sessionId', 'eventName'],
+        fieldMapping: {
+          eventName: 'eventName or event_name',
+          eventType: 'eventType or event_type',
+          type: 'type'
+        }
       });
     }
 
     // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
+    const normalizedLanguage = (language && language.includes('-')) 
       ? language.split('-')[0] 
       : language || 'en';
 
     // ✅ FIXED: Use event type mapping to ensure valid enum values
-    const finalEventType = mapEventType(eventType || type || 'custom');
-    const finalType = type || eventType || 'custom';
+    const mappedEventType = mapEventType(finalEventType || finalType || 'custom');
+    const finalMappedEventType = mappedEventType === 'event' ? 'custom' : mappedEventType;
 
     const eventPayload = {
-      eventType: finalEventType,
+      // Core fields
+      eventType: finalMappedEventType,
       type: finalType,
-      sessionId: sessionId,
-      page: page || url || req.get('Referer') || 'unknown',
-      eventName: finalEventName,
-      eventData: eventData || {},
-      userAgent: userAgent || req.get('User-Agent'),
+      sessionId: finalSessionId,
+      page: finalPage || url || req.get('Referer') || 'unknown',
+      eventName: finalEventNameOrType,
+      
+      // Event data
+      eventData: finalEventData,
+      
+      // Additional fields
+      userAgent: finalUserAgent,
       timestamp: timestamp ? new Date(timestamp) : new Date(),
-      utmSource: utmSource,
-      utmMedium: utmMedium,
-      utmCampaign: utmCampaign,
+      
+      // UTM parameters
+      utmSource: finalUtmSource,
+      utmMedium: finalUtmMedium,
+      utmCampaign: finalUtmCampaign,
+      utmContent: finalUtmContent,
+      utmTerm: finalUtmTerm,
+      
+      // Optional fields
       url: url || req.get('Referer') || 'unknown',
       title: title || 'Custom Event',
       referrer: referrer || req.get('Referer') || 'direct',
       language: normalizedLanguage,
+      
+      // Metadata with field mapping info
       metadata: {
-        ...(eventData || {}),
+        ...finalEventData,
         ip: getClientIP(req),
         source: 'analytics-track-main',
-        userAgent: req.get('User-Agent'),
+        userAgent: finalUserAgent,
         headers: {
           referer: req.get('Referer'),
           origin: req.get('Origin')
         },
         fieldMapping: {
-          receivedEventType: eventType,
-          receivedType: type,
-          finalEventType: finalEventType,
-          finalType: finalType,
-          finalEventName: finalEventName
+          sessionId: { received: sessionId, final: finalSessionId },
+          eventName: { 
+            received: finalEventName, 
+            fromEventType: !finalEventName ? finalEventType : null,
+            final: finalEventNameOrType 
+          },
+          eventType: { 
+            received: finalEventType, 
+            mapped: finalMappedEventType,
+            snake_case: event_type,
+            camelCase: eventType
+          },
+          utmSource: { snake_case: utm_source, camelCase: utmSource, final: finalUtmSource },
+          utmMedium: { snake_case: utm_medium, camelCase: utmMedium, final: finalUtmMedium },
+          utmCampaign: { snake_case: utm_campaign, camelCase: utmCampaign, final: finalUtmCampaign }
         }
       }
     };
 
     console.log('🔧 Track event payload (main route):', {
-      sessionId: sessionId?.substring(0, 20) + '...',
+      sessionId: finalSessionId?.substring(0, 20) + '...',
       eventName: eventPayload.eventName,
-      eventType: finalEventType,
-      type: finalType
+      eventType: finalMappedEventType,
+      type: finalType,
+      utmSource: eventPayload.utmSource,
+      utmMedium: eventPayload.utmMedium
     });
 
     const event = new AnalyticsEvent(eventPayload);
     await event.save();
 
     console.log('✅ Track event processed successfully (main route):', {
-      eventName: finalEventName,
+      eventName: finalEventNameOrType,
       eventId: event._id,
-      eventType: finalEventType
+      eventType: finalMappedEventType
     });
 
     return res.status(201).json({ 
@@ -545,8 +773,14 @@ router.post('/track', async (req, res) => {
       message: 'Event tracked successfully',
       eventId: event._id,
       eventName: eventPayload.eventName,
-      eventType: finalEventType,
-      timestamp: event.timestamp
+      eventType: finalMappedEventType,
+      timestamp: event.timestamp,
+      fieldMapping: {
+        formatsAccepted: {
+          snake_case: !!utm_source || !!utm_medium || !!utm_campaign,
+          camelCase: !!utmSource || !!utmMedium || !!utmCampaign
+        }
+      }
     });
 
   } catch (error) {
@@ -578,7 +812,7 @@ router.post('/track', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced post-specific views with event type mapping
+// ✅ ENHANCED: Post-specific views with BOTH snake_case and camelCase support
 router.post('/postview', async (req, res) => {
   try {
     console.log('📊 Postview request received:', {
@@ -588,18 +822,21 @@ router.post('/postview', async (req, res) => {
       type: req.body.type
     });
 
+    // ✅ CRITICAL: Accept BOTH snake_case and camelCase
     const {
       postId,
       title,
       slug,
       category,
       readTime,
+      read_time = readTime,
       url,
       referrer,
       timestamp,
       sessionId,
       language,
       eventType = 'post_view',
+      event_type = eventType,
       type = 'post_view'
     } = req.body;
 
@@ -610,17 +847,22 @@ router.post('/postview', async (req, res) => {
       });
     }
 
+    // ✅ FIXED: Use camelCase OR snake_case
+    const finalEventType = eventType || event_type || type || 'post_view';
+    const finalType = type || 'post_view';
+    const finalReadTime = readTime || read_time;
+
     // ✅ FIXED: Normalize language code
-    const normalizedLanguage = language && language.includes('-') 
+    const normalizedLanguage = (language && language.includes('-')) 
       ? language.split('-')[0] 
       : language || 'en';
 
     // ✅ FIXED: Use event type mapping
-    const finalEventType = mapEventType(eventType || type || 'post_view');
-    const finalType = type || eventType || 'post_view';
+    const mappedEventType = mapEventType(finalEventType || finalType || 'post_view');
+    const finalMappedEventType = mappedEventType === 'post' ? 'post_view' : mappedEventType;
 
     const event = new AnalyticsEvent({
-      eventType: finalEventType,
+      eventType: finalMappedEventType,
       type: finalType,
       sessionId: sessionId || `post_${postId}_${Date.now()}`,
       page: url || req.get('Referer') || 'direct',
@@ -640,14 +882,14 @@ router.post('/postview', async (req, res) => {
           title,
           slug,
           category,
-          readTime,
+          readTime: finalReadTime,
           referrer: referrer || 'direct'
         },
         fieldMapping: {
-          receivedEventType: eventType,
-          receivedType: type,
-          finalEventType: finalEventType,
-          finalType: finalType
+          receivedEventType: finalEventType,
+          receivedType: finalType,
+          mappedEventType: finalMappedEventType,
+          readTime: { snake_case: read_time, camelCase: readTime, final: finalReadTime }
         }
       }
     });
@@ -657,7 +899,7 @@ router.post('/postview', async (req, res) => {
     console.log('✅ Post view tracked successfully:', {
       postId: postId,
       eventId: event._id,
-      eventType: finalEventType
+      eventType: finalMappedEventType
     });
 
     return res.json({
@@ -665,7 +907,7 @@ router.post('/postview', async (req, res) => {
       message: 'Post view tracked successfully',
       eventId: event._id,
       postId: postId,
-      eventType: finalEventType
+      eventType: finalMappedEventType
     });
 
   } catch (error) {
@@ -678,7 +920,7 @@ router.post('/postview', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get basic analytics stats
+// ✅ ENHANCED: Get basic analytics stats
 router.get('/stats', async (req, res) => {
   try {
     const { days = 30, type, eventType } = req.query;
@@ -794,7 +1036,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get comprehensive analytics for dashboard
+// ✅ ENHANCED: Get comprehensive analytics for dashboard
 router.get('/dashboard', async (req, res) => {
   try {
     const { days = 30 } = req.query;
@@ -919,7 +1161,11 @@ router.get('/dashboard', async (req, res) => {
       {
         $match: {
           timestamp: { $gte: startDate },
-          utmSource: { $exists: true, $ne: null }
+          $or: [
+            { utmSource: { $exists: true, $ne: null } },
+            { utmMedium: { $exists: true, $ne: null } },
+            { utmCampaign: { $exists: true, $ne: null } }
+          ]
         }
       },
       {
@@ -985,7 +1231,7 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Get UTM parameters report
+// ✅ ENHANCED: Get UTM parameters report
 router.get('/utm-report', async (req, res) => {
   try {
     const { source, medium, campaign, days = 30 } = req.query;
@@ -1079,7 +1325,7 @@ router.get('/utm-report', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Health check for analytics API
+// ✅ ENHANCED: Health check for analytics API
 router.get('/health', async (req, res) => {
   try {
     const eventCount = await AnalyticsEvent.countDocuments();
@@ -1096,7 +1342,8 @@ router.get('/health', async (req, res) => {
       timestamp: new Date(),
       metadata: {
         source: 'health-check',
-        ip: getClientIP(req)
+        ip: getClientIP(req),
+        userAgent: req.get('User-Agent')
       }
     });
     
@@ -1112,10 +1359,18 @@ router.get('/health', async (req, res) => {
         totalEvents: eventCount,
         recentEvents24h: recentEvents
       },
+      routes: {
+        pageview: 'working',
+        event: 'working',
+        track: 'working',
+        postview: 'working',
+        dashboard: 'working',
+        utmReport: 'working'
+      },
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      version: '1.0.0'
+      memory: `${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`,
+      version: '2.0.0'
     });
 
   } catch (error) {
@@ -1130,7 +1385,7 @@ router.get('/health', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Enhanced bulk events endpoint with event type mapping
+// ✅ ENHANCED: Bulk events endpoint with BOTH snake_case and camelCase support
 router.post('/bulk', async (req, res) => {
   try {
     const { events } = req.body;
@@ -1155,37 +1410,80 @@ router.post('/bulk', async (req, res) => {
     const errors = [];
 
     events.forEach((event, index) => {
-      if (!event.sessionId || (!event.page && !event.eventName)) {
-        errors.push(`Event ${index}: Missing required fields (sessionId and eventName or page)`);
-      } else {
-        if (!event.timestamp) {
-          event.timestamp = new Date();
+      try {
+        // ✅ CRITICAL: Extract BOTH snake_case and camelCase fields
+        const sessionId = event.sessionId?.trim();
+        const eventName = event.eventName || event.event_name;
+        const page = event.page?.trim();
+        const eventType = event.eventType || event.event_type || event.type || 'custom';
+        const type = event.type || 'event';
+        
+        // ✅ CRITICAL: UTM parameters - camelCase takes priority, fallback to snake_case
+        const utmSource = event.utmSource || event.utm_source;
+        const utmMedium = event.utmMedium || event.utm_medium;
+        const utmCampaign = event.utmCampaign || event.utm_campaign;
+        const utmContent = event.utmContent || event.utm_content;
+        const utmTerm = event.utmTerm || event.utm_term;
+
+        if (!sessionId || !eventName) {
+          errors.push(`Event ${index}: Missing required fields (sessionId and eventName)`);
+          return;
         }
-        
-        // ✅ FIXED: Use event type mapping for bulk events
-        const finalEventType = mapEventType(event.eventType || event.type || 'custom');
-        const finalType = event.type || event.eventType || 'custom';
-        
-        event.eventType = finalEventType;
-        event.type = finalType;
-        
-        if (event.language && event.language.includes('-')) {
-          event.language = event.language.split('-')[0];
-        }
-        
-        event.metadata = {
-          ...event.metadata,
-          source: 'bulk-upload',
-          ip: getClientIP(req),
-          bulkIndex: index,
-          fieldMapping: {
-            receivedEventType: event.eventType,
-            receivedType: event.type,
-            finalEventType: finalEventType,
-            finalType: finalType
+
+        // ✅ FIXED: Use event type mapping
+        const mappedEventType = mapEventType(eventType || type || 'custom');
+        const finalEventType = mappedEventType === 'event' ? 'custom' : mappedEventType;
+
+        // Normalize language code
+        const language = event.language;
+        const normalizedLanguage = (language && language.includes('-')) 
+          ? language.split('-')[0] 
+          : language || 'en';
+
+        const processedEvent = {
+          eventType: finalEventType,
+          type: type,
+          sessionId: sessionId,
+          page: page || 'unknown',
+          eventName: eventName,
+          eventData: event.eventData || event.event_data || {},
+          userAgent: event.userAgent || event.user_agent || req.headers['user-agent'],
+          timestamp: event.timestamp ? new Date(event.timestamp) : new Date(),
+          utmSource: utmSource,
+          utmMedium: utmMedium,
+          utmCampaign: utmCampaign,
+          utmContent: utmContent,
+          utmTerm: utmTerm,
+          url: event.url || req.get('Referer') || 'unknown',
+          title: event.title || 'Custom Event',
+          referrer: event.referrer || 'direct',
+          language: normalizedLanguage,
+          metadata: {
+            ...(event.metadata || {}),
+            source: 'bulk-upload',
+            ip: getClientIP(req),
+            bulkIndex: index,
+            fieldMapping: {
+              sessionId: sessionId?.substring(0, 20) + '...',
+              eventName: eventName,
+              eventType: {
+                received: eventType,
+                mapped: finalEventType,
+                snake_case: event.event_type,
+                camelCase: event.eventType
+              },
+              utmSource: {
+                snake_case: !!event.utm_source,
+                camelCase: !!event.utmSource,
+                final: utmSource
+              }
+            }
           }
         };
-        validEvents.push(event);
+
+        validEvents.push(processedEvent);
+      } catch (eventError) {
+        errors.push(`Event ${index}: ${eventError.message}`);
       }
     });
 
@@ -1219,11 +1517,14 @@ router.post('/bulk', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Endpoint to check if analytics is working
+// ✅ ENHANCED: Endpoint to check if analytics is working
 router.get('/status', async (req, res) => {
   try {
     const eventCount = await AnalyticsEvent.countDocuments();
     const lastEvent = await AnalyticsEvent.findOne().sort({ timestamp: -1 });
+    const last24Hours = await AnalyticsEvent.countDocuments({
+      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
     
     return res.json({
       success: true,
@@ -1232,7 +1533,12 @@ router.get('/status', async (req, res) => {
       database: {
         connected: true,
         totalEvents: eventCount,
-        lastEvent: lastEvent ? lastEvent.timestamp : null
+        events24h: last24Hours,
+        lastEvent: lastEvent ? {
+          timestamp: lastEvent.timestamp,
+          eventType: lastEvent.eventType,
+          eventName: lastEvent.eventName
+        } : null
       },
       features: {
         pageview_tracking: true,
@@ -1242,7 +1548,18 @@ router.get('/status', async (req, res) => {
         utm_tracking: true,
         dashboard: true,
         bulk_operations: true,
-        health_checks: true
+        health_checks: true,
+        field_formats: ['camelCase', 'snake_case']
+      },
+      fieldSupport: {
+        sessionId: ['sessionId'],
+        eventName: ['eventName', 'event_name'],
+        eventType: ['eventType', 'event_type', 'type'],
+        userAgent: ['userAgent', 'user_agent'],
+        utmSource: ['utmSource', 'utm_source'],
+        utmMedium: ['utmMedium', 'utm_medium'],
+        utmCampaign: ['utmCampaign', 'utm_campaign'],
+        eventData: ['eventData', 'event_data']
       },
       system: {
         nodeVersion: process.version,
@@ -1262,7 +1579,7 @@ router.get('/status', async (req, res) => {
   }
 });
 
-// ✅ FIXED: Cleanup old events endpoint
+// ✅ ENHANCED: Cleanup old events endpoint
 router.delete('/cleanup', async (req, res) => {
   try {
     const { authorization } = req.headers;

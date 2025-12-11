@@ -1,18 +1,113 @@
 // frontend/src/utils/analyticsTracker.js
+// ✅ UPDATED: Enhanced analytics tracker with robust error handling
+// ✅ FIXED: 400 Bad Request issues with proper payload validation
 
-// ✅ UPDATED: API base URL for deployed backend
 const API_BASE_URL = 'https://api.wilsonmuita.com';
 
 // Session management
 let currentSessionId = null;
 let isInitialized = false;
 let pendingEvents = [];
+let retryQueue = [];
 
-// ✅ NEW: Language code normalization helper
+// ✅ NEW: Request queue for managing concurrent requests
+const requestQueue = {
+  queue: [],
+  processing: false,
+  
+  async add(requestFn) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ requestFn, resolve, reject });
+      if (!this.processing) {
+        this.processQueue();
+      }
+    });
+  },
+  
+  async processQueue() {
+    if (this.queue.length === 0) {
+      this.processing = false;
+      return;
+    }
+    
+    this.processing = true;
+    const { requestFn, resolve, reject } = this.queue.shift();
+    
+    try {
+      const result = await requestFn();
+      resolve(result);
+    } catch (error) {
+      reject(error);
+    }
+    
+    // Process next item after a small delay to prevent rate limiting
+    setTimeout(() => this.processQueue(), 100);
+  }
+};
+
+// ✅ NEW: Enhanced language code normalization
 export const normalizeLanguageCode = (lang) => {
-  if (!lang) return 'en';
-  // Convert 'en-US' to 'en', 'fr-FR' to 'fr', etc.
-  return lang.split('-')[0];
+  if (!lang || typeof lang !== 'string') return 'en';
+  
+  // Convert to lowercase and split
+  const code = lang.toLowerCase().split('-')[0];
+  
+  // Map common language codes
+  const languageMap = {
+    'en': 'en',
+    'es': 'es',
+    'fr': 'fr',
+    'de': 'de',
+    'it': 'it',
+    'pt': 'pt',
+    'ru': 'ru',
+    'ja': 'ja',
+    'ko': 'ko',
+    'zh': 'zh',
+    'ar': 'ar',
+    'hi': 'hi',
+    'sw': 'sw'
+  };
+  
+  return languageMap[code] || 'en';
+};
+
+// ✅ NEW: Validate payload structure before sending
+const validateAnalyticsPayload = (endpoint, data) => {
+  const errors = [];
+  
+  // Common required fields for all endpoints
+  if (!data.sessionId) {
+    errors.push('sessionId is required');
+  }
+  
+  // Endpoint-specific validation
+  switch (endpoint) {
+    case '/api/analytics/pageview':
+      if (!data.page) errors.push('page is required for pageview');
+      if (!data.eventName) errors.push('eventName is required for pageview');
+      break;
+      
+    case '/api/analytics/event':
+    case '/api/analytics/track':
+      if (!data.eventName) errors.push('eventName is required for event tracking');
+      if (!data.eventType) errors.push('eventType is required for event tracking');
+      break;
+  }
+  
+  // Validate data types
+  if (data.timestamp && typeof data.timestamp !== 'string') {
+    errors.push('timestamp must be a string');
+  }
+  
+  if (data.language && typeof data.language !== 'string') {
+    errors.push('language must be a string');
+  }
+  
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
 };
 
 // Initialize analytics with enhanced error handling
@@ -31,7 +126,7 @@ export const initAnalyticsTracking = () => {
       return;
     }
 
-    // Initialize session first - CRITICAL FIX
+    // Initialize session first
     currentSessionId = getSessionId();
     
     // Set up page visibility tracking
@@ -43,11 +138,11 @@ export const initAnalyticsTracking = () => {
     // Initialize UTM tracking
     initUTMTracking();
     
-    // ✅ REMOVED: Don't track initial page view here - let App.js handle it
-    // This prevents duplicate pageview tracking
-
     // Process any pending events
     processPendingEvents();
+
+    // ✅ NEW: Set up automatic retry for failed events
+    setupAutomaticRetry();
 
     isInitialized = true;
     console.log('📊 Analytics tracking initialized successfully');
@@ -68,7 +163,7 @@ const getConsentStatus = () => {
   }
 };
 
-// FIXED: Improved session management with proper sessionId generation
+// ✅ ENHANCED: Improved session management
 const getSessionId = () => {
   try {
     let sessionId = localStorage.getItem('analytics_session_id');
@@ -83,9 +178,14 @@ const getSessionId = () => {
       localStorage.setItem('analytics_session_id', sessionId);
       localStorage.setItem('analytics_session_timestamp', now.toString());
       
-      console.log('🆕 New analytics session created:', sessionId);
-    } else {
-      console.log('🔁 Continuing existing session:', sessionId);
+      console.log('🆕 New analytics session created:', sessionId.substring(0, 20) + '...');
+      
+      // Track session start
+      trackEvent({
+        eventName: 'session_start',
+        eventType: 'session',
+        eventData: { sessionId: sessionId.substring(0, 20) + '...' }
+      });
     }
     
     return sessionId;
@@ -98,11 +198,8 @@ const getSessionId = () => {
   }
 };
 
-// ✅ CRITICAL FIX: Enhanced page view tracking with better error handling
+// ✅ CRITICAL FIX: Enhanced page view tracking with payload validation
 export const trackPageView = async (page) => {
-  let payload;
-  let response;
-
   try {
     if (!getConsentStatus()) {
       console.log('🔕 Page view tracking skipped: No consent');
@@ -119,309 +216,370 @@ export const trackPageView = async (page) => {
 
     const utmParams = getUTMParams();
 
-    payload = {
+    const payload = {
       type: 'pageview',
-      eventType: 'pageview', // ✅ CRITICAL FIX: Added eventType for backend compatibility
+      eventType: 'pageview',
       eventName: 'page_view',
       sessionId: sessionId,
       page: pagePath,
       title: document.title || 'Unknown Page',
       url: window.location.href,
       referrer: document.referrer || 'direct',
-      userAgent: navigator.userAgent,
+      userAgent: navigator.userAgent.substring(0, 200), // Limit length
       timestamp: new Date().toISOString(),
       screenResolution: window.screen ? `${window.screen.width}x${window.screen.height}` : 'unknown',
-      // ✅ FIXED: Normalize language code before sending
       language: normalizeLanguageCode(navigator.language || 'en'),
-      utm_source: utmParams.utm_source,
-      utm_medium: utmParams.utm_medium,
-      utm_campaign: utmParams.utm_campaign,
-      utm_content: utmParams.utm_content,
-      utm_term: utmParams.utm_term
+      utm_source: utmParams.utm_source || null,
+      utm_medium: utmParams.utm_medium || null,
+      utm_campaign: utmParams.utm_campaign || null,
+      utm_content: utmParams.utm_content || null,
+      utm_term: utmParams.utm_term || null,
+      // ✅ NEW: Additional context for debugging
+      _debug: {
+        hostname: window.location.hostname,
+        protocol: window.location.protocol,
+        localTime: new Date().toString(),
+        timezoneOffset: new Date().getTimezoneOffset()
+      }
     };
 
     console.log('📊 Tracking page view:', {
       sessionId: sessionId.substring(0, 20) + '...',
       page: pagePath,
       language: payload.language,
-      eventType: payload.eventType,
-      backend: API_BASE_URL
+      eventType: payload.eventType
     });
+
+    // Validate payload before sending
+    const validation = validateAnalyticsPayload('/api/analytics/pageview', payload);
+    if (!validation.isValid) {
+      console.error('❌ Page view payload validation failed:', validation.errors);
+      return {
+        success: false,
+        message: 'Payload validation failed',
+        errors: validation.errors
+      };
+    }
+
+    // Use request queue to prevent concurrent requests
+    const result = await requestQueue.add(() => 
+      sendAnalyticsData('/api/analytics/pageview', payload)
+    );
     
-    // Use the enhanced sendAnalyticsData function for consistency
-    const result = await sendAnalyticsData('/api/analytics/pageview', payload);
     return result;
     
   } catch (error) {
-    console.error('❌ Page view tracking failed:', {
-      error: error.message,
-      type: error.name,
-      payload: payload ? {
-        sessionId: payload.sessionId?.substring(0, 20) + '...',
-        page: payload.page,
-        language: payload.language,
-        eventType: payload.eventType
-      } : 'No payload'
-    });
+    console.error('❌ Page view tracking failed:', error.message);
     
     // Store for retry later
-    if (payload) {
-      storeOfflineEvent({ endpoint: '/api/analytics/pageview', data: payload });
-    }
+    storeOfflineEvent({
+      endpoint: '/api/analytics/pageview',
+      data: {
+        sessionId: currentSessionId || getSessionId(),
+        page: page || window.location.pathname,
+        timestamp: new Date().toISOString()
+      }
+    });
     
     return {
       success: false,
-      message: 'Network error',
+      message: 'Page view tracking failed',
       error: error.message
     };
   }
 };
 
-// ✅ CRITICAL FIX: Enhanced sendAnalyticsData with robust JSON parsing and error handling
+// ✅ ENHANCED: Robust sendAnalyticsData with comprehensive error handling
 const sendAnalyticsData = async (endpoint, data) => {
-  let response;
+  const startTime = Date.now();
   
   try {
-    // CRITICAL FIX: Validate required fields before sending
-    if (endpoint === '/api/analytics/pageview') {
-      if (!data.sessionId || !data.page || !data.eventName) {
-        console.error('❌ Analytics validation failed: Missing required fields for pageview', {
-          sessionId: data.sessionId,
-          page: data.page,
-          eventName: data.eventName
-        });
-        return { 
-          success: false, 
-          message: 'Missing required fields: sessionId, page, and eventName are required' 
-        };
-      }
+    // ✅ CRITICAL: Remove any undefined or null values that might cause 400 errors
+    const cleanData = cleanPayload(data);
+    
+    // Validate payload
+    const validation = validateAnalyticsPayload(endpoint, cleanData);
+    if (!validation.isValid) {
+      throw new Error(`Payload validation failed: ${validation.errors.join(', ')}`);
     }
 
-    // Validate required fields for event tracking
-    if (endpoint === '/api/analytics/event' || endpoint === '/api/analytics/track') {
-      if (!data.sessionId || !data.eventName) {
-        console.error('❌ Analytics validation failed: Missing sessionId or eventName for event', data);
-        return { 
-          success: false, 
-          message: 'Missing required fields: sessionId and eventName are required' 
-        };
-      }
-      
-      // ✅ CRITICAL FIX: Ensure eventType is present for track endpoint
-      if (endpoint === '/api/analytics/track' && !data.eventType) {
-        console.warn('⚠️ Analytics track endpoint: eventType missing, using type as fallback');
-        data.eventType = data.type || 'custom';
-      }
-    }
-
-    // Queue event if analytics not initialized yet
-    if (!isInitialized && endpoint !== '/api/analytics/pageview') {
-      pendingEvents.push({ endpoint, data });
-      console.log('⏳ Event queued (analytics not initialized):', data.eventName || data.type);
-      return { success: true, message: 'Event queued' };
-    }
-
-    console.log(`📊 Sending analytics to: ${API_BASE_URL}${endpoint}`, {
-      eventName: data.eventName,
-      eventType: data.eventType,
-      sessionId: data.sessionId?.substring(0, 10) + '...',
-      page: data.page
+    console.log(`📊 Sending analytics to ${endpoint}:`, {
+      eventName: cleanData.eventName,
+      eventType: cleanData.eventType,
+      sessionId: cleanData.sessionId?.substring(0, 10) + '...',
+      page: cleanData.page,
+      timestamp: cleanData.timestamp
     });
 
-    // ✅ ENHANCED: Add timeout to prevent hanging requests
+    // Add timeout to prevent hanging requests
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        // ✅ NEW: Add request ID for debugging
+        'X-Request-ID': `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        'X-Analytics-Version': '2.0.0'
       },
-      body: JSON.stringify(data),
-      signal: controller.signal
+      body: JSON.stringify(cleanData),
+      signal: controller.signal,
+      mode: 'cors',
+      credentials: 'omit' // Don't send cookies to prevent CORS issues
     });
 
     clearTimeout(timeoutId);
-
-    // ✅ CRITICAL FIX: Handle response as text first to avoid JSON parsing errors
+    
+    const responseTime = Date.now() - startTime;
+    
+    // Handle response as text first to avoid JSON parsing errors
     const responseText = await response.text();
     
-    console.log(`📊 Analytics response for ${endpoint}:`, {
+    console.log(`📊 Analytics response (${responseTime}ms):`, {
       status: response.status,
       statusText: response.statusText,
-      body: responseText || '[EMPTY RESPONSE]'
+      endpoint: endpoint,
+      responseLength: responseText.length
     });
     
-    // ✅ CRITICAL FIX: Handle non-200 responses first
+    // Handle non-200 responses
     if (!response.ok) {
-      console.error('❌ Analytics API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        endpoint: endpoint,
-        response: responseText
-      });
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      let errorData = null;
       
-      // Store for retry if it's a server error
-      if (response.status >= 500) {
-        storeOfflineEvent({ endpoint, data });
+      try {
+        if (responseText) {
+          errorData = JSON.parse(responseText);
+          errorMessage = errorData.message || errorMessage;
+        }
+      } catch {
+        errorData = { raw: responseText.substring(0, 200) };
       }
       
-      // Return structured error - don't try to parse as JSON
+      const error = new Error(errorMessage);
+      error.status = response.status;
+      error.responseData = errorData;
+      
+      // Handle specific status codes
+      switch (response.status) {
+        case 400:
+          console.error('❌ Bad Request (400):', {
+            endpoint,
+            payload: cleanData,
+            response: errorData
+          });
+          // Don't retry 400 errors (client error)
+          break;
+          
+        case 401:
+        case 403:
+          console.error('❌ Authentication error:', response.status);
+          break;
+          
+        case 429:
+          console.warn('⚠️ Rate limited, will retry later');
+          storeOfflineEvent({ endpoint, data: cleanData });
+          break;
+          
+        case 500:
+        case 502:
+        case 503:
+        case 504:
+          console.warn('⚠️ Server error, will retry later');
+          storeOfflineEvent({ endpoint, data: cleanData });
+          break;
+          
+        default:
+          if (response.status >= 500) {
+            storeOfflineEvent({ endpoint, data: cleanData });
+          }
+      }
+      
+      throw error;
+    }
+
+    // Handle empty response
+    if (!responseText.trim()) {
       return {
-        success: false,
-        message: `HTTP error: ${response.status}`,
-        status: response.status,
-        response: responseText
+        success: true,
+        message: 'Event tracked successfully (empty response)',
+        responseTime
       };
     }
 
-    // ✅ CRITICAL FIX: Handle empty response gracefully
-    if (!responseText || responseText.trim() === '') {
-      console.log('✅ Analytics request successful (empty response)');
-      return { 
-        success: true, 
-        message: 'Event tracked successfully',
-        emptyResponse: true 
-      };
-    }
-
-    // ✅ CRITICAL FIX: Safe JSON parsing with comprehensive error handling
+    // Parse JSON response
     try {
       const responseData = JSON.parse(responseText);
       
-      // Double check if response indicates success
-      if (response.ok) {
-        console.log('✅ Analytics Success:', responseData);
-        return responseData;
-      } else {
-        console.error('❌ Analytics API error response:', {
-          status: response.status,
-          endpoint: endpoint,
-          error: responseData
-        });
-        return {
-          success: false,
-          message: responseData.message || 'Analytics API error',
-          error: responseData.error,
-          status: response.status
-        };
+      if (responseData.success === false) {
+        throw new Error(responseData.message || 'Analytics API returned error');
       }
-    } catch (parseError) {
-      // ✅ CRITICAL FIX: Handle non-JSON responses gracefully
-      console.warn('⚠️ Analytics response not JSON, but request succeeded:', {
-        parseError: parseError.message,
-        responseText: responseText.substring(0, 100) + '...',
-        endpoint: endpoint,
-        status: response.status
-      });
       
-      // Even if not JSON, if status is 200, consider it successful
-      if (response.ok) {
-        return { 
-          success: true, 
-          message: 'Event tracked (non-JSON response)',
-          responseText: responseText 
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Invalid JSON response',
-          error: parseError.message,
-          responseText: responseText
-        };
-      }
+      return {
+        success: true,
+        ...responseData,
+        responseTime
+      };
+    } catch (parseError) {
+      // Non-JSON but successful response
+      return {
+        success: true,
+        message: 'Event tracked (non-JSON response)',
+        responseText: responseText.substring(0, 100),
+        responseTime
+      };
     }
 
   } catch (error) {
-    // ✅ ENHANCED: Better error classification
-    console.error('🌐 Network error in analytics request:', {
+    const responseTime = Date.now() - startTime;
+    
+    // Classify error type
+    const errorInfo = {
       error: error.message,
       errorType: error.name,
-      endpoint: endpoint,
-      backend: API_BASE_URL,
+      endpoint,
+      responseTime,
       isTimeout: error.name === 'AbortError',
-      isNetworkError: error.message.includes('Failed to fetch')
-    });
+      isNetworkError: error.message.includes('Failed to fetch') || error.message.includes('NetworkError'),
+      isValidationError: error.message.includes('validation')
+    };
     
-    // Store for retry if it's a network error
-    if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
-      console.warn('🌐 Network offline, storing event for retry');
+    if (error.name === 'AbortError') {
+      console.warn('⏱️ Request timeout:', endpoint);
+    } else if (error.isNetworkError) {
+      console.warn('🌐 Network error, storing for retry:', endpoint);
+      storeOfflineEvent({ endpoint, data });
+    } else {
+      console.error('❌ Analytics request failed:', errorInfo);
+    }
+    
+    // Store for retry if it's a network issue
+    if (error.isNetworkError || error.name === 'AbortError') {
       storeOfflineEvent({ endpoint, data });
     }
     
     return {
       success: false,
-      message: 'Network error',
-      error: error.message,
-      errorType: error.name
+      message: error.message,
+      errorType: error.name,
+      responseTime,
+      ...errorInfo
     };
   }
 };
 
-// ✅ CRITICAL FIX: Enhanced event tracking with better error handling
+// ✅ NEW: Clean payload by removing undefined/null values and trimming strings
+const cleanPayload = (data) => {
+  const cleaned = { ...data };
+  
+  // Remove undefined and null values
+  Object.keys(cleaned).forEach(key => {
+    if (cleaned[key] === undefined || cleaned[key] === null) {
+      delete cleaned[key];
+    }
+  });
+  
+  // Trim string values to prevent whitespace issues
+  Object.keys(cleaned).forEach(key => {
+    if (typeof cleaned[key] === 'string') {
+      cleaned[key] = cleaned[key].trim();
+      
+      // Limit string lengths for specific fields
+      if (key === 'userAgent' && cleaned[key].length > 500) {
+        cleaned[key] = cleaned[key].substring(0, 500);
+      }
+      if (key === 'referrer' && cleaned[key].length > 1000) {
+        cleaned[key] = cleaned[key].substring(0, 1000);
+      }
+      if (key === 'url' && cleaned[key].length > 2000) {
+        cleaned[key] = cleaned[key].substring(0, 2000);
+      }
+    }
+  });
+  
+  return cleaned;
+};
+
+// ✅ ENHANCED: Event tracking with better payload construction
 export const trackEvent = async (eventData) => {
   try {
-    // Check if analytics are enabled
     if (!getConsentStatus()) {
       console.log('🔕 Event tracking disabled: No user consent');
       return { success: true, message: 'Event tracking disabled: No consent' };
     }
 
-    // Validate event data
     if (!eventData || !eventData.eventName) {
       console.warn('⚠️ Event tracking skipped: Missing event name');
       return { success: false, message: 'Missing event name' };
     }
 
-    // Include UTM parameters in all events
     const utmParams = getUTMParams();
+    const sessionId = currentSessionId || getSessionId();
+    
+    // Validate session ID
+    if (!sessionId) {
+      console.warn('⚠️ Event tracking skipped: No session ID');
+      return { success: false, message: 'No session ID' };
+    }
 
-    // ✅ CRITICAL FIX: Extract eventType from eventData or use type as fallback
-    const eventType = eventData.eventType || eventData.type || 'custom';
-
-    const enhancedEventData = {
+    const enhancedEventData = cleanPayload({
       type: 'event',
-      eventType: eventType,
-      sessionId: currentSessionId || getSessionId(),
-      page: window.location.pathname,
+      eventType: eventData.eventType || eventData.type || 'custom',
+      eventName: eventData.eventName,
+      sessionId: sessionId,
+      page: window.location.pathname || '/',
       url: window.location.href,
       timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      // ✅ FIXED: Normalize language code for all events
+      userAgent: navigator.userAgent?.substring(0, 200) || 'unknown',
       language: normalizeLanguageCode(navigator.language || 'en'),
-      utm_source: utmParams.utm_source,
-      utm_medium: utmParams.utm_medium,
-      utm_campaign: utmParams.utm_campaign,
+      utm_source: utmParams.utm_source || null,
+      utm_medium: utmParams.utm_medium || null,
+      utm_campaign: utmParams.utm_campaign || null,
+      // Include any additional event data
+      ...eventData.eventData,
+      // Keep original eventData for backward compatibility
       ...eventData
-    };
+    });
+
+    // Remove duplicate fields
+    delete enhancedEventData.eventData;
 
     console.log('📈 Tracking event:', {
       eventName: enhancedEventData.eventName,
       eventType: enhancedEventData.eventType,
-      sessionId: enhancedEventData.sessionId?.substring(0, 10) + '...',
-      language: enhancedEventData.language
+      sessionId: enhancedEventData.sessionId?.substring(0, 10) + '...'
     });
 
-    // ✅ ENHANCED: Try multiple endpoints for better compatibility
-    let result;
-    
-    try {
-      // First try the main track endpoint
-      result = await sendAnalyticsData('/api/analytics/track', enhancedEventData);
-    } catch (error) {
-      console.warn('⚠️ Track endpoint failed, trying event endpoint:', error.message);
-      // Fallback to event endpoint
-      result = await sendAnalyticsData('/api/analytics/event', enhancedEventData);
-    }
+    // Use request queue to prevent concurrent requests
+    const result = await requestQueue.add(async () => {
+      try {
+        return await sendAnalyticsData('/api/analytics/track', enhancedEventData);
+      } catch (error) {
+        // Fallback to event endpoint
+        console.warn('⚠️ Track endpoint failed, trying event endpoint:', error.message);
+        return await sendAnalyticsData('/api/analytics/event', enhancedEventData);
+      }
+    });
     
     return result;
 
   } catch (error) {
-    console.error('❌ Event tracking failed:', {
-      error: error.message,
-      eventName: eventData?.eventName,
-      eventType: eventData?.eventType
-    });
+    console.error('❌ Event tracking failed:', error.message);
+    
+    // Store for retry
+    if (eventData) {
+      storeOfflineEvent({
+        endpoint: '/api/analytics/track',
+        data: {
+          sessionId: currentSessionId || getSessionId(),
+          eventName: eventData.eventName,
+          timestamp: new Date().toISOString(),
+          ...eventData
+        }
+      });
+    }
     
     return {
       success: false,
@@ -433,44 +591,84 @@ export const trackEvent = async (eventData) => {
 
 // ✅ NEW: Direct track function for API compatibility
 export const track = async (eventData) => {
-  // Ensure eventType is present for the track endpoint
-  const dataWithEventType = {
-    eventType: eventData.eventType || eventData.type || 'custom',
-    ...eventData
-  };
-  
-  return sendAnalyticsData('/api/analytics/track', dataWithEventType);
+  return trackEvent(eventData);
 };
 
-// ✅ ENHANCED: Store offline events for retry
+// ✅ ENHANCED: Store offline events with size limits
 const storeOfflineEvent = (eventData) => {
   try {
-    const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
+    const storageKey = 'analytics_offline_events';
+    const maxEvents = 100; // Maximum events to store
     
-    // Add timestamp and limit to 50 events to prevent storage issues
-    offlineEvents.push({
-      ...eventData,
-      offlineTimestamp: new Date().toISOString(),
-      retryCount: 0
-    });
-    
-    // Keep only the last 50 events
-    if (offlineEvents.length > 50) {
-      offlineEvents.splice(0, offlineEvents.length - 50);
+    let offlineEvents = [];
+    try {
+      const stored = localStorage.getItem(storageKey);
+      offlineEvents = stored ? JSON.parse(stored) : [];
+    } catch {
+      offlineEvents = [];
     }
     
-    localStorage.setItem('analytics_offline_events', JSON.stringify(offlineEvents));
-    console.log('💾 Event stored offline for retry. Total offline events:', offlineEvents.length);
+    // Add timestamp and retry count
+    const eventWithMetadata = {
+      ...eventData,
+      storedAt: new Date().toISOString(),
+      retryCount: 0,
+      id: `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    };
+    
+    offlineEvents.push(eventWithMetadata);
+    
+    // Keep only the last maxEvents
+    if (offlineEvents.length > maxEvents) {
+      offlineEvents = offlineEvents.slice(-maxEvents);
+    }
+    
+    localStorage.setItem(storageKey, JSON.stringify(offlineEvents));
+    console.log('💾 Event stored offline. Total:', offlineEvents.length);
+    
+    return eventWithMetadata.id;
     
   } catch (error) {
     console.warn('⚠️ Could not store event offline:', error);
+    return null;
   }
 };
 
-// ✅ NEW: Retry offline events
+// ✅ NEW: Setup automatic retry mechanism
+const setupAutomaticRetry = () => {
+  // Check for offline events on initialization
+  setTimeout(() => {
+    if (navigator.onLine) {
+      retryOfflineEvents();
+    }
+  }, 5000);
+  
+  // Retry when coming back online
+  window.addEventListener('online', () => {
+    console.log('🌐 Back online, retrying offline events');
+    setTimeout(retryOfflineEvents, 2000);
+  });
+  
+  // Periodic retry every 5 minutes if online
+  setInterval(() => {
+    if (navigator.onLine && isInitialized) {
+      retryOfflineEvents();
+    }
+  }, 5 * 60 * 1000);
+};
+
+// ✅ ENHANCED: Retry offline events with exponential backoff
 export const retryOfflineEvents = async () => {
   try {
-    const offlineEvents = JSON.parse(localStorage.getItem('analytics_offline_events') || '[]');
+    const storageKey = 'analytics_offline_events';
+    let offlineEvents = [];
+    
+    try {
+      const stored = localStorage.getItem(storageKey);
+      offlineEvents = stored ? JSON.parse(stored) : [];
+    } catch {
+      return { success: true, message: 'No offline events found' };
+    }
     
     if (offlineEvents.length === 0) {
       return { success: true, message: 'No offline events to retry' };
@@ -480,32 +678,45 @@ export const retryOfflineEvents = async () => {
     
     const successfulRetries = [];
     const failedRetries = [];
+    const maxRetries = 3;
 
     for (const event of offlineEvents) {
+      // Skip if retry count exceeded
+      if (event.retryCount >= maxRetries) {
+        console.log(`⏩ Skipping event ${event.id}, max retries exceeded`);
+        continue;
+      }
+      
       try {
+        // Add delay between retries based on retry count
+        if (event.retryCount > 0) {
+          const delay = Math.min(1000 * Math.pow(2, event.retryCount), 10000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
         const result = await sendAnalyticsData(event.endpoint, event.data);
         
         if (result.success) {
-          successfulRetries.push(event);
+          successfulRetries.push(event.id);
         } else {
-          // Increment retry count and keep if under limit
+          // Increment retry count
           event.retryCount = (event.retryCount || 0) + 1;
-          if (event.retryCount < 5) {
+          if (event.retryCount < maxRetries) {
             failedRetries.push(event);
           }
         }
       } catch (error) {
         event.retryCount = (event.retryCount || 0) + 1;
-        if (event.retryCount < 5) {
+        if (event.retryCount < maxRetries) {
           failedRetries.push(event);
         }
       }
     }
 
     // Update localStorage with remaining failed events
-    localStorage.setItem('analytics_offline_events', JSON.stringify(failedRetries));
+    localStorage.setItem(storageKey, JSON.stringify(failedRetries));
     
-    console.log(`✅ Offline events retry completed: ${successfulRetries.length} successful, ${failedRetries.length} failed`);
+    console.log(`✅ Offline events retry: ${successfulRetries.length} successful, ${failedRetries.length} remaining`);
     
     return {
       success: true,
@@ -529,39 +740,38 @@ const processPendingEvents = () => {
 
   console.log(`🔄 Processing ${pendingEvents.length} pending events`);
   
-  const processEvents = async () => {
-    for (const event of pendingEvents) {
-      try {
-        await sendAnalyticsData(event.endpoint, event.data);
-      } catch (error) {
-        console.warn('⚠️ Failed to process pending event:', error);
-      }
+  pendingEvents.forEach(async (event) => {
+    try {
+      await sendAnalyticsData(event.endpoint, event.data);
+    } catch (error) {
+      console.warn('⚠️ Failed to process pending event:', error);
     }
-    pendingEvents = [];
-  };
+  });
   
-  processEvents();
+  pendingEvents = [];
 };
 
-// ✅ UPDATED: UTM tracking initialization for production
+// ✅ UPDATED: UTM tracking initialization
 export const initUTMTracking = () => {
   try {
     const urlParams = new URLSearchParams(window.location.search);
     const utmParams = {};
     
-    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach(param => {
+    const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+    
+    utmKeys.forEach(param => {
       const value = urlParams.get(param);
-      if (value) {
-        utmParams[param] = value;
+      if (value && value.trim()) {
+        utmParams[param] = value.trim();
       }
     });
 
     if (Object.keys(utmParams).length > 0) {
-      // Store UTM parameters in sessionStorage for the session
+      // Store UTM parameters in sessionStorage
       sessionStorage.setItem('utm_params', JSON.stringify(utmParams));
       console.log('🔗 UTM parameters detected:', utmParams);
       
-      // Track UTM acquisition with proper eventType
+      // Track UTM acquisition
       trackEvent({
         eventName: 'utm_acquisition',
         eventType: 'conversion',
@@ -582,12 +792,11 @@ export const getUTMParams = () => {
     const stored = sessionStorage.getItem('utm_params');
     return stored ? JSON.parse(stored) : {};
   } catch (error) {
-    console.warn('⚠️ Could not retrieve UTM parameters:', error);
     return {};
   }
 };
 
-// Page visibility tracking for better engagement metrics
+// Page visibility tracking
 const setupVisibilityTracking = () => {
   let visibilityStartTime = Date.now();
   let visible = true;
@@ -596,9 +805,8 @@ const setupVisibilityTracking = () => {
     const now = Date.now();
     
     if (document.hidden) {
-      // Page became hidden - track visible time
       const visibleTime = now - visibilityStartTime;
-      if (visibleTime > 1000) { // Only track if visible for more than 1 second
+      if (visibleTime > 1000) {
         trackEvent({
           eventName: 'page_visibility',
           eventType: 'engagement',
@@ -611,7 +819,6 @@ const setupVisibilityTracking = () => {
       }
       visible = false;
     } else {
-      // Page became visible
       visibilityStartTime = now;
       if (!visible) {
         trackEvent({
@@ -629,7 +836,6 @@ const setupVisibilityTracking = () => {
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
   
-  // Track initial visibility state
   if (document.hidden) {
     visible = false;
   }
@@ -639,15 +845,12 @@ const setupVisibilityTracking = () => {
 const setupPerformanceTracking = () => {
   if (!window.performance || !window.performance.timing) return;
 
-  // Use window.addEventListener instead of direct window.onload
   window.addEventListener('load', () => {
     setTimeout(() => {
       try {
         const timing = window.performance.timing;
         
-        // Check if timing data is available
         if (!timing.loadEventEnd) {
-          console.log('⚠️ Performance timing data not fully available');
           return;
         }
         
@@ -661,12 +864,10 @@ const setupPerformanceTracking = () => {
             domProcessing: timing.domComplete - timing.domLoading,
             pageLoad: timing.loadEventEnd - timing.navigationStart,
             firstContentfulPaint: getFirstContentfulPaint(),
-            largestContentfulPaint: getLargestContentfulPaint(),
-            cumulativeLayoutShift: getCumulativeLayoutShift()
+            largestContentfulPaint: getLargestContentfulPaint()
           }
         };
 
-        // Only track if we have meaningful data
         if (performanceData.eventData.pageLoad > 0) {
           trackEvent(performanceData);
         }
@@ -703,24 +904,6 @@ const getLargestContentfulPaint = () => {
   }
 };
 
-const getCumulativeLayoutShift = () => {
-  try {
-    if (!window.performance || !window.performance.getEntriesByType) {
-      return null;
-    }
-    let cls = 0;
-    const layoutShiftEntries = window.performance.getEntriesByType('layout-shift');
-    layoutShiftEntries.forEach(entry => {
-      if (!entry.hadRecentInput) {
-        cls += entry.value;
-      }
-    });
-    return Math.round(cls * 1000) / 1000;
-  } catch (error) {
-    return null;
-  }
-};
-
 // User interaction tracking
 export const trackUserInteraction = (element, action, metadata = {}) => {
   trackEvent({
@@ -735,9 +918,8 @@ export const trackUserInteraction = (element, action, metadata = {}) => {
   });
 };
 
-// ✅ ENHANCED: Error tracking with better error handling
+// Error tracking
 export const trackError = (error, context = {}) => {
-  // Don't track errors if analytics isn't initialized or no consent
   if (!isInitialized || !getConsentStatus()) {
     return;
   }
@@ -747,19 +929,18 @@ export const trackError = (error, context = {}) => {
       eventName: 'javascript_error',
       eventType: 'error',
       eventData: {
-        errorMessage: error.message,
-        errorStack: error.stack,
+        errorMessage: error.message?.substring(0, 500),
+        errorType: error.name,
         page: window.location.pathname,
         ...context
       }
     });
   } catch (trackingError) {
-    // Don't create infinite loop if tracking fails
     console.warn('⚠️ Failed to track error:', trackingError.message);
   }
 };
 
-// E-commerce tracking (if needed)
+// E-commerce tracking
 export const trackEcommerceEvent = (eventType, data) => {
   trackEvent({
     eventName: `ecommerce_${eventType}`,
@@ -775,7 +956,7 @@ export const trackSocialShare = (platform, content) => {
     eventType: 'social',
     eventData: {
       platform,
-      content,
+      content: content?.substring(0, 200),
       page: window.location.pathname
     }
   });
@@ -794,7 +975,7 @@ export const trackScrollDepth = (depth) => {
   });
 };
 
-// Reset analytics (for testing or user opt-out)
+// Reset analytics
 export const resetAnalytics = () => {
   try {
     localStorage.removeItem('analytics_session_id');
@@ -820,12 +1001,13 @@ export const getAnalyticsStatus = () => {
     return {
       isInitialized,
       hasConsent: getConsentStatus(),
-      sessionId: currentSessionId,
+      sessionId: currentSessionId ? currentSessionId.substring(0, 20) + '...' : null,
       pendingEvents: pendingEvents.length,
       offlineEvents: offlineEvents.length,
       backend: API_BASE_URL,
       domain: window.location.hostname,
       currentLanguage: normalizeLanguageCode(navigator.language || 'en'),
+      userOnline: navigator.onLine,
       endpoints: {
         pageview: `${API_BASE_URL}/api/analytics/pageview`,
         event: `${API_BASE_URL}/api/analytics/event`,
@@ -836,7 +1018,7 @@ export const getAnalyticsStatus = () => {
     return {
       isInitialized,
       hasConsent: getConsentStatus(),
-      sessionId: currentSessionId,
+      sessionId: currentSessionId ? currentSessionId.substring(0, 20) + '...' : null,
       pendingEvents: pendingEvents.length,
       offlineEvents: 0,
       backend: API_BASE_URL,
@@ -865,15 +1047,14 @@ const initializeWithRetry = () => {
   }
 };
 
-// Auto-initialize when imported (with delay to ensure DOM is ready)
+// Auto-initialize when imported
 if (typeof window !== 'undefined') {
-  // Wait for DOM to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-      setTimeout(initializeWithRetry, 1000);
+      setTimeout(initializeWithRetry, 1500);
     });
   } else {
-    setTimeout(initializeWithRetry, 1000);
+    setTimeout(initializeWithRetry, 1500);
   }
 }
 
@@ -893,7 +1074,11 @@ const analyticsTracker = {
   retryOfflineEvents,
   resetAnalytics,
   getAnalyticsStatus,
-  normalizeLanguageCode
+  normalizeLanguageCode,
+  // ✅ NEW: Debug utility
+  debug: () => {
+    console.log('🔍 Analytics Debug Info:', getAnalyticsStatus());
+  }
 };
 
 export default analyticsTracker;
