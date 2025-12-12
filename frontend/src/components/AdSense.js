@@ -1,10 +1,5 @@
-// frontend/src/components/AdSense.js - COMPREHENSIVE FIXED VERSION
-// Complete fix for no_div error and duplicate ad prevention
-
+// frontend/src/components/AdSense.js
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-
-// Import the enhanced hotfix
-import '../utils/adSenseHotfix';
 
 // Global tracking for script and ad initialization - SINGLE SOURCE OF TRUTH
 if (typeof window !== 'undefined') {
@@ -187,11 +182,6 @@ const AdSense = ({
         window._adSenseScriptLoaded = true;
         window._adSenseScriptLoading = false;
         
-        // Update hotfix script status
-        if (window._adSenseHotfix) {
-          window._adSenseHotfix.setScriptLoaded();
-        }
-        
         log('Script loaded successfully');
         
         // Process any queued ad pushes
@@ -304,19 +294,10 @@ const AdSense = ({
         return false;
       }
 
-      // Layer 4: Hotfix integration
-      if (window._adSenseHotfix && window._adSenseHotfix.isElementProcessed(adElement)) {
-        log('Element already processed (hotfix)', 'debug');
-        return false;
-      }
-
       log('Safe push initiated - element is visible and ready');
       
       // Mark element as processed across all tracking systems
       window._adSenseProcessedElements.add(adElement);
-      if (window._adSenseHotfix) {
-        window._adSenseHotfix.markElementProcessed(adElement);
-      }
       
       // Clear visibility retries on successful push
       window._adSenseVisibilityRetries.delete(componentIdRef.current);
@@ -366,12 +347,6 @@ const AdSense = ({
     const excludedPaths = ['/privacy', '/disclaimer', '/contact', '/about'];
     if (excludedPaths.some(path => currentPath.startsWith(path))) {
       log('Skipping ad load - excluded page: ' + currentPath);
-      return;
-    }
-
-    // HOTFIX INTEGRATION: Check with global hotfix first
-    if (window._adSenseHotfix && !window._adSenseHotfix.trackSlot(slot)) {
-      log('Blocking duplicate slot (hotfix)', 'debug');
       return;
     }
 
@@ -462,11 +437,6 @@ const AdSense = ({
     
     adInitializedRef.current = false;
     
-    // HOTFIX INTEGRATION: Also clear from hotfix tracking
-    if (window._adSenseHotfix && slot) {
-      window._adSenseHotfix.clearSlot(slot);
-    }
-    
     // Clear from processed elements
     if (adElementRef.current) {
       window._adSenseProcessedElements.delete(adElementRef.current);
@@ -496,11 +466,6 @@ const AdSense = ({
       
       if (slot) {
         window._adSenseInitializedSlots.delete(slot);
-        
-        // HOTFIX INTEGRATION: Also clear from hotfix tracking
-        if (window._adSenseHotfix) {
-          window._adSenseHotfix.clearSlot(slot);
-        }
       }
     };
     
@@ -555,9 +520,6 @@ const AdSense = ({
       
       if (slot && adInitializedRef.current) {
         window._adSenseInitializedSlots.delete(slot);
-        if (window._adSenseHotfix) {
-          window._adSenseHotfix.clearSlot(slot);
-        }
         if (componentIdRef.current) {
           window._adSenseComponentInstances.delete(componentIdRef.current);
         }
@@ -804,9 +766,6 @@ export const consentHelper = {
       localStorage.setItem('adsense_consent', granted ? 'granted' : 'denied');
       
       // Clear all tracking when consent changes
-      if (window._adSenseHotfix) {
-        window._adSenseHotfix.clearAllSlots();
-      }
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
       }
@@ -827,11 +786,6 @@ export const consentHelper = {
       
       console.log(`🔄 AdSense: Consent ${granted ? 'granted' : 'denied'}`);
       
-      // Google Funding Choices integration
-      if (window.googlefc && window.googlefc.call) {
-        window.googlefc.call(granted);
-      }
-      
       if (granted) {
         setTimeout(() => {
           window.location.reload();
@@ -847,9 +801,6 @@ export const consentHelper = {
       localStorage.removeItem('cookieConsent');
       localStorage.removeItem('adsense_consent');
       
-      if (window._adSenseHotfix) {
-        window._adSenseHotfix.clearAllSlots();
-      }
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
       }

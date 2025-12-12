@@ -374,205 +374,165 @@
       });
     </script>
 
-    <!-- ✅ ENHANCED: Advanced Error Suppression Script for AdSense and Analytics -->
+    <!-- ✅ CRITICAL: Enhanced AdSense Script Loading with Duplicate Prevention -->
     <script>
-    (function() {
-      // Store original console methods
-      const originalError = console.error;
-      const originalWarn = console.warn;
-      const originalLog = console.log;
-      
-      // ✅ CRITICAL: Enhanced console.error suppression
-      console.error = function(...args) {
-        const firstArg = args[0];
-        const secondArg = args[1];
-        
-        // Skip all AdSense-related errors
-        if (typeof firstArg === 'string') {
-          // AdSense errors
-          if (firstArg.includes('googleads') || 
-              firstArg.includes('googlesyndication') ||
-              firstArg.includes('adsbygoogle') ||
-              firstArg.includes('AdSense: Error') ||
-              firstArg.includes('AdSense: Ad') ||
-              firstArg.includes('gpt.js') ||
-              firstArg.includes('ads.js') ||
-              firstArg.includes('doubleclick.net') ||
-              firstArg.includes('Failed to load resource: the server responded with a status of 400') ||
-              firstArg.includes('Failed to load resource: the server responded with a status of 403') ||
-              firstArg.includes('Failed to load resource: net::ERR_BLOCKED_BY_CLIENT') ||
-              firstArg.includes('Failed to load resource: net::ERR_BLOCKED_BY_RESPONSE')) {
-            return;
-          }
-          
-          // Analytics errors
-          if (firstArg.includes('/api/analytics/') ||
-              firstArg.includes('Analytics error') ||
-              firstArg.includes('tracking failed')) {
-            return;
-          }
-          
-          // Common browser errors to ignore
-          if (firstArg.includes('Content Security Policy') ||
-              firstArg.includes('Mixed Content') ||
-              firstArg.includes('Invalid or unexpected token') ||
-              firstArg.includes('Unexpected token')) {
-            return;
-          }
-        }
-        
-        // Check if it's a network error for AdSense domains
-        if (secondArg && typeof secondArg === 'string') {
-          if (secondArg.includes('googleads') ||
-              secondArg.includes('googlesyndication') ||
-              secondArg.includes('doubleclick.net')) {
-            return;
-          }
-        }
-        
-        // Call original for other errors
-        originalError.apply(console, args);
-      };
+    // Global AdSense tracking variables
+    window._adSenseGlobalTracking = window._adSenseGlobalTracking || {
+      scriptLoaded: false,
+      scriptLoading: false,
+      initializedSlots: new Set(),
+      processedElements: new WeakSet(),
+      pushAttempts: new Map(),
+      pushQueue: []
+    };
 
-      // ✅ ENHANCED: console.warn suppression
-      console.warn = function(...args) {
-        const firstArg = args[0];
-        
-        if (typeof firstArg === 'string') {
-          // Skip common browser warnings
-          if (firstArg.includes('Third-party cookies') ||
-              firstArg.includes('preload') ||
-              firstArg.includes('adsbygoogle') ||
-              firstArg.includes('AdSense') ||
-              firstArg.includes('was loaded over HTTPS') ||
-              firstArg.includes('autoplay') ||
-              firstArg.includes('deprecated') ||
-              firstArg.includes('non-passive event listener') ||
-              firstArg.includes('will be removed in future') ||
-              firstArg.includes('Resource interpreted') ||
-              firstArg.includes('DefaultProps') ||
-              firstArg.includes('componentWill') ||
-              firstArg.includes('react_devtools_backend')) {
-            return;
-          }
-        }
-        
-        // Call original for other warnings
-        originalWarn.apply(console, args);
-      };
-
-      // ✅ ENHANCED: console.log suppression for development noise
-      console.log = function(...args) {
-        const firstArg = args[0];
-        
-        if (typeof firstArg === 'string') {
-          // Skip verbose React development logs
-          if (firstArg.includes('[HMR]') ||
-              firstArg.includes('[WDS]') ||
-              firstArg.includes('Download the React DevTools') ||
-              firstArg.includes('react_devtools_backend') ||
-              firstArg.includes('%cDownload') ||
-              firstArg.includes('webpack-dev-server') ||
-              firstArg.includes('source mapped') ||
-              firstArg.includes('[webpack-dev-server]')) {
-            return;
-          }
-        }
-        
-        // Call original for other logs
-        originalLog.apply(console, args);
-      };
-
-      // ✅ ENHANCED: Network request error suppression
-      const originalFetch = window.fetch;
-      if (originalFetch) {
-        window.fetch = function(...args) {
-          const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
-          
-          // Skip logging failed AdSense requests
-          if (url.includes('googleads') ||
-              url.includes('googlesyndication') ||
-              url.includes('doubleclick.net') ||
-              url.includes('adsbygoogle')) {
-            return originalFetch.apply(this, args).catch(error => {
-              // Silently catch AdSense fetch errors
-              return Promise.reject(error);
-            });
-          }
-          
-          return originalFetch.apply(this, args);
-        };
+    // Enhanced AdSense script loading with duplicate prevention
+    function loadAdSenseScript() {
+      // Check if already loaded
+      if (window._adSenseGlobalTracking.scriptLoaded) {
+        console.log('✅ AdSense script already loaded');
+        return Promise.resolve();
       }
 
-      // ✅ ENHANCED: XMLHttpRequest error suppression
-      const originalXHROpen = XMLHttpRequest.prototype.open;
-      const originalXHRSend = XMLHttpRequest.prototype.send;
-      
-      XMLHttpRequest.prototype.open = function(method, url) {
-        this._requestUrl = url;
-        return originalXHROpen.apply(this, arguments);
-      };
-      
-      XMLHttpRequest.prototype.send = function(body) {
-        if (this._requestUrl && 
-            (this._requestUrl.includes('googleads') ||
-             this._requestUrl.includes('googlesyndication') ||
-             this._requestUrl.includes('doubleclick.net'))) {
-          // Suppress AdSense XHR errors
-          this.onerror = function() {};
-          this.ontimeout = function() {};
-        }
-        return originalXHRSend.apply(this, arguments);
-      };
-
-      // ✅ Enhanced consent management for AdSense
-      window.addEventListener('load', function() {
-        // Important for AdSense: Set cookie consent for non-EEA users
-        if (!localStorage.getItem('cookieConsent')) {
-          try {
-            // Check if user is in EEA (European Economic Area)
-            const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            const isEEA = timezone && (
-              timezone.includes('Europe') ||
-              timezone.includes('London') ||
-              timezone.includes('Paris') ||
-              timezone.includes('Berlin') ||
-              timezone.includes('Madrid') ||
-              timezone.includes('Rome') ||
-              timezone.includes('Amsterdam') ||
-              timezone.includes('Brussels') ||
-              timezone.includes('Vienna')
-            );
-            
-            if (!isEEA) {
-              localStorage.setItem('cookieConsent', 'true');
-              console.log('✅ Auto-consent enabled for non-EEA user');
+      // Check if already loading
+      if (window._adSenseGlobalTracking.scriptLoading) {
+        console.log('⏳ AdSense script already loading, waiting...');
+        return new Promise((resolve) => {
+          const checkInterval = setInterval(() => {
+            if (window._adSenseGlobalTracking.scriptLoaded) {
+              clearInterval(checkInterval);
+              resolve();
             }
-          } catch (error) {
-            // Default to consent if detection fails
-            localStorage.setItem('cookieConsent', 'true');
-            console.log('✅ Auto-consent enabled (fallback)');
-          }
-        }
-        
-        // Initialize AdSense after consent check
-        if (window.adsbygoogle && localStorage.getItem('cookieConsent') === 'true') {
-          try {
-            // Initialize all ad slots
-            (window.adsbygoogle = window.adsbygoogle || []).push({});
-            console.log('✅ AdSense initialized');
-          } catch (error) {
-            // Silently ignore AdSense initialization errors
-          }
-        }
-      });
-    })();
-    </script>
+          }, 100);
+          
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            resolve();
+          }, 5000);
+        });
+      }
 
-    <!-- ✅ CRITICAL: AdSense Error Suppression Script (from previous prompt) -->
-    <script>
-    // ✅ Suppress AdSense Errors (Not Critical):
-    // Add this to your frontend/public/index.html to suppress AdSense errors
+      // Mark as loading
+      window._adSenseGlobalTracking.scriptLoading = true;
+      console.log('📥 Loading AdSense script...');
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
+        script.async = true;
+        script.crossOrigin = 'anonymous';
+        script.setAttribute('data-ad-client', 'ca-pub-4047817727348673');
+        
+        script.onload = function() {
+          window._adSenseGlobalTracking.scriptLoaded = true;
+          window._adSenseGlobalTracking.scriptLoading = false;
+          
+          // Initialize empty array
+          window.adsbygoogle = window.adsbygoogle || [];
+          console.log('✅ AdSense script loaded successfully');
+          
+          // Process any queued pushes
+          processQueuedPushes();
+          resolve();
+        };
+        
+        script.onerror = function(error) {
+          window._adSenseGlobalTracking.scriptLoading = false;
+          console.warn('⚠️ Failed to load AdSense script:', error);
+          reject(error);
+        };
+        
+        document.head.appendChild(script);
+      });
+    }
+
+    // Process queued ad pushes
+    function processQueuedPushes() {
+      if (window._adSenseGlobalTracking.pushQueue.length > 0) {
+        console.log(`🔄 Processing ${window._adSenseGlobalTracking.pushQueue.length} queued ad pushes`);
+        window._adSenseGlobalTracking.pushQueue.forEach(pushFn => pushFn());
+        window._adSenseGlobalTracking.pushQueue = [];
+      }
+    }
+
+    // Enhanced push wrapper with duplicate prevention
+    function initializePushWrapper() {
+      if (window.adsbygoogle && window.adsbygoogle.push) {
+        const originalPush = window.adsbygoogle.push;
+        
+        window.adsbygoogle.push = function() {
+          const args = arguments;
+          
+          try {
+            // Check for empty push (just initialization)
+            if (args.length === 0 || (args.length === 1 && !args[0])) {
+              console.log('📝 AdSense empty push (initialization)');
+              return originalPush.apply(this, args);
+            }
+
+            // Check all configurations for duplicates
+            for (let i = 0; i < args.length; i++) {
+              const config = args[i];
+              
+              if (config && typeof config === 'object') {
+                // Extract slot from various formats
+                let slot = null;
+                if (config.slot) slot = config.slot;
+                else if (config.dataAdSlot) slot = config.dataAdSlot;
+                else if (config.element && config.element.dataset && config.element.dataset.adSlot) {
+                  slot = config.element.dataset.adSlot;
+                }
+
+                // Check if slot is already initialized
+                if (slot && window._adSenseGlobalTracking.initializedSlots.has(slot)) {
+                  console.log(`⏩ Skipping duplicate push for slot: ${slot}`);
+                  continue; // Skip this config but process others
+                }
+
+                // Check element-level duplication
+                if (config.element && window._adSenseGlobalTracking.processedElements.has(config.element)) {
+                  console.log('⏩ Skipping duplicate push for already processed element');
+                  continue;
+                }
+
+                // Track slot and element
+                if (slot) {
+                  window._adSenseGlobalTracking.initializedSlots.add(slot);
+                  console.log(`✅ Tracking slot: ${slot}`);
+                }
+                
+                if (config.element) {
+                  window._adSenseGlobalTracking.processedElements.add(config.element);
+                }
+              }
+            }
+
+            // Call original push
+            return originalPush.apply(this, args);
+            
+          } catch (error) {
+            console.warn('⚠️ AdSense push wrapper error:', error);
+            // Fallback to original push
+            return originalPush.apply(this, args);
+          }
+        };
+
+        console.log('✅ AdSense push wrapper initialized');
+      }
+    }
+
+    // Initialize when DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+      // Load AdSense script
+      loadAdSenseScript().then(() => {
+        // Initialize push wrapper
+        setTimeout(initializePushWrapper, 100);
+      }).catch(() => {
+        console.log('⚠️ AdSense script loading failed, will retry on demand');
+      });
+    });
+
+    // Enhanced error suppression for AdSense
     (function() {
       const originalError = console.error;
       console.error = function(...args) {
@@ -581,9 +541,10 @@
             (args[0].includes('googleads') || 
              args[0].includes('googlesyndication') ||
              args[0].includes('adsbygoogle') ||
+             args[0].includes('TagError') ||
+             args[0].includes('All ins elements') ||
              args[0].includes('Failed to load resource: the server responded with a status of 400') ||
              args[0].includes('Failed to load resource: the server responded with a status of 403') ||
-             args[0].includes('Failed to load resource: the server responded with a status of 500') ||
              args[0].includes('Failed to load resource: net::ERR_BLOCKED_BY_CLIENT') ||
              args[0].includes('Failed to load resource: net::ERR_BLOCKED_BY_RESPONSE'))) {
           return; // Don't log AdSense errors
@@ -596,22 +557,6 @@
         
         originalError.apply(console, args);
       };
-      
-      // Also suppress fetch errors for AdSense
-      const originalFetch = window.fetch;
-      if (originalFetch) {
-        window.fetch = function(...args) {
-          const url = args[0];
-          if (typeof url === 'string' && 
-              (url.includes('googleads') || url.includes('googlesyndication'))) {
-            return originalFetch.apply(this, args).catch(() => {
-              // Silently ignore AdSense fetch errors
-              return Promise.reject(new Error('AdSense request failed silently'));
-            });
-          }
-          return originalFetch.apply(this, args);
-        };
-      }
     })();
     </script>
 
@@ -626,41 +571,6 @@
       "datePublished": "2025-01-01",
       "dateModified": "2025-01-21"
     }
-    </script>
-    
-    <!-- ✅ AdSense Script - Load only once globally -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673" crossorigin="anonymous"></script>
-    <script>
-      // Initialize AdSense globally once
-      window.adsbygoogle = window.adsbygoogle || [];
-      // Push empty configuration to initialize
-      window.adsbygoogle.push({});
-      
-      // Error handler for AdSense
-      window.addEventListener('error', function(e) {
-        if (e.target && (
-          e.target.src?.includes('googleads') ||
-          e.target.src?.includes('googlesyndication') ||
-          e.target.src?.includes('doubleclick.net')
-        )) {
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
-        }
-      }, true);
-      
-      // Handle AdSense iframe errors
-      window.addEventListener('securitypolicyviolation', function(e) {
-        if (e.blockedURI && (
-          e.blockedURI.includes('googleads') ||
-          e.blockedURI.includes('googlesyndication') ||
-          e.blockedURI.includes('doubleclick.net')
-        )) {
-          e.preventDefault();
-          e.stopPropagation();
-          return false;
-        }
-      });
     </script>
     
     <!-- ✅ Performance Optimization Script -->
