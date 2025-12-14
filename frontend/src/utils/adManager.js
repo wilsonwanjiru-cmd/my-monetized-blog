@@ -11,6 +11,8 @@ class AdSenseManager {
     this.adQueue = [];
     this.maxRetries = 3;
     this.retryDelays = [1000, 3000, 5000]; // Retry delays in milliseconds
+    this.adBlockDetected = false;
+    this.adsEnabled = true;
     
     // Initialize global tracking
     this.initGlobalTracking();
@@ -139,6 +141,11 @@ class AdSenseManager {
 
   // Queue an ad for loading
   queueAd(slot, containerId, options = {}) {
+    if (!this.adsEnabled || this.adBlockDetected) {
+      console.log(`🚫 AdManager: Ads disabled or ad blocker detected, skipping slot ${slot}`);
+      return false;
+    }
+
     if (this.isSlotLoaded(slot) || this.isSlotPending(slot)) {
       console.log(`⏩ AdManager: Slot ${slot} already loaded or pending, skipping queue`);
       return false;
@@ -167,7 +174,7 @@ class AdSenseManager {
 
   // Process the ad queue
   processQueue() {
-    if (!this.isScriptLoaded() || this.adQueue.length === 0) {
+    if (!this.isScriptLoaded() || this.adQueue.length === 0 || !this.adsEnabled) {
       return;
     }
 
@@ -187,6 +194,11 @@ class AdSenseManager {
   async loadAd(adConfig) {
     const { slot, containerId, options, retryCount } = adConfig;
     
+    if (!this.adsEnabled || this.adBlockDetected) {
+      console.log(`🚫 AdManager: Ads disabled or ad blocker detected, skipping slot ${slot}`);
+      return false;
+    }
+
     if (this.isSlotLoaded(slot)) {
       console.log(`⏩ AdManager: Slot ${slot} already loaded, skipping`);
       return false;
@@ -345,11 +357,199 @@ class AdSenseManager {
     }
   }
 
-  // Initialize manager
-  init() {
-    if (this.initialized) return;
+  // Check for ad blocker
+  checkAdBlock() {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined') {
+        resolve(false);
+        return;
+      }
+
+      const testAd = document.createElement('div');
+      testAd.className = 'adsbygoogle';
+      testAd.style.cssText = 'height: 1px; width: 1px; position: absolute; left: -1000px; top: -1000px;';
+      document.body.appendChild(testAd);
+      
+      setTimeout(() => {
+        const detected = testAd.offsetHeight === 0 || 
+                        testAd.offsetWidth === 0 || 
+                        window.getComputedStyle(testAd).display === 'none';
+        this.adBlockDetected = detected;
+        document.body.removeChild(testAd);
+        
+        if (detected) {
+          console.warn('🚫 AdManager: Ad blocker detected');
+          this.onAdBlockDetected();
+        }
+        
+        resolve(detected);
+      }, 100);
+    });
+  }
+
+  // Handle ad blocker detection
+  onAdBlockDetected() {
+    // Show non-intrusive message
+    const message = document.createElement('div');
+    message.className = 'ad-block-message-global';
+    message.innerHTML = `
+      <div style="
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 12px;
+        margin: 10px;
+        text-align: center;
+        color: #856404;
+        font-size: 14px;
+      ">
+        <p style="margin: 0 0 8px 0;">Please consider disabling your ad blocker to support this site.</p>
+        <small style="opacity: 0.8;">Ads help keep this content free for everyone.</small>
+      </div>
+    `;
     
-    this.initialized = true;
+    // Insert at the beginning of body
+    document.body.insertBefore(message, document.body.firstChild);
+    
+    // Remove after 10 seconds
+    setTimeout(() => {
+      if (message.parentNode) {
+        message.remove();
+      }
+    }, 10000);
+  }
+
+  // Setup event listeners
+  setupEventListeners() {
+    if (typeof window === 'undefined') return;
+    
+    // Listen for consent changes
+    window.addEventListener('consentChanged', (event) => {
+      console.log('Consent changed:', event.detail);
+      this.handleConsentChange(event.detail);
+    });
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.refreshAds();
+      }
+    });
+
+    // Refresh ads on route change
+    window.addEventListener('popstate', () => {
+      setTimeout(() => this.refreshAds(), 1000);
+    });
+  }
+
+  // Handle consent changes
+  handleConsentChange(detail) {
+    const { granted } = detail || {};
+    
+    if (granted) {
+      this.enableAds();
+    } else {
+      this.disableAds();
+    }
+  }
+
+  // Enable ads
+  enableAds() {
+    this.adsEnabled = true;
+    console.log('✅ AdManager: Ads enabled');
+    
+    // Reload ads
+    this.refreshAds();
+  }
+
+  // Disable ads
+  disableAds() {
+    this.adsEnabled = false;
+    console.log('🚫 AdManager: Ads disabled');
+    
+    // Remove all ads
+    this.removeAds();
+  }
+
+  // Refresh all ads
+  refreshAds() {
+    if (!this.adsEnabled || this.adBlockDetected) return;
+    
+    console.log('🔄 AdManager: Refreshing ads...');
+    
+    // Clear all slots and reload
+    this.clearAllSlots();
+    
+    // Use AdSense's built-in refresh
+    if (window.adsbygoogle) {
+      try {
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        console.log('✅ AdManager: Ads refreshed');
+      } catch (error) {
+        console.warn('⚠️ AdManager: Error refreshing ads:', error);
+      }
+    }
+  }
+
+  // Remove all ads
+  removeAds() {
+    const ads = document.querySelectorAll('.adsbygoogle, .ad-container');
+    ads.forEach(ad => {
+      ad.innerHTML = '';
+      ad.style.display = 'none';
+    });
+    
+    // Clear tracking
+    this.clearAllSlots();
+    
+    console.log('🧹 AdManager: Ads removed');
+  }
+
+  // Get ad revenue estimation (placeholder)
+  getRevenueEstimate() {
+    if (typeof window === 'undefined') {
+      return {
+        estimatedRevenue: '0.00',
+        adsDisplayed: 0,
+        pageViews: 0
+      };
+    }
+    
+    const ads = document.querySelectorAll('.adsbygoogle');
+    const visibleAds = Array.from(ads).filter(ad => 
+      ad.offsetHeight > 0 && ad.offsetWidth > 0
+    );
+    
+    // Very rough estimate based on ad positions
+    let estimate = 0;
+    visibleAds.forEach(ad => {
+      const slot = ad.dataset.adSlot;
+      
+      // Different ad positions have different estimated values
+      // These are example values - actual revenue would come from AdSense
+      if (['1529123561', '2835386242'].includes(slot)) {
+        estimate += 0.05; // Banner ads
+      } else if (['8087712926', '9876543210', '1234567890'].includes(slot)) {
+        estimate += 0.10; // In-content ads
+      } else if (['5976732519'].includes(slot)) {
+        estimate += 0.03; // Sidebar ads
+      } else if (['6583059564'].includes(slot)) {
+        estimate += 0.04; // Between posts
+      } else {
+        estimate += 0.05; // Default
+      }
+    });
+    
+    return {
+      estimatedRevenue: estimate.toFixed(2),
+      adsDisplayed: visibleAds.length,
+      pageViews: 1 // Would be tracked separately
+    };
+  }
+
+  // Initialize manager
+  async init() {
+    if (this.initialized) return this;
     
     // Check if script is already in DOM
     if (typeof window !== 'undefined') {
@@ -359,6 +559,13 @@ class AdSenseManager {
       }
     }
     
+    // Check for ad blocker
+    await this.checkAdBlock();
+    
+    // Setup event listeners
+    this.setupEventListeners();
+    
+    this.initialized = true;
     console.log('🔧 AdManager: Initialized successfully');
     return this;
   }
@@ -376,11 +583,14 @@ class AdSenseManager {
   getStatus() {
     return {
       initialized: this.initialized,
+      adsEnabled: this.adsEnabled,
+      adBlockDetected: this.adBlockDetected,
       scriptLoaded: this.isScriptLoaded(),
       scriptLoading: this.scriptLoading,
       loadedSlots: this.getLoadedSlots(),
       pendingSlots: this.getPendingSlots(),
       queueLength: this.adQueue.length,
+      revenueEstimate: this.getRevenueEstimate(),
       globalTracking: window._adSenseManager ? {
         loadedSlots: Array.from(window._adSenseManager.loadedSlots || []),
         scriptLoaded: window._adSenseManager.scriptLoaded,
@@ -391,5 +601,22 @@ class AdSenseManager {
 }
 
 // Singleton instance
-const adManager = new AdSenseManager().init();
-export default adManager;
+let adManagerInstance = null;
+
+const getAdManager = () => {
+  if (!adManagerInstance) {
+    adManagerInstance = new AdSenseManager();
+  }
+  return adManagerInstance;
+};
+
+// Initialize on page load
+if (typeof window !== 'undefined') {
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      getAdManager().init();
+    }, 1000);
+  });
+}
+
+export default getAdManager();

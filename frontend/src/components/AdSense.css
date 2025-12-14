@@ -1,0 +1,192 @@
+/* AdSense.css - Styling for AdSense components */
+
+.ad-container {
+  position: relative;
+  min-height: 90px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 16px 0;
+  transition: all 0.3s ease;
+}
+
+.ad-container:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ad-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #6c757d;
+}
+
+.ad-loading-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #e9ecef;
+  border-top-color: #007bff;
+  border-radius: 50%;
+  animation: ad-spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes ad-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ad-loading-text {
+  font-size: 14px;
+  text-align: center;
+}
+
+.ad-fallback {
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 1px dashed #dee2e6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 90px;
+}
+
+.ad-fallback-content {
+  text-align: center;
+  color: #6c757d;
+}
+
+.ad-fallback-content span {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+  color: #495057;
+}
+
+.ad-fallback-content small {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.ad-block-message {
+  padding: 16px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  margin: 16px 0;
+  text-align: center;
+}
+
+.ad-block-content {
+  color: #856404;
+}
+
+.ad-block-content p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+}
+
+.ad-block-content small {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.ad-test-container {
+  padding: 20px;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border: 2px dashed #2196f3;
+  border-radius: 8px;
+  margin: 16px 0;
+  position: relative;
+}
+
+.ad-test-content {
+  text-align: center;
+  color: #1565c0;
+}
+
+.ad-test-label {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #2196f3;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.ad-test-slot {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ad-test-format {
+  font-size: 11px;
+  margin-bottom: 8px;
+  opacity: 0.8;
+}
+
+.ad-test-message {
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .ad-container {
+    min-height: 70px;
+    margin: 12px 0;
+  }
+  
+  .ad-loading {
+    padding: 15px;
+  }
+  
+  .ad-loading-spinner {
+    width: 25px;
+    height: 25px;
+  }
+}
+
+/* Hide ads on print */
+@media print {
+  .ad-container,
+  .ad-block-message,
+  .ad-test-container {
+    display: none !important;
+  }
+}
+
+/* Specific ad positions */
+.ad-wrapper-header {
+  margin: 0 auto 24px auto;
+  max-width: 970px;
+}
+
+.ad-wrapper-sidebar {
+  margin-bottom: 24px;
+}
+
+.ad-wrapper-footer {
+  margin-top: 32px;
+}
+
+.ad-wrapper-in-article {
+  margin: 32px auto;
+  text-align: center;
+}
+
+.ad-wrapper-between-posts {
+  margin: 32px 0;
+  clear: both;
+}
