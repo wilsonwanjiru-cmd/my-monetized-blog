@@ -1,4 +1,4 @@
-/* AdSense.css - Styling for AdSense components */
+/* frontend/src/components/AdSense.css */
 
 .ad-container {
   position: relative;
@@ -189,4 +189,27 @@
 .ad-wrapper-between-posts {
   margin: 32px 0;
   clear: both;
+}
+
+/* Ad label styling */
+.ad-label {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: Inter, Arial, sans-serif;
+}
+
+/* Animation for loading */
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.ad-loading {
+  animation: pulse 1.5s infinite;
 }

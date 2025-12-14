@@ -9,8 +9,6 @@ if (typeof window !== 'undefined') {
   window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
   window._adSenseScriptLoading = window._adSenseScriptLoading || false;
   window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
-  window._adSenseComponentInstances = window._adSenseComponentInstances || new Map();
-  window._adSenseProcessedElements = window._adSenseProcessedElements || new WeakSet();
 }
 
 const AdSense = ({ 
@@ -28,10 +26,10 @@ const AdSense = ({
 }) => {
   const location = useLocation();
   const adRef = useRef(null);
-  const adInitializedRef = useRef(false);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
   const [adLoaded, setAdLoaded] = useState(false);
   const [adError, setAdError] = useState(false);
+  const [shouldRenderAd, setShouldRenderAd] = useState(false);
   
   // Skip ad rendering on certain pages
   const excludedPaths = ['/privacy', '/disclaimer', '/about', '/contact'];
@@ -50,6 +48,8 @@ const AdSense = ({
   // Check if ad blocker is active
   useEffect(() => {
     const testAdBlock = () => {
+      if (typeof window === 'undefined') return;
+      
       const testAd = document.createElement('div');
       testAd.className = 'adsbygoogle';
       testAd.style.cssText = 'height: 1px; width: 1px; position: absolute; left: -1000px; top: -1000px;';
@@ -60,7 +60,9 @@ const AdSense = ({
                         testAd.offsetWidth === 0 || 
                         window.getComputedStyle(testAd).display === 'none';
         setAdBlockDetected(detected);
-        document.body.removeChild(testAd);
+        if (testAd.parentNode) {
+          document.body.removeChild(testAd);
+        }
         
         if (detected && debug) {
           console.warn('Ad blocker detected');
@@ -74,6 +76,11 @@ const AdSense = ({
   // Load AdSense script
   const loadAdSenseScript = useCallback((maxRetries = 3, retryDelay = 1000) => {
     return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined') {
+        reject(new Error('Window not available'));
+        return;
+      }
+      
       if (window._adSenseScriptLoaded) {
         resolve(true);
         return;
@@ -94,7 +101,7 @@ const AdSense = ({
       
       const loadScript = (retryCount = 0) => {
         // Check if script already exists
-        const existingScript = document.querySelector(`script[src*="pagead2.googlesyndication.com"]`);
+        const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
         if (existingScript) {
           window._adSenseScriptLoaded = true;
           window._adSenseScriptLoading = false;
@@ -103,7 +110,7 @@ const AdSense = ({
         }
         
         const script = document.createElement('script');
-        script.src = `${'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'}?client=${client}`;
+        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + client;
         script.async = true;
         script.crossOrigin = 'anonymous';
         script.defer = true;
@@ -119,8 +126,8 @@ const AdSense = ({
           resolve(true);
         };
         
-        script.onerror = (error) => {
-          console.error('❌ AdSense script failed to load:', error);
+        script.onerror = () => {
+          console.error('❌ AdSense script failed to load');
           
           if (retryCount < maxRetries) {
             console.log(`Retrying AdSense script load (${retryCount + 1}/${maxRetries})...`);
@@ -139,159 +146,97 @@ const AdSense = ({
     });
   }, [client, log]);
 
-  // Fix for duplicate ad pushes
-  const fixDuplicateAds = useCallback(() => {
-    if (!window.adsbygoogle) {
-      window.adsbygoogle = [];
-    }
-    
-    // Override push to prevent duplicates
-    const originalPush = window.adsbygoogle.push;
-    const processedAds = new Set();
-    
-    window.adsbygoogle.push = function(...args) {
-      const adConfig = args[0] || {};
-      const adSlot = adConfig.data && adConfig.data.adSlot;
-      
-      // Generate a unique key for this ad
-      const adKey = adSlot || JSON.stringify(adConfig);
-      
-      if (processedAds.has(adKey)) {
-        log(`Skipping duplicate ad: ${adSlot || 'unknown slot'}`, 'debug');
-        return;
-      }
-      
-      processedAds.add(adKey);
-      
-      try {
-        // Call original push
-        return originalPush.apply(this, args);
-      } catch (error) {
-        log('AdSense push error (non-fatal): ' + error.message, 'warn');
-        return null;
-      }
-    };
-  }, [log]);
-
-  // Initialize ad
+  // Initialize ad safely
   const initializeAd = useCallback(() => {
-    // Don't initialize if excluded, no slot, or ad blocker detected
-    if (isExcluded || !slot || adBlockDetected || testMode) {
+    if (typeof window === 'undefined' || !slot || !adRef.current) return;
+
+    // Don't initialize if excluded or ad blocker detected
+    if (isExcluded || adBlockDetected || testMode) {
       return;
     }
-    
-    // Don't initialize if already done
-    if (adInitializedRef.current) {
-      if (debug) log(`Ad slot ${slot} already initialized`);
+
+    // Check if already initialized globally
+    if (window._adSenseInitializedSlots.has(slot)) {
+      log(`Slot ${slot} already initialized globally, skipping`, 'debug');
       return;
     }
-    
-    const initAd = () => {
-      if (!adRef.current || !window.adsbygoogle) {
-        if (debug) log('Ad container or adsbygoogle not ready, retrying...');
-        setTimeout(initAd, 500);
+
+    try {
+      // Get the ins element
+      const adElement = adRef.current.querySelector('.adsbygoogle');
+      if (!adElement) {
+        log('Ad element not found', 'warn');
         return;
       }
-      
+
+      // Mark as initialized
+      window._adSenseInitializedSlots.add(slot);
+
+      // Push to adsbygoogle queue
       try {
-        // Clear any existing content
-        adRef.current.innerHTML = '';
+        (window.adsbygoogle = window.adsbygoogle || []).push({});
+        setAdLoaded(true);
         
-        // Create ad element
-        const adElement = document.createElement('ins');
-        adElement.className = 'adsbygoogle';
-        adElement.style.display = 'block';
-        
-        // Set data attributes
-        adElement.dataset.adClient = client;
-        adElement.dataset.adSlot = slot;
-        
-        if (format && format !== 'auto') {
-          adElement.dataset.adFormat = format;
+        if (debug) {
+          log(`AdSense ad initialized - Slot: ${slot}, Format: ${format}`);
         }
-        
-        if (layout) {
-          adElement.dataset.adLayout = layout;
-        }
-        
-        if (layoutKey) {
-          adElement.dataset.adLayoutKey = layoutKey;
-        }
-        
-        adElement.dataset.fullWidthResponsive = responsive;
-        
-        // Test mode
-        if (testMode) {
-          adElement.dataset.adtest = 'on';
-        }
-        
-        // Append to container
-        adRef.current.appendChild(adElement);
-        
-        // Check if this slot is already initialized globally
-        if (window._adSenseInitializedSlots.has(slot)) {
-          log(`Slot ${slot} already initialized globally, skipping`, 'debug');
-          return;
-        }
-        
-        // Mark slot as initialized
-        window._adSenseInitializedSlots.add(slot);
-        
-        // Push to adsbygoogle queue
-        try {
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
-          adInitializedRef.current = true;
-          setAdLoaded(true);
-          
-          if (debug) {
-            log(`AdSense ad initialized - Slot: ${slot}, Format: ${format}`);
-          }
-        } catch (pushError) {
-          log('AdSense push error: ' + pushError.message, 'error');
-          setAdError(true);
-          
-          // Show fallback content
-          if (adRef.current) {
-            adRef.current.innerHTML = `
-              <div class="ad-fallback">
-                <div class="ad-fallback-content">
-                  <span>Advertisement</span>
-                  <small>Ad could not be loaded</small>
-                </div>
-              </div>
-            `;
-          }
-        }
-      } catch (error) {
-        log('AdSense initialization error: ' + error.message, 'error');
+      } catch (pushError) {
+        log('AdSense push error: ' + pushError.message, 'error');
         setAdError(true);
       }
-    };
-    
-    // Initialize with delay
-    setTimeout(initAd, 1000);
-  }, [client, slot, format, layout, layoutKey, responsive, isExcluded, adBlockDetected, testMode, debug, log]);
+    } catch (error) {
+      log('AdSense initialization error: ' + error.message, 'error');
+      setAdError(true);
+    }
+  }, [slot, format, isExcluded, adBlockDetected, testMode, debug, log]);
 
   // Main initialization effect
   useEffect(() => {
-    if (isExcluded || !slot || adBlockDetected) {
-      return;
-    }
-    
     let mounted = true;
-    
-    const init = async () => {
+    let scriptLoadTimeout = null;
+    let adInitTimeout = null;
+
+    // Don't proceed if excluded or no slot
+    if (isExcluded || !slot) {
+      return () => {
+        mounted = false;
+      };
+    }
+
+    const initAdSense = async () => {
+      if (!mounted) return;
+
       try {
+        // Don't initialize if ad blocker detected
+        if (adBlockDetected && !testMode) {
+          return;
+        }
+
+        // Wait a bit for DOM to be ready
+        await new Promise(resolve => {
+          adInitTimeout = setTimeout(resolve, 500);
+        });
+
+        if (!mounted) return;
+
         // Load AdSense script
         await loadAdSenseScript();
-        
-        // Fix duplicate ads
-        fixDuplicateAds();
-        
+
+        if (!mounted) return;
+
+        // Set flag to render ad element
+        setShouldRenderAd(true);
+
+        // Wait for ad element to be rendered
+        await new Promise(resolve => {
+          scriptLoadTimeout = setTimeout(resolve, 100);
+        });
+
+        if (!mounted) return;
+
         // Initialize ad
-        if (mounted) {
-          initializeAd();
-        }
+        initializeAd();
+
       } catch (error) {
         if (mounted) {
           log('Failed to initialize AdSense: ' + error.message, 'error');
@@ -299,18 +244,24 @@ const AdSense = ({
         }
       }
     };
-    
-    init();
-    
+
+    // Delay initialization
+    const initTimeout = setTimeout(() => {
+      initAdSense();
+    }, 1000);
+
     return () => {
       mounted = false;
+      clearTimeout(initTimeout);
+      clearTimeout(scriptLoadTimeout);
+      clearTimeout(adInitTimeout);
+      
       // Clean up global tracking
       if (slot) {
         window._adSenseInitializedSlots.delete(slot);
       }
-      adInitializedRef.current = false;
     };
-  }, [slot, isExcluded, adBlockDetected, loadAdSenseScript, fixDuplicateAds, initializeAd, log]);
+  }, [slot, isExcluded, adBlockDetected, loadAdSenseScript, initializeAd, testMode, log]);
 
   // Don't render on excluded pages
   if (isExcluded) {
@@ -353,8 +304,7 @@ const AdSense = ({
   if (adError && fallbackContent) {
     return <div className={`ad-fallback-container ${className}`}>{fallbackContent}</div>;
   }
-  
-  // Normal ad container
+
   return (
     <div 
       className={`ad-container ${className}`}
@@ -381,6 +331,28 @@ const AdSense = ({
             <small>Ad could not be loaded</small>
           </div>
         </div>
+      )}
+
+      {/* Render the actual ad element safely */}
+      {shouldRenderAd && !adError && !adBlockDetected && (
+        <ins
+          className="adsbygoogle"
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            minHeight: '90px',
+            overflow: 'hidden',
+            borderRadius: '8px'
+          }}
+          data-ad-client={client}
+          data-ad-slot={slot}
+          data-ad-format={format}
+          data-ad-layout={layout}
+          data-ad-layout-key={layoutKey}
+          data-full-width-responsive={responsive}
+          data-adtest={testMode ? 'on' : undefined}
+          key={`ad-${slot}-${Date.now()}`} // Unique key to prevent React reusing DOM nodes
+        />
       )}
     </div>
   );
@@ -411,6 +383,9 @@ export const AdSlots = {
   IN_CONTENT_2: '1234567890'
 };
 
+// Alias for backward compatibility
+export const AdUnits = AdSlots;
+
 // Helper to get ad format based on position
 export const getAdFormat = (position) => {
   const formats = {
@@ -427,6 +402,8 @@ export const getAdFormat = (position) => {
 
 // Helper to check if ads are loaded
 export const areAdsLoaded = () => {
+  if (typeof window === 'undefined') return false;
+  
   const ads = document.querySelectorAll('.adsbygoogle');
   return Array.from(ads).some(ad => ad.offsetHeight > 0);
 };
@@ -441,12 +418,6 @@ export const consentHelper = {
       // Clear all tracking when consent changes
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
-      }
-      if (window._adSenseProcessedElements) {
-        window._adSenseProcessedElements = new WeakSet();
-      }
-      if (window._adSenseComponentInstances) {
-        window._adSenseComponentInstances.clear();
       }
       
       const consentEvent = new CustomEvent('consentChanged', {
@@ -474,12 +445,6 @@ export const consentHelper = {
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
       }
-      if (window._adSenseProcessedElements) {
-        window._adSenseProcessedElements = new WeakSet();
-      }
-      if (window._adSenseComponentInstances) {
-        window._adSenseComponentInstances.clear();
-      }
       
       window.dispatchEvent(new Event('consentChanged'));
       console.log('🔄 AdSense: Consent cleared');
@@ -489,7 +454,11 @@ export const consentHelper = {
   },
   
   getConsent: () => {
-    return localStorage.getItem('cookieConsent');
+    try {
+      return localStorage.getItem('cookieConsent');
+    } catch {
+      return null;
+    }
   },
   
   isEEAUser: () => {
@@ -503,16 +472,24 @@ export const consentHelper = {
   },
   
   initialize: () => {
-    const consent = localStorage.getItem('cookieConsent');
-    const isEEA = consentHelper.isEEAUser();
-    
-    console.log(`🔍 AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
-    
-    return {
-      isEEA,
-      hasConsent: consent === 'true',
-      needsConsent: isEEA && !consent
-    };
+    try {
+      const consent = localStorage.getItem('cookieConsent');
+      const isEEA = consentHelper.isEEAUser();
+      
+      console.log(`🔍 AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
+      
+      return {
+        isEEA,
+        hasConsent: consent === 'true',
+        needsConsent: isEEA && !consent
+      };
+    } catch {
+      return {
+        isEEA: false,
+        hasConsent: false,
+        needsConsent: false
+      };
+    }
   }
 };
 
