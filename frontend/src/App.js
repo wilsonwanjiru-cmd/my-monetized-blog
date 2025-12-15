@@ -1,4 +1,4 @@
-// frontend/src/App.js - UPDATED WITH HOTFIX IMPORTS
+// frontend/src/App.js - UPDATED WITH HOTFIX IMPORTS AND ADSENSE INITIALIZATION
 import React, { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
@@ -26,6 +26,9 @@ import './utils/analyticsDebugger';
 import { adSenseHotfix } from './utils/adSenseHotfix';
 import { safeFetch, safeTrackEvent } from './utils/analyticsSafeFetch';
 import './utils/analyticsFallback';
+
+// ✅ NEW: Import AdSense loader
+import { initAdSense } from './utils/loadAdSense';
 
 // Component to handle page view tracking
 const PageViewTracker = () => {
@@ -324,6 +327,53 @@ const initializeGoogleCMP = () => {
   }
 };
 
+// ✅ NEW: Initialize AdSense globally
+const initializeAdSense = () => {
+  // Check if we're in production
+  const isProduction = window.location.hostname === 'wilsonmuita.com' || 
+                       window.location.hostname === 'www.wilsonmuita.com';
+  
+  // Always initialize in development for testing, but use test mode
+  if (typeof window !== 'undefined') {
+    console.log(`🔍 AdSense: Initializing in ${isProduction ? 'production' : 'development'} mode`);
+    
+    // Use test mode in development, real ads in production
+    const testMode = !isProduction;
+    const debug = true; // Enable debug logs to see what's happening
+    
+    // Initialize with debug mode to see what's happening
+    initAdSense({ debug, testMode }).then(result => {
+      if (!result.success) {
+        console.error('❌ AdSense failed to initialize:', result.error);
+        
+        // Log to analytics if available
+        if (typeof trackEvent === 'function') {
+          trackEvent('adsense_failed', {
+            error: result.error,
+            url: window.location.href,
+            testMode: testMode,
+            isProduction: isProduction
+          });
+        }
+      } else {
+        console.log('✅ AdSense initialized successfully');
+        
+        // Track successful initialization
+        if (typeof trackEvent === 'function') {
+          trackEvent('adsense_initialized', {
+            success: true,
+            testMode: testMode,
+            isProduction: isProduction,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }).catch(error => {
+      console.error('❌ AdSense initialization error:', error);
+    });
+  }
+};
+
 // Enhanced scroll tracking
 const setupScrollTracking = () => {
   // Only enable scroll tracking in production
@@ -497,6 +547,12 @@ function App() {
     
     // Setup scroll tracking
     setupScrollTracking();
+    
+    // ✅ NEW: Initialize AdSense globally
+    // Delay AdSense initialization to let other critical resources load first
+    setTimeout(() => {
+      initializeAdSense();
+    }, 3000);
     
     // Track initial app load with hotfix info
     trackEvent('app_loaded', {
