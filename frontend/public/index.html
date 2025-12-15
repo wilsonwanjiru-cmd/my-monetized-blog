@@ -7,14 +7,14 @@
     <link rel="preload" href="%PUBLIC_URL%/favicon.ico" as="image" type="image/x-icon">
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5" />
     <meta name="theme-color" content="#667eea" />
     
     <!-- ✅ Enhanced SEO Meta Tags -->
     <meta name="description" content="Wilson Muita - Technology, Programming, and Web Development Insights. High-quality articles on React, Node.js, JavaScript, and modern web development." />
     <meta name="keywords" content="technology, programming, web development, react, node.js, javascript, tutorials, wilson muita, software engineering, coding, frontend, backend" />
     <meta name="author" content="Wilson Muita" />
-    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
     <meta name="copyright" content="Wilson Muita" />
     <meta name="language" content="en" />
     <meta name="revisit-after" content="7 days" />
@@ -50,6 +50,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://pagead2.googlesyndication.com">
     <link rel="preconnect" href="https://googleads.g.doubleclick.net">
+    <link rel="preconnect" href="https://tpc.googlesyndication.com">
     <link rel="preconnect" href="https://api.wilsonmuita.com">
     
     <!-- ✅ Google Fonts -->
@@ -136,25 +137,6 @@
     <!-- Web App Manifest -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
-
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    
-    <!-- ✅ Microsoft Clarity Heatmap & Analytics -->
-    <script type="text/javascript">
-      (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-      })(window, document, "clarity", "script", "tmnk4u8wvm");
-    </script>
-
     <title>Wilson Muita - Technology, Programming & Web Development Blog</title>
 
     <!-- ✅ Critical CSS (Inline for performance) -->
@@ -170,6 +152,7 @@
         background: #ffffff;
         color: #2d3748;
         line-height: 1.6;
+        overflow-x: hidden;
       }
 
       /* Font fallback until Inter loads */
@@ -187,6 +170,8 @@
 
       #root {
         min-height: 100vh;
+        display: flex;
+        flex-direction: column;
       }
 
       /* Loading animation */
@@ -200,6 +185,12 @@
         flex-direction: column;
         gap: 1rem;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
       }
 
       .loading-spinner {
@@ -242,6 +233,7 @@
       .adsbygoogle {
         border-radius: 8px;
         overflow: hidden;
+        display: block !important;
       }
 
       /* No JavaScript styles */
@@ -256,7 +248,40 @@
         justify-content: center;
         align-items: center;
       }
+      
+      /* Prevent layout shift */
+      ins.adsbygoogle[data-ad-status="unfilled"] {
+        display: none !important;
+      }
+      
+      ins.adsbygoogle[data-ad-status="filled"] {
+        display: block !important;
+      }
     </style>
+    
+    <!-- ✅ Microsoft Clarity Heatmap & Analytics -->
+    <script type="text/javascript">
+      (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+      })(window, document, "clarity", "script", "tmnk4u8wvm");
+    </script>
+    
+    <!-- ✅ Google AdSense Script (NO AUTO ADS INITIALIZATION HERE) -->
+    <!-- This will be loaded conditionally via adsense-config.js -->
+    <script>
+      // Define AdSense configuration globally
+      window._adsenseConfig = {
+        clientId: 'ca-pub-4047817727348673',
+        enabled: true,
+        testMode: window.location.hostname === 'localhost' || 
+                  window.location.hostname.includes('test') ||
+                  window.location.hostname.includes('staging'),
+        autoAdsConfigured: false, // Flag to track if auto ads have been configured
+        pageLevelAdsConfigured: false // Flag to track if page-level ads have been configured
+      };
+    </script>
   </head>
   <body>
     <!-- ✅ No JavaScript Fallback -->
@@ -298,266 +323,200 @@
 
     <!-- ✅ Load config after DOM is ready -->
     <script src="%PUBLIC_URL%/config.js"></script>
+    <!-- ✅ Load AdSense configuration -->
+    <script src="%PUBLIC_URL%/adsense-config.js"></script>
     
-    <!-- ✅ Performance & Error Tracking Script -->
+    <!-- ✅ Critical: AdSense Error Prevention & Performance Optimization -->
     <script>
-      // Remove loading state when React app starts
-      window.addEventListener('DOMContentLoaded', function() {
-        const loadingElement = document.querySelector('.app-loading');
-        if (loadingElement) {
-          setTimeout(() => {
-            if (loadingElement.parentNode) {
-              loadingElement.style.display = 'none';
+      // Suppress common AdSense errors
+      (function() {
+        const originalError = console.error;
+        console.error = function(...args) {
+          // Suppress AdSense related errors
+          if (typeof args[0] === 'string') {
+            const errorMessage = args[0];
+            const suppressedPatterns = [
+              'no_div',
+              'adsbygoogle',
+              'googleads',
+              'googlesyndication',
+              'TagError',
+              'All ins elements',
+              'Failed to load resource',
+              'ERR_BLOCKED_BY_CLIENT',
+              'ERR_BLOCKED_BY_RESPONSE',
+              'ca-pub-4047817727348673',
+              'NetworkError',
+              'ad blocker'
+            ];
+            
+            if (suppressedPatterns.some(pattern => errorMessage.includes(pattern))) {
+              return;
             }
-          }, 3000);
-        }
-        
-        // Add font-loaded class when Inter font loads
-        const interFont = new FontFace('Inter', 'url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2JL7SUc.woff2)');
-        interFont.load().then(function(loadedFont) {
-          document.documentElement.classList.add('font-inter-loaded');
-        }).catch(function(error) {
-          console.log('Inter font loading failed:', error);
-        });
-      });
+          }
+          originalError.apply(console, args);
+        };
 
-      // Performance monitoring - simplified to avoid errors
+        // Also suppress warning logs
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+          if (typeof args[0] === 'string') {
+            const warningMessage = args[0];
+            const suppressedPatterns = [
+              'adsbygoogle',
+              'googleads',
+              'googlesyndication'
+            ];
+            
+            if (suppressedPatterns.some(pattern => warningMessage.includes(pattern))) {
+              return;
+            }
+          }
+          originalWarn.apply(console, args);
+        };
+      })();
+
+      // Performance monitoring
       window.addEventListener('load', function() {
         console.log('🚀 Page loaded successfully');
         
-        // Optional: Send minimal performance data if needed
-        if ('performance' in window && window.APP_CONFIG) {
-          setTimeout(function() {
-            try {
-              const perfData = window.performance.timing;
-              const loadTime = perfData.loadEventEnd - perfData.navigationStart;
-              
-              // Only send if we have valid data
-              if (loadTime > 0 && window.APP_CONFIG.API_BASE_URL) {
-                const apiUrl = window.APP_CONFIG.API_BASE_URL;
-                // Simple fetch without expecting response
-                fetch(apiUrl + '/api/analytics/pageview', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    url: window.location.href,
-                    timestamp: new Date().toISOString(),
-                    loadTime: loadTime
-                  }),
-                  // Don't wait for response to avoid blocking
-                  mode: 'no-cors'
-                }).catch(() => {});
-              }
-            } catch (e) {
-              // Silently ignore performance tracking errors
-            }
-          }, 100);
+        // Remove loading state
+        const loadingElement = document.querySelector('.app-loading');
+        if (loadingElement && loadingElement.parentNode) {
+          setTimeout(() => {
+            loadingElement.style.opacity = '0';
+            loadingElement.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => {
+              loadingElement.style.display = 'none';
+            }, 500);
+          }, 1000);
         }
+        
+        // Load Inter font
+        const interFont = new FontFace('Inter', 'url(https://fonts.gstatic.com/s/inter/v12/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa2JL7SUc.woff2)');
+        interFont.load().then(function(loadedFont) {
+          document.fonts.add(loadedFont);
+          document.documentElement.classList.add('font-inter-loaded');
+        }).catch(function() {
+          // Font loading failed, but that's okay
+        });
       });
-      
-      // Global error handler - simplified
+
+      // Global error handler
       window.addEventListener('error', function(e) {
-        // Only log critical errors, ignore common ones
-        if (!e.message.includes('adsbygoogle') && 
-            !e.message.includes('googlesyndication') &&
-            !e.filename?.includes('googleads')) {
-          console.error('JavaScript Error:', e.message);
-        }
+        // Filter out AdSense errors
+        if (e.message && e.message.includes('adsbygoogle')) return;
+        if (e.filename && e.filename.includes('googlesyndication')) return;
+        console.error('JavaScript Error:', e.message);
       });
 
       // Unhandled promise rejection handler
       window.addEventListener('unhandledrejection', function(e) {
-        // Suppress common AdSense promise rejections
-        if (!e.reason?.toString().includes('adsbygoogle')) {
-          console.warn('Unhandled Promise Rejection:', e.reason);
-        }
+        // Filter out AdSense promise rejections
+        if (e.reason && e.reason.toString().includes('adsbygoogle')) return;
+        console.warn('Unhandled Promise Rejection:', e.reason);
       });
     </script>
 
-    <!-- ✅ CRITICAL: Enhanced AdSense Script Loading with Duplicate Prevention -->
+    <!-- ✅ Enhanced AdSense Safe Loader -->
     <script>
-    // Global AdSense tracking variables
-    window._adSenseGlobalTracking = window._adSenseGlobalTracking || {
-      scriptLoaded: false,
-      scriptLoading: false,
-      initializedSlots: new Set(),
-      processedElements: new WeakSet(),
-      pushAttempts: new Map(),
-      pushQueue: []
-    };
-
-    // Enhanced AdSense script loading with duplicate prevention
-    function loadAdSenseScript() {
-      // Check if already loaded
-      if (window._adSenseGlobalTracking.scriptLoaded) {
-        console.log('✅ AdSense script already loaded');
-        return Promise.resolve();
-      }
-
-      // Check if already loading
-      if (window._adSenseGlobalTracking.scriptLoading) {
-        console.log('⏳ AdSense script already loading, waiting...');
-        return new Promise((resolve) => {
-          const checkInterval = setInterval(() => {
-            if (window._adSenseGlobalTracking.scriptLoaded) {
-              clearInterval(checkInterval);
-              resolve();
-            }
-          }, 100);
-          
-          setTimeout(() => {
-            clearInterval(checkInterval);
-            resolve();
-          }, 5000);
-        });
-      }
-
-      // Mark as loading
-      window._adSenseGlobalTracking.scriptLoading = true;
-      console.log('📥 Loading AdSense script...');
-
-      return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
-        script.async = true;
-        script.crossOrigin = 'anonymous';
-        script.setAttribute('data-ad-client', 'ca-pub-4047817727348673');
+      (function() {
+        // Prevent duplicate AdSense script loading
+        if (window._adSenseLoaded) return;
+        window._adSenseLoaded = true;
         
-        script.onload = function() {
-          window._adSenseGlobalTracking.scriptLoaded = true;
-          window._adSenseGlobalTracking.scriptLoading = false;
-          
-          // Initialize empty array
-          window.adsbygoogle = window.adsbygoogle || [];
-          console.log('✅ AdSense script loaded successfully');
-          
-          // Process any queued pushes
-          processQueuedPushes();
-          resolve();
-        };
+        // Global tracking for ad slots
+        window._adSenseSlots = window._adSenseSlots || new Set();
         
-        script.onerror = function(error) {
-          window._adSenseGlobalTracking.scriptLoading = false;
-          console.warn('⚠️ Failed to load AdSense script:', error);
-          reject(error);
-        };
-        
-        document.head.appendChild(script);
-      });
-    }
-
-    // Process queued ad pushes
-    function processQueuedPushes() {
-      if (window._adSenseGlobalTracking.pushQueue.length > 0) {
-        console.log(`🔄 Processing ${window._adSenseGlobalTracking.pushQueue.length} queued ad pushes`);
-        window._adSenseGlobalTracking.pushQueue.forEach(pushFn => pushFn());
-        window._adSenseGlobalTracking.pushQueue = [];
-      }
-    }
-
-    // Enhanced push wrapper with duplicate prevention
-    function initializePushWrapper() {
-      if (window.adsbygoogle && window.adsbygoogle.push) {
-        const originalPush = window.adsbygoogle.push;
-        
-        window.adsbygoogle.push = function() {
-          const args = arguments;
+        // Enhanced ad push wrapper to prevent duplicates
+        function wrapAdSensePush() {
+          if (!window.adsbygoogle || !window.adsbygoogle.push) return;
           
-          try {
-            // Check for empty push (just initialization)
-            if (args.length === 0 || (args.length === 1 && !args[0])) {
-              console.log('📝 AdSense empty push (initialization)');
-              return originalPush.apply(this, args);
-            }
-
-            // Check all configurations for duplicates
-            for (let i = 0; i < args.length; i++) {
-              const config = args[i];
+          const originalPush = window.adsbygoogle.push;
+          window.adsbygoogle.push = function() {
+            try {
+              const args = Array.from(arguments);
               
-              if (config && typeof config === 'object') {
-                // Extract slot from various formats
-                let slot = null;
-                if (config.slot) slot = config.slot;
-                else if (config.dataAdSlot) slot = config.dataAdSlot;
-                else if (config.element && config.element.dataset && config.element.dataset.adSlot) {
-                  slot = config.element.dataset.adSlot;
-                }
-
-                // Check if slot is already initialized
-                if (slot && window._adSenseGlobalTracking.initializedSlots.has(slot)) {
-                  console.log(`⏩ Skipping duplicate push for slot: ${slot}`);
-                  continue; // Skip this config but process others
-                }
-
-                // Check element-level duplication
-                if (config.element && window._adSenseGlobalTracking.processedElements.has(config.element)) {
-                  console.log('⏩ Skipping duplicate push for already processed element');
-                  continue;
-                }
-
-                // Track slot and element
-                if (slot) {
-                  window._adSenseGlobalTracking.initializedSlots.add(slot);
-                  console.log(`✅ Tracking slot: ${slot}`);
-                }
-                
-                if (config.element) {
-                  window._adSenseGlobalTracking.processedElements.add(config.element);
+              // Check for duplicate enable_page_level_ads
+              for (const config of args) {
+                if (config && typeof config === 'object') {
+                  // Prevent multiple page level ads configurations
+                  if (config.enable_page_level_ads) {
+                    if (window._adsenseConfig.pageLevelAdsConfigured) {
+                      console.log('⏩ Skipping duplicate enable_page_level_ads configuration');
+                      continue;
+                    }
+                    window._adsenseConfig.pageLevelAdsConfigured = true;
+                  }
+                  
+                  // Check for duplicate slots
+                  const slot = config.google_ad_slot || config.dataAdSlot;
+                  if (slot && window._adSenseSlots.has(slot)) {
+                    console.log('⏩ Skipping duplicate ad slot:', slot);
+                    continue;
+                  }
+                  if (slot) {
+                    window._adSenseSlots.add(slot);
+                  }
                 }
               }
+              
+              // Call original push
+              return originalPush.apply(this, args);
+            } catch (error) {
+              // Silent fail for AdSense errors
+              return;
             }
-
-            // Call original push
-            return originalPush.apply(this, args);
-            
-          } catch (error) {
-            console.warn('⚠️ AdSense push wrapper error:', error);
-            // Fallback to original push
-            return originalPush.apply(this, args);
+          };
+        }
+        
+        // Initialize when AdSense loads
+        function onAdSenseLoad() {
+          window.adsbygoogle = window.adsbygoogle || [];
+          wrapAdSensePush();
+          console.log('✅ AdSense wrapper initialized successfully');
+        }
+        
+        // Check if AdSense is already loaded
+        const adSenseScript = document.querySelector('script[src*="adsbygoogle"]');
+        if (adSenseScript) {
+          adSenseScript.addEventListener('load', onAdSenseLoad);
+          // Also check if already loaded
+          if (window.adsbygoogle) {
+            setTimeout(onAdSenseLoad, 100);
           }
-        };
-
-        console.log('✅ AdSense push wrapper initialized');
-      }
-    }
-
-    // Initialize when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-      // Load AdSense script
-      loadAdSenseScript().then(() => {
-        // Initialize push wrapper
-        setTimeout(initializePushWrapper, 100);
-      }).catch(() => {
-        console.log('⚠️ AdSense script loading failed, will retry on demand');
-      });
-    });
-
-    // Enhanced error suppression for AdSense
-    (function() {
-      const originalError = console.error;
-      console.error = function(...args) {
-        // Filter out AdSense errors
-        if (typeof args[0] === 'string' && 
-            (args[0].includes('googleads') || 
-             args[0].includes('googlesyndication') ||
-             args[0].includes('adsbygoogle') ||
-             args[0].includes('TagError') ||
-             args[0].includes('All ins elements') ||
-             args[0].includes('Failed to load resource: the server responded with a status of 400') ||
-             args[0].includes('Failed to load resource: the server responded with a status of 403') ||
-             args[0].includes('Failed to load resource: net::ERR_BLOCKED_BY_CLIENT') ||
-             args[0].includes('Failed to load resource: net::ERR_BLOCKED_BY_RESPONSE'))) {
-          return; // Don't log AdSense errors
         }
         
-        // Also filter analytics errors
-        if (typeof args[0] === 'string' && args[0].includes('/api/analytics/')) {
-          return; // Don't log analytics errors
+        // Safe DOM ready check
+        function domReady(callback) {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', callback);
+          } else {
+            callback();
+          }
         }
         
-        originalError.apply(console, args);
-      };
-    })();
+        // Initialize on DOM ready
+        domReady(function() {
+          // Ensure ad containers exist
+          setTimeout(function() {
+            // This ensures React has time to render initial components
+            if (window.adsbygoogle && window.adsbygoogle.request) {
+              // Request ad refresh for any existing ads
+              const adElements = document.querySelectorAll('ins.adsbygoogle');
+              adElements.forEach(function(ad) {
+                try {
+                  if (ad.dataset.adStatus !== 'filled') {
+                    window.adsbygoogle.request(ad);
+                  }
+                } catch (e) {
+                  // Silent fail
+                }
+              });
+            }
+          }, 2000);
+        });
+      })();
     </script>
 
     <!-- ✅ Schema.org for Current Page -->
@@ -569,7 +528,7 @@
       "description": "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more.",
       "url": "https://wilsonmuita.com",
       "datePublished": "2025-01-01",
-      "dateModified": "2025-01-21"
+      "dateModified": new Date().toISOString().split('T')[0]
     }
     </script>
     
@@ -578,28 +537,100 @@
       // Defer non-critical scripts
       window.addEventListener('load', function() {
         // Load non-critical scripts after page load
-        const nonCriticalScripts = [
-          // Add any non-critical script URLs here
-        ];
+        const nonCriticalScripts = [];
         
         nonCriticalScripts.forEach(function(src) {
           var script = document.createElement('script');
           script.src = src;
           script.async = true;
+          script.defer = true;
           document.body.appendChild(script);
+        });
+        
+        // Prefetch likely navigation targets
+        const linksToPrefetch = [
+          '/blog',
+          '/about',
+          '/contact'
+        ];
+        
+        linksToPrefetch.forEach(function(link) {
+          var prefetch = document.createElement('link');
+          prefetch.rel = 'prefetch';
+          prefetch.href = link;
+          document.head.appendChild(prefetch);
         });
       });
       
       // Set up service worker for PWA
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && window.location.hostname !== 'localhost') {
         window.addEventListener('load', function() {
           navigator.serviceWorker.register('/service-worker.js').then(function(registration) {
-            console.log('✅ ServiceWorker registration successful with scope: ', registration.scope);
+            console.log('✅ ServiceWorker registered with scope:', registration.scope);
           }).catch(function(err) {
-            console.log('❌ ServiceWorker registration failed: ', err);
+            console.log('❌ ServiceWorker registration failed:', err);
           });
         });
       }
+      
+      // Handle page visibility for ad optimization
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible' && window.adsbygoogle && window.adsbygoogle.request) {
+          // Refresh ads after 10 seconds of becoming visible
+          setTimeout(function() {
+            try {
+              const adElements = document.querySelectorAll('ins.adsbygoogle[data-ad-status="filled"]');
+              adElements.forEach(function(ad) {
+                window.adsbygoogle.request(ad);
+              });
+            } catch (e) {
+              // Silent fail
+            }
+          }, 10000);
+        }
+      });
+    </script>
+    
+    <!-- ✅ Critical AdSense Fix Script -->
+    <script>
+      // This script runs after everything else to fix remaining AdSense issues
+      (function() {
+        // Wait for everything to settle
+        setTimeout(function() {
+          // Fix for "no_div" error: ensure all ad containers are properly attached
+          const adContainers = document.querySelectorAll('.ad-container, ins.adsbygoogle');
+          adContainers.forEach(function(container) {
+            if (!document.body.contains(container)) {
+              console.warn('Found detached ad container, reattaching...');
+              document.body.appendChild(container);
+            }
+            
+            // Ensure visibility
+            if (container.style.display === 'none' || container.style.visibility === 'hidden') {
+              container.style.display = 'block';
+              container.style.visibility = 'visible';
+            }
+          });
+          
+          // Re-request ads for any unfilled slots
+          if (window.adsbygoogle && window.adsbygoogle.request) {
+            const unfilledAds = document.querySelectorAll('ins.adsbygoogle[data-ad-status="unfilled"], ins.adsbygoogle:not([data-ad-status])');
+            unfilledAds.forEach(function(ad) {
+              try {
+                // Mark as requested to prevent duplicates
+                if (!ad.dataset.requested) {
+                  ad.dataset.requested = 'true';
+                  setTimeout(function() {
+                    window.adsbygoogle.request(ad);
+                  }, Math.random() * 2000); // Stagger requests
+                }
+              } catch (e) {
+                // Silent fail
+              }
+            });
+          }
+        }, 3000);
+      })();
     </script>
   </body>
 </html>

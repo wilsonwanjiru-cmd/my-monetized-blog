@@ -1,19 +1,25 @@
 /* frontend/src/components/AdSense.css */
 
+/* Main Ad Container */
 .ad-container {
   position: relative;
-  min-height: 90px;
   background: #f8f9fa;
   border-radius: 8px;
   overflow: hidden;
   margin: 16px 0;
   transition: all 0.3s ease;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .ad-container:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+/* Loading State */
 .ad-loading {
   display: flex;
   flex-direction: column;
@@ -21,6 +27,7 @@
   justify-content: center;
   padding: 20px;
   color: #6c757d;
+  width: 100%;
 }
 
 .ad-loading-spinner {
@@ -42,8 +49,10 @@
 .ad-loading-text {
   font-size: 14px;
   text-align: center;
+  font-family: 'Inter', sans-serif;
 }
 
+/* Fallback State */
 .ad-fallback {
   padding: 20px;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -53,11 +62,13 @@
   align-items: center;
   justify-content: center;
   min-height: 90px;
+  width: 100%;
 }
 
 .ad-fallback-content {
   text-align: center;
   color: #6c757d;
+  font-family: 'Inter', sans-serif;
 }
 
 .ad-fallback-content span {
@@ -75,29 +86,13 @@
   opacity: 0.7;
 }
 
-.ad-block-message {
-  padding: 16px;
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 8px;
-  margin: 16px 0;
-  text-align: center;
+/* Error State */
+.ad-error {
+  background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+  border: 1px solid #fc8181;
 }
 
-.ad-block-content {
-  color: #856404;
-}
-
-.ad-block-content p {
-  margin: 0 0 8px 0;
-  font-size: 14px;
-}
-
-.ad-block-content small {
-  font-size: 12px;
-  opacity: 0.8;
-}
-
+/* Test Mode */
 .ad-test-container {
   padding: 20px;
   background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
@@ -105,11 +100,16 @@
   border-radius: 8px;
   margin: 16px 0;
   position: relative;
+  min-height: 250px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .ad-test-content {
   text-align: center;
   color: #1565c0;
+  font-family: 'Inter', sans-serif;
 }
 
 .ad-test-label {
@@ -139,6 +139,59 @@
 .ad-test-message {
   font-size: 13px;
   font-style: italic;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+/* AdSense Ins Element */
+.adsbygoogle {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Ad Label */
+.ad-label {
+  text-align: center;
+  font-size: 11px;
+  color: #666;
+  margin-top: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: 'Inter', sans-serif;
+  padding: 4px 0;
+  width: 100%;
+  background: rgba(248, 249, 250, 0.5);
+}
+
+/* Specific Ad Positions */
+.header-ad-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.header-ad {
+  margin: 10px auto;
+  max-width: 728px;
+}
+
+.sidebar-ad-wrapper {
+  margin-bottom: 24px;
+}
+
+.sidebar-ad, .sidebar-ad-secondary {
+  width: 300px !important;
+  margin: 0 auto;
+}
+
+.footer-ad-wrapper {
+  width: 100%;
+  max-width: 970px;
+  margin: 0 auto;
+  padding: 0 20px;
 }
 
 /* Responsive adjustments */
@@ -156,54 +209,46 @@
     width: 25px;
     height: 25px;
   }
+  
+  .header-ad {
+    max-width: 100%;
+  }
+  
+  .sidebar-ad, .sidebar-ad-secondary {
+    width: 100% !important;
+    max-width: 300px;
+  }
+  
+  .ad-test-container {
+    min-height: 200px;
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ad-container {
+    min-height: 60px;
+    margin: 8px 0;
+  }
+  
+  .ad-loading {
+    padding: 10px;
+  }
+  
+  .ad-loading-text {
+    font-size: 12px;
+  }
 }
 
 /* Hide ads on print */
 @media print {
   .ad-container,
-  .ad-block-message,
   .ad-test-container {
     display: none !important;
   }
 }
 
-/* Specific ad positions */
-.ad-wrapper-header {
-  margin: 0 auto 24px auto;
-  max-width: 970px;
-}
-
-.ad-wrapper-sidebar {
-  margin-bottom: 24px;
-}
-
-.ad-wrapper-footer {
-  margin-top: 32px;
-}
-
-.ad-wrapper-in-article {
-  margin: 32px auto;
-  text-align: center;
-}
-
-.ad-wrapper-between-posts {
-  margin: 32px 0;
-  clear: both;
-}
-
-/* Ad label styling */
-.ad-label {
-  text-align: center;
-  font-size: 11px;
-  color: #666;
-  margin-top: 8px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-family: Inter, Arial, sans-serif;
-}
-
-/* Animation for loading */
+/* Loading animation */
 @keyframes pulse {
   0% { opacity: 0.6; }
   50% { opacity: 1; }
@@ -212,4 +257,28 @@
 
 .ad-loading {
   animation: pulse 1.5s infinite;
+}
+
+/* AdSense specific fixes */
+ins.adsbygoogle[data-ad-status="unfilled"] {
+  display: none !important;
+}
+
+ins.adsbygoogle[data-ad-status="filled"] {
+  display: block !important;
+}
+
+/* Ensure proper stacking */
+.ad-container * {
+  box-sizing: border-box;
+}
+
+/* Performance optimization */
+@media (prefers-reduced-motion: reduce) {
+  .ad-container,
+  .ad-loading-spinner,
+  .ad-loading {
+    animation: none;
+    transition: none;
+  }
 }

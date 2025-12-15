@@ -1,16 +1,12 @@
-// frontend/src/pages/BlogPost.js - ENHANCED VERSION WITH FIXED ERROR
-// Comprehensive BlogPost with AdSense fixes and enhanced features
-
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+// frontend/src/pages/BlogPost.js
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { LazyLoadImage } from 'react-lazy-load-image-component';
-import 'react-lazy-load-image-component/src/effects/blur.css';
+import { Helmet } from 'react-helmet-async';
 import Layout from '../components/Layout';
 import NewsletterSignup from '../components/NewsletterSignup';
 import RelatedPosts from '../components/RelatedPosts';
-import AdSense, { AdUnits } from '../components/AdSense';
-import { blogAPI, trackPostView } from '../utils/api';
-import { initUTMTracking, trackPageView, trackCustomEvent, addUTMParams, getCurrentSessionId } from '../utils/utmTracker';
+import AdSenseFixed, { AdUnits } from '../components/AdSenseFixed';
+import { blogAPI } from '../utils/api';
 import './BlogPost.css';
 
 const BlogPost = () => {
@@ -19,26 +15,26 @@ const BlogPost = () => {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [viewTracked, setViewTracked] = useState(false);
   const [readingProgress, setReadingProgress] = useState(0);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [tableOfContents, setTableOfContents] = useState([]);
   const [activeHeading, setActiveHeading] = useState('');
   const [estimatedReadingTime, setEstimatedReadingTime] = useState(5);
   const [socialShareCount, setSocialShareCount] = useState(0);
+  const [viewTracked, setViewTracked] = useState(false);
+  
   const contentRef = useRef(null);
-  
-  // FIXED: Initialize as object with postViewTracked property instead of boolean
-  const postViewTrackedRef = useRef({ 
-    postViewTracked: false,
-    milestones: {}
-  });
-  
-  const scrollListenersRef = useRef([]);
-  // Add milestones tracked ref to track reading milestones separately
+  const viewTrackedRef = useRef(false);
   const milestonesTrackedRef = useRef({});
+  const scrollListenersRef = useRef([]);
 
-  // Enhanced post fetching with error handling and analytics
+  // Check if debug mode is enabled
+  const isDebugMode = useMemo(() => {
+    return window.location.search.includes('debug=true') || 
+           (window.getConfig && window.getConfig('ENVIRONMENT') === 'development');
+  }, []);
+
+  // Enhanced post fetching with error handling
   const fetchPost = useCallback(async () => {
     if (!slug) {
       setError('No post slug provided');
@@ -50,7 +46,10 @@ const BlogPost = () => {
       setLoading(true);
       setError(null);
 
-      console.log(`🔄 Fetching post: ${slug}`);
+      if (isDebugMode) {
+        console.log(`🔄 Fetching post: ${slug}`);
+      }
+
       const result = await blogAPI.posts.getBySlug(slug);
       const postData = result.post;
 
@@ -63,18 +62,12 @@ const BlogPost = () => {
       // Calculate reading time if not provided
       if (postData.content && !postData.readTime) {
         const wordCount = postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length;
-        const readingTime = Math.max(1, Math.ceil(wordCount / 200)); // 200 words per minute
+        const readingTime = Math.max(1, Math.ceil(wordCount / 200));
         setEstimatedReadingTime(readingTime);
       } else {
         setEstimatedReadingTime(postData.readTime || 5);
       }
 
-      // Update document head for SEO
-      updateMetaTags(postData);
-      
-      // Add structured data for rich snippets
-      addStructuredData(postData);
-      
       // Process content after a short delay to ensure DOM is updated
       setTimeout(() => {
         processContentImages(postData);
@@ -83,94 +76,59 @@ const BlogPost = () => {
         initializeReadingProgress();
       }, 100);
 
-      // Track page view after meta tags are set
-      setTimeout(() => {
-        trackPageView();
-        trackPostViewHandler(postData);
-      }, 500);
-
-      // Track successful post load
-      trackCustomEvent('post_loaded', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'post_loaded',
-        metadata: {
-          postId: postData._id,
-          postSlug: postData.slug,
-          postTitle: postData.title,
-          category: postData.category,
-          readTime: postData.readTime || estimatedReadingTime,
-          timestamp: new Date().toISOString()
-        }
-      });
+      // Track view after load
+      trackPostView(postData);
 
     } catch (err) {
-      console.error('❌ Error fetching post:', err);
+      console.error('Error fetching post:', err);
       const errorMessage = err.message || 'Failed to load blog post. Please try again later.';
       setError(errorMessage);
       
       // Track the error
-      trackCustomEvent('post_load_error', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'fetch_error',
-        metadata: {
-          slug: slug,
-          error: errorMessage,
-          url: window.location.href,
-          timestamp: new Date().toISOString()
-        }
-      });
+      if (window.reportError) {
+        window.reportError(err, { 
+          context: 'fetch_post', 
+          slug: slug 
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [slug, estimatedReadingTime]);
+  }, [slug, isDebugMode]);
 
-  // Enhanced post view tracking with duplicate prevention
-  const trackPostViewHandler = async (postData) => {
-    if (postViewTrackedRef.current.postViewTracked || !postData) return;
+  // Track post view
+  const trackPostView = async (postData) => {
+    if (viewTrackedRef.current || !postData) return;
 
     try {
-      postViewTrackedRef.current.postViewTracked = true;
-
-      // Use the helper function with fallback mechanism
-      await trackPostView(postData._id, {
-        title: postData.title,
-        slug: postData.slug,
-        category: postData.category,
-        readTime: postData.readTime || estimatedReadingTime
-      });
+      viewTrackedRef.current = true;
       
-      // Track custom event
-      await trackCustomEvent('post_view', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'post_view',
-        metadata: {
+      // Track view via API
+      if (blogAPI.posts.trackView) {
+        await blogAPI.posts.trackView(postData._id);
+      }
+      
+      // Use config logging if available
+      if (window.logDebug) {
+        window.logDebug('Post view tracked', {
           postId: postData._id,
-          postSlug: postData.slug,
-          postTitle: postData.title,
-          category: postData.category,
-          readTime: postData.readTime || estimatedReadingTime,
-          author: postData.author,
-          sessionId: getCurrentSessionId(),
-          timestamp: new Date().toISOString()
-        }
-      });
-
+          title: postData.title,
+          slug: postData.slug
+        });
+      }
+      
       setViewTracked(true);
-      console.log('✅ Post view tracked successfully');
     } catch (error) {
       console.warn('Failed to track post view:', error);
       // Even if tracking fails, mark as tracked to avoid multiple attempts
-      postViewTrackedRef.current.postViewTracked = true;
+      viewTrackedRef.current = true;
       setViewTracked(true);
     }
   };
 
   // Generate table of contents from headings
   const generateTableOfContents = () => {
-    const contentElement = document.querySelector('.post-content');
+    const contentElement = contentRef.current || document.querySelector('.post-content');
     if (!contentElement) {
       // Retry after a short delay if content isn't ready
       setTimeout(generateTableOfContents, 200);
@@ -182,8 +140,11 @@ const BlogPost = () => {
 
     headings.forEach((heading, index) => {
       // Generate a safe ID for the heading
-      const id = heading.id || `section-${index + 1}-${Date.now()}`;
-      heading.id = id;
+      let id = heading.id;
+      if (!id) {
+        id = `section-${index + 1}-${Date.now()}`;
+        heading.id = id;
+      }
       
       toc.push({
         id: id,
@@ -199,7 +160,7 @@ const BlogPost = () => {
   // Enhanced reading progress tracking
   const initializeReadingProgress = () => {
     const handleScroll = () => {
-      const contentElement = document.querySelector('.post-content');
+      const contentElement = contentRef.current || document.querySelector('.post-content');
       if (!contentElement) return;
 
       const contentHeight = contentElement.offsetHeight;
@@ -231,7 +192,7 @@ const BlogPost = () => {
     };
   };
 
-  // Track reading milestones for analytics - FIXED VERSION
+  // Track reading milestones
   const trackReadingMilestones = (progress) => {
     const milestones = [25, 50, 75, 90, 100];
     const currentMilestone = milestones.find(milestone => progress >= milestone);
@@ -239,17 +200,13 @@ const BlogPost = () => {
     if (currentMilestone && !milestonesTrackedRef.current[`milestone_${currentMilestone}`]) {
       milestonesTrackedRef.current[`milestone_${currentMilestone}`] = true;
       
-      trackCustomEvent('reading_progress', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'reading_milestone',
-        metadata: {
-          postId: post?._id,
+      if (window.logDebug) {
+        window.logDebug('Reading milestone reached', {
           milestone: currentMilestone,
           progress: Math.round(progress),
-          timestamp: new Date().toISOString()
-        }
-      });
+          postId: post?._id
+        });
+      }
     }
   };
 
@@ -272,7 +229,7 @@ const BlogPost = () => {
     setActiveHeading(currentActive);
   };
 
-  // Enhanced scroll to section with smooth animation
+  // Enhanced scroll to section
   const scrollToSection = (sectionId) => {
     const element = document.getElementById(sectionId);
     if (element) {
@@ -286,18 +243,6 @@ const BlogPost = () => {
 
       // Update URL hash without page jump
       window.history.replaceState(null, null, `#${sectionId}`);
-
-      trackCustomEvent('toc_click', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'toc_navigation',
-        metadata: {
-          postId: post?._id,
-          sectionId: sectionId,
-          sectionText: tableOfContents.find(item => item.id === sectionId)?.text,
-          timestamp: new Date().toISOString()
-        }
-      });
     }
   };
 
@@ -307,175 +252,11 @@ const BlogPost = () => {
       top: 0,
       behavior: 'smooth'
     });
-
-    trackCustomEvent('scroll_to_top', {
-      medium: 'content',
-      campaign: 'blog_post',
-      content: 'scroll_top',
-      metadata: {
-        postId: post?._id,
-        timestamp: new Date().toISOString()
-      }
-    });
-  };
-
-  // Enhanced meta tags update with fallbacks
-  const updateMetaTags = (postData) => {
-    const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
-    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
-    const postUrl = `${siteUrl}/blog/${postData.slug}`;
-    
-    // Update document title
-    document.title = `${postData.title} | ${siteName}`;
-
-    // Basic meta tags
-    updateMetaTag('description', postData.metaDescription || postData.excerpt || postData.title);
-    updateMetaTag('keywords', postData.tags?.join(', ') || 'technology, programming, web development');
-    updateMetaTag('author', postData.author || siteName);
-    
-    // Open Graph meta tags
-    updateMetaTag('og:title', postData.title, 'property');
-    updateMetaTag('og:description', postData.metaDescription || postData.excerpt || postData.title, 'property');
-    updateMetaTag('og:image', postData.featuredImage || postData.ogImage || `${siteUrl}/default-og-image.jpg`, 'property');
-    updateMetaTag('og:url', postUrl, 'property');
-    updateMetaTag('og:type', 'article', 'property');
-    updateMetaTag('og:site_name', siteName, 'property');
-    updateMetaTag('og:locale', 'en_US', 'property');
-    
-    // Twitter Card meta tags
-    updateMetaTag('twitter:card', 'summary_large_image', 'name');
-    updateMetaTag('twitter:title', postData.title, 'name');
-    updateMetaTag('twitter:description', postData.metaDescription || postData.excerpt || postData.title, 'name');
-    updateMetaTag('twitter:image', postData.twitterImage || postData.featuredImage || `${siteUrl}/default-og-image.jpg`, 'name');
-    updateMetaTag('twitter:url', postUrl, 'name');
-    updateMetaTag('twitter:creator', window.REACT_APP_TWITTER_HANDLE || '@WilsonMuita', 'name');
-
-    // Article-specific meta tags
-    if (postData.publishedAt) {
-      updateMetaTag('article:published_time', new Date(postData.publishedAt).toISOString(), 'property');
-    }
-    if (postData.updatedAt) {
-      updateMetaTag('article:modified_time', new Date(postData.updatedAt).toISOString(), 'property');
-    }
-    updateMetaTag('article:author', postData.author || siteName, 'property');
-    if (postData.category) {
-      updateMetaTag('article:section', postData.category, 'property');
-    }
-    
-    if (postData.tags && postData.tags.length > 0) {
-      postData.tags.forEach(tag => {
-        updateMetaTag('article:tag', tag, 'property');
-      });
-    }
-
-    // Canonical URL
-    updateMetaTag('canonical', postData.canonicalUrl || postUrl, 'rel', 'link');
-
-    // Additional meta tags for better SEO
-    updateMetaTag('robots', 'index, follow, max-image-preview:large');
-  };
-
-  // Enhanced helper function to update meta tags
-  const updateMetaTag = (name, content, attribute = 'name', tagName = 'meta') => {
-    if (!content) return;
-
-    try {
-      let metaTag;
-      
-      if (tagName === 'link') {
-        metaTag = document.querySelector(`link[${attribute}="${name}"]`);
-      } else {
-        metaTag = document.querySelector(`${tagName}[${attribute}="${name}"]`);
-      }
-      
-      if (!metaTag) {
-        metaTag = document.createElement(tagName);
-        if (tagName === 'link') {
-          metaTag.setAttribute('rel', attribute);
-          metaTag.setAttribute('href', content);
-        } else {
-          metaTag.setAttribute(attribute, name);
-          metaTag.setAttribute('content', content);
-        }
-        document.head.appendChild(metaTag);
-      } else {
-        if (tagName === 'link') {
-          metaTag.setAttribute('href', content);
-        } else {
-          metaTag.setAttribute('content', content);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to update meta tag:', name, error);
-    }
-  };
-
-  // Enhanced JSON-LD structured data
-  const addStructuredData = (postData) => {
-    const siteUrl = window.REACT_APP_SITE_URL || 'https://wilsonmuita.com';
-    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
-
-    // Remove existing structured data
-    const existingScript = document.getElementById('blog-post-structured-data');
-    if (existingScript) {
-      existingScript.remove();
-    }
-
-    const wordCount = postData.content ? postData.content.replace(/<[^>]*>/g, '').split(/\s+/).length : 0;
-
-    const structuredData = {
-      "@context": "https://schema.org",
-      "@type": "BlogPosting",
-      "headline": postData.title,
-      "description": postData.metaDescription || postData.excerpt || postData.title,
-      "image": {
-        "@type": "ImageObject",
-        "url": postData.featuredImage || `${siteUrl}/default-og-image.jpg`,
-        "width": "1200",
-        "height": "630"
-      },
-      "author": {
-        "@type": "Person",
-        "name": postData.author || siteName,
-        "url": `${siteUrl}/about`
-      },
-      "publisher": {
-        "@type": "Organization",
-        "name": siteName,
-        "logo": {
-          "@type": "ImageObject",
-          "url": `${siteUrl}/logo.png`,
-          "width": "180",
-          "height": "60"
-        }
-      },
-      "datePublished": postData.publishedAt,
-      "dateModified": postData.updatedAt || postData.publishedAt,
-      "mainEntityOfPage": {
-        "@type": "WebPage",
-        "@id": `${siteUrl}/blog/${postData.slug}`
-      },
-      "wordCount": wordCount,
-      "timeRequired": `PT${postData.readTime || estimatedReadingTime}M`,
-      "articleSection": postData.category || 'Technology',
-      "keywords": postData.tags?.join(', ') || '',
-      "inLanguage": "en-US"
-    };
-
-    try {
-      const script = document.createElement('script');
-      script.type = 'application/ld+json';
-      script.id = 'blog-post-structured-data';
-      script.text = JSON.stringify(structuredData);
-      document.head.appendChild(script);
-    } catch (error) {
-      console.warn('Failed to add structured data:', error);
-    }
   };
 
   // Enhanced content image processing
   const processContentImages = (postData) => {
-    const contentElement = document.querySelector('.post-content');
+    const contentElement = contentRef.current || document.querySelector('.post-content');
     if (!contentElement) {
       setTimeout(() => processContentImages(postData), 200);
       return;
@@ -510,56 +291,19 @@ const BlogPost = () => {
         img.setAttribute('decoding', 'async');
       }
 
-      // Handle image container
-      const parent = img.parentElement;
-      if (parent && parent.tagName !== 'FIGURE') {
-        // Wrap image in figure element for better semantics
-        const figure = document.createElement('figure');
-        figure.className = 'content-image-container';
-        parent.insertBefore(figure, img);
-        figure.appendChild(img);
-      }
-
-      // Track image views
-      img.addEventListener('load', () => {
-        console.log(`✅ Image ${index + 1} loaded successfully`);
-        trackCustomEvent('image_load', {
-          medium: 'content',
-          campaign: 'blog_post',
-          content: 'image_loaded',
-          metadata: {
-            postId: postData._id,
-            imageSrc: img.src,
-            imageIndex: index,
-            imageAlt: img.alt,
-            timestamp: new Date().toISOString()
-          }
-        });
-      });
-
       // Enhanced image error handling
       img.addEventListener('error', () => {
-        console.warn(`❌ Image failed to load: ${img.src}`);
+        console.warn(`Image failed to load: ${img.src}`);
         img.style.opacity = '0.5';
         img.style.filter = 'grayscale(100%)';
         img.alt = 'Image failed to load';
-        
-        // Create retry button
-        const retryButton = document.createElement('button');
-        retryButton.textContent = 'Retry Image';
-        retryButton.className = 'image-retry-button';
-        retryButton.onclick = () => {
-          img.src = img.src + '?retry=' + Date.now();
-        };
-        
-        img.parentNode.appendChild(retryButton);
       });
     });
   };
 
-  // Enhanced content links with UTM tracking
+  // Enhanced content links
   const enhanceContentLinks = (postData) => {
-    const contentElement = document.querySelector('.post-content');
+    const contentElement = contentRef.current || document.querySelector('.post-content');
     if (!contentElement) {
       setTimeout(() => enhanceContentLinks(postData), 200);
       return;
@@ -572,44 +316,14 @@ const BlogPost = () => {
       const isInternal = originalHref.includes('wilsonmuita.com') || 
                          originalHref.includes(window.location.hostname);
 
-      if (!isInternal && !originalHref.includes('utm_source')) {
-        const trackedUrl = addUTMParams(
-          originalHref,
-          'wilsonmuita',
-          'content',
-          'outbound_link',
-          `post_${postData.slug}`,
-          link.textContent?.substring(0, 50)
-        );
-        
-        link.setAttribute('href', trackedUrl);
+      if (!isInternal) {
         link.setAttribute('target', '_blank');
         link.setAttribute('rel', 'noopener noreferrer');
-
-        // Add click tracking with enhanced analytics
-        const clickHandler = () => {
-          trackCustomEvent('outbound_link_click', {
-            medium: 'content',
-            campaign: 'outbound_link',
-            content: `post_${postData.slug}`,
-            metadata: {
-              postId: postData._id,
-              originalUrl: originalHref,
-              trackedUrl: trackedUrl,
-              linkText: link.textContent?.substring(0, 100),
-              isAffiliate: link.classList.contains('affiliate-link'),
-              timestamp: new Date().toISOString()
-            }
-          });
-        };
-
-        link.addEventListener('click', clickHandler);
-        scrollListenersRef.current.push(() => link.removeEventListener('click', clickHandler));
       }
     });
   };
 
-  // Enhanced social sharing with analytics
+  // Social sharing with analytics
   const handleSocialShare = (platform) => {
     if (!post) return;
 
@@ -635,41 +349,14 @@ const BlogPost = () => {
         return;
     }
 
-    // Track the share event
-    trackCustomEvent('social_share_attempt', {
-      medium: 'social',
-      campaign: 'social_share',
-      content: platform,
-      metadata: {
-        postId: post._id,
-        platform: platform,
-        url: postUrl,
-        timestamp: new Date().toISOString()
-      }
-    });
-
     // Update share count
     setSocialShareCount(prev => prev + 1);
 
     // Open share window
-    const shareWindow = window.open(shareUrl, '_blank', 'width=600,height=400,menubar=no,toolbar=no,resizable=yes,scrollbars=yes');
-    
-    // Track if share was successful
-    if (shareWindow) {
-      trackCustomEvent('social_share_success', {
-        medium: 'social',
-        campaign: 'social_share',
-        content: platform,
-        metadata: {
-          postId: post._id,
-          platform: platform,
-          timestamp: new Date().toISOString()
-        }
-      });
-    }
+    window.open(shareUrl, '_blank', 'width=600,height=400,menubar=no,toolbar=no,resizable=yes,scrollbars=yes');
   };
 
-  // Enhanced copy URL to clipboard
+  // Copy URL to clipboard
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -686,16 +373,6 @@ const BlogPost = () => {
         }, 2000);
       });
 
-      trackCustomEvent('url_copied', {
-        medium: 'content',
-        campaign: 'blog_post',
-        content: 'url_copied',
-        metadata: {
-          postId: post?._id,
-          url: window.location.href,
-          timestamp: new Date().toISOString()
-        }
-      });
     } catch (err) {
       console.error('Failed to copy URL:', err);
       
@@ -709,13 +386,14 @@ const BlogPost = () => {
     }
   };
 
-  // Enhanced print article functionality
+  // Print article functionality
   const printArticle = () => {
     // Add print-specific styles
     const printStyle = document.createElement('style');
     printStyle.innerHTML = `
       @media print {
-        .no-print, .social-sharing, .table-of-contents, .scroll-to-top, .reading-progress {
+        .no-print, .social-sharing, .table-of-contents, .scroll-to-top, .reading-progress,
+        .newsletter-section, .post-footer, .related-posts, .ad-container {
           display: none !important;
         }
         body {
@@ -733,64 +411,38 @@ const BlogPost = () => {
     
     // Clean up print styles
     setTimeout(() => {
-      document.head.removeChild(printStyle);
-    }, 1000);
-    
-    trackCustomEvent('print_article', {
-      medium: 'content',
-      campaign: 'blog_post',
-      content: 'print',
-      metadata: {
-        postId: post?._id,
-        timestamp: new Date().toISOString()
+      if (printStyle.parentNode) {
+        document.head.removeChild(printStyle);
       }
-    });
+    }, 1000);
   };
 
   // Enhanced cleanup function
   const cleanup = () => {
-    // Reset document title
-    const siteName = window.REACT_APP_SITE_NAME || 'Wilson Muita';
-    document.title = siteName;
-    
-    // Remove structured data script
-    const existingScript = document.getElementById('blog-post-structured-data');
-    if (existingScript) {
-      existingScript.remove();
-    }
-    
     // Cleanup scroll listeners
     scrollListenersRef.current.forEach(cleanup => cleanup());
     scrollListenersRef.current = [];
     
-    // Reset tracking refs - FIXED: Reset to initial object structure
-    postViewTrackedRef.current = { 
-      postViewTracked: false,
-      milestones: {}
-    };
+    // Reset tracking refs
+    viewTrackedRef.current = false;
     milestonesTrackedRef.current = {};
   };
 
   // Main useEffect for component lifecycle
   useEffect(() => {
-    // Initialize UTM tracking
-    initUTMTracking();
-
     // Reset state when slug changes
     setPost(null);
     setLoading(true);
     setError(null);
-    setViewTracked(false);
     setReadingProgress(0);
     setShowScrollTop(false);
     setTableOfContents([]);
     setActiveHeading('');
+    setSocialShareCount(0);
+    setViewTracked(false);
     
-    // FIXED: Reset refs to proper initial values
-    postViewTrackedRef.current = { 
-      postViewTracked: false,
-      milestones: {}
-    };
+    // Reset refs to proper initial values
+    viewTrackedRef.current = false;
     milestonesTrackedRef.current = {};
 
     // Fetch post data
@@ -809,6 +461,20 @@ const BlogPost = () => {
       updateActiveHeading();
     }
   }, [tableOfContents]);
+
+  // Debug logging
+  useEffect(() => {
+    if (isDebugMode && post) {
+      console.log('📊 BlogPost Debug Info:', {
+        postId: post._id,
+        slug: post.slug,
+        title: post.title,
+        readingProgress,
+        viewTracked,
+        estimatedReadingTime
+      });
+    }
+  }, [post, readingProgress, viewTracked, estimatedReadingTime, isDebugMode]);
 
   // Enhanced loading state with skeleton UI
   if (loading) {
@@ -929,13 +595,57 @@ const BlogPost = () => {
     );
   }
 
-  // Main post content with Layout component
+  // Prepare article meta for Layout component
+  const articleMeta = {
+    title: post.title,
+    description: post.metaDescription || post.excerpt,
+    image: post.featuredImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    tags: post.tags
+  };
+
   return (
     <Layout 
       title={post.title} 
       description={post.metaDescription || post.excerpt}
+      articleMeta={articleMeta}
       canonicalUrl={`/blog/${post.slug}`}
+      ogImage={post.featuredImage || "https://wilsonmuita.com/default-og-image.jpg"}
+      twitterImage={post.featuredImage || "https://wilsonmuita.com/default-og-image.jpg"}
+      isBlogPost={true}
     >
+      <Helmet>
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BlogPosting",
+            "headline": post.title,
+            "description": post.metaDescription || post.excerpt,
+            "image": post.featuredImage || "https://wilsonmuita.com/default-og-image.jpg",
+            "datePublished": post.publishedAt,
+            "dateModified": post.updatedAt || post.publishedAt,
+            "author": {
+              "@type": "Person",
+              "name": post.author || "Wilson Muita",
+              "url": "https://wilsonmuita.com/about"
+            },
+            "publisher": {
+              "@type": "Organization",
+              "name": "Wilson Muita",
+              "logo": {
+                "@type": "ImageObject",
+                "url": "https://wilsonmuita.com/logo512.png"
+              }
+            },
+            "mainEntityOfPage": {
+              "@type": "WebPage",
+              "@id": `https://wilsonmuita.com/blog/${post.slug}`
+            }
+          })}
+        </script>
+      </Helmet>
+
       <div className="blog-post-container">
         {/* READING PROGRESS BAR */}
         <div className="reading-progress">
@@ -957,21 +667,17 @@ const BlogPost = () => {
           </button>
         )}
 
-        {/* FEATURED IMAGE with LazyLoadImage */}
+        {/* FEATURED IMAGE */}
         {post.featuredImage && (
           <div className="featured-image-container">
-            <LazyLoadImage
+            <img
               src={post.featuredImage}
               alt={post.imageAltText || post.title}
-              effect="blur"
               className="featured-image"
-              placeholderSrc="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PC9zdmc+"
+              loading="lazy"
               onError={(e) => {
                 e.target.style.display = 'none';
                 console.warn('Featured image failed to load:', post.featuredImage);
-              }}
-              onLoad={() => {
-                console.log('Featured image loaded successfully');
               }}
             />
             {post.imageCaption && (
@@ -980,20 +686,22 @@ const BlogPost = () => {
           </div>
         )}
 
-        {/* ✅ FIXED: Using enhanced AdSense component with proper slot management */}
-        <AdSense 
-          slot={AdUnits.IN_ARTICLE}
-          format="fluid"
-          layout="in-article"
-          responsive={true}
-          className="ad-in-article"
-          currentPath={window.location.pathname}
-          fallbackContent={
-            <div className="ad-fallback">
-              <p>Advertisement</p>
-            </div>
-          }
-        />
+        {/* IN-ARTICLE AD (Top) */}
+        <div className="in-article-ad-top" data-ad-type="in-article-top">
+          <AdSenseFixed 
+            slot={AdUnits.IN_ARTICLE}
+            format="auto"
+            responsive={true}
+            className="in-article-ad"
+            fullWidthResponsive={true}
+            lazyLoad={true}
+            debug={isDebugMode}
+            adStyle={{ 
+              margin: '20px auto',
+              maxWidth: '728px'
+            }}
+          />
+        </div>
 
         {/* POST HEADER */}
         <header className="post-header">
@@ -1140,31 +848,12 @@ const BlogPost = () => {
           </aside>
         )}
 
-        {/* ✅ FIXED: Using enhanced AdSense component for header ad */}
-        <AdSense 
-          slot={AdUnits.HEADER}
-          format="fluid"
-          layout="in-article"
-          responsive={true}
-          className="ad-before-content"
-          currentPath={window.location.pathname}
-        />
-
         {/* POST CONTENT */}
         <article 
           ref={contentRef}
           className="post-content"
           itemProp="articleBody"
           dangerouslySetInnerHTML={{ __html: post.content }}
-        />
-
-        {/* ✅ FIXED: Using enhanced AdSense component for footer ad */}
-        <AdSense 
-          slot={AdUnits.FOOTER}
-          format="auto"
-          responsive={true}
-          className="ad-after-content"
-          currentPath={window.location.pathname}
         />
 
         {/* READING PROGRESS SUMMARY */}
@@ -1203,6 +892,23 @@ const BlogPost = () => {
           </div>
         </section>
 
+        {/* IN-ARTICLE AD (Bottom) */}
+        <div className="in-article-ad-bottom" data-ad-type="in-article-bottom">
+          <AdSenseFixed 
+            slot={AdUnits.BETWEEN_POSTS}
+            format="auto"
+            responsive={true}
+            className="in-article-ad"
+            fullWidthResponsive={true}
+            lazyLoad={true}
+            debug={isDebugMode}
+            adStyle={{ 
+              margin: '20px auto',
+              maxWidth: '728px'
+            }}
+          />
+        </div>
+
         {/* NEWSLETTER SIGNUP SECTION */}
         <section className="newsletter-section">
           <div className="newsletter-header">
@@ -1214,15 +920,6 @@ const BlogPost = () => {
           </div>
           <NewsletterSignup source="blog_post" location="post_bottom" />
         </section>
-
-        {/* ✅ FIXED: Using enhanced AdSense component for between posts ad */}
-        <AdSense 
-          slot={AdUnits.BETWEEN_POSTS}
-          format="auto"
-          responsive={true}
-          className="ad-between-sections"
-          currentPath={window.location.pathname}
-        />
 
         {/* RELATED POSTS */}
         {post && (
@@ -1251,6 +948,11 @@ const BlogPost = () => {
               🖨️ Print Article
             </button>
           </div>
+          {isDebugMode && (
+            <div className="post-debug-info">
+              <p>Debug Info: Post ID: {post._id} | Views: {post.views || 0} | Reading Time: {estimatedReadingTime} min</p>
+            </div>
+          )}
         </footer>
       </div>
     </Layout>
