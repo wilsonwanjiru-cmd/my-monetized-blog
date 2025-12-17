@@ -1,263 +1,343 @@
 // frontend/src/components/AdSenseEnhanced.js
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import PropTypes from 'prop-types';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { loadAdSenseScript } from '../utils/loadAdSense';
-import './AdSense.css';
 
-const AdSenseEnhanced = ({
+// Global tracking for script and ad initialization
+if (typeof window !== 'undefined') {
+  window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
+  window._adSenseScriptLoading = window._adSenseScriptLoading || false;
+  window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
+}
+
+const AdSenseEnhanced = ({ 
+  client = 'ca-pub-4047817727348673',
   slot,
   format = 'auto',
-  responsive = 'true',
-  className = '',
   layout = '',
   layoutKey = '',
+  responsive = 'true',
+  className = '',
   style = {},
-  fallbackContent = null,
-  debug = false,
   testMode = false,
-  lazyLoad = true
+  debug = false,
+  fallbackContent = null
 }) => {
   const location = useLocation();
-  const containerRef = useRef(null);
-  const [status, setStatus] = useState('idle'); // idle, loading, loaded, error
-  const [errorMessage, setErrorMessage] = useState('');
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const adRef = useRef(null);
+  const [adBlockDetected, setAdBlockDetected] = useState(false);
+  const [adLoaded, setAdLoaded] = useState(false);
+  const [adError, setAdError] = useState(false);
+  const [shouldRenderAd, setShouldRenderAd] = useState(false);
   
-  // Excluded paths
+  // Skip ad rendering on certain pages
   const excludedPaths = ['/privacy', '/disclaimer', '/about', '/contact'];
   const isExcluded = excludedPaths.some(path => 
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
-
+  
+  // Enhanced logging
   const log = useCallback((message, type = 'info') => {
-    if (!debug && type !== 'error') return;
+    if (!debug && type === 'debug') return;
     
-    const prefix = {
-      error: '❌',
-      warn: '⚠️',
-      info: 'ℹ️',
-      success: '✅'
-    }[type] || 'ℹ️';
-    
-    console.log(`${prefix} AdSense [${slot}]: ${message}`);
+    const prefix = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : '✅';
+    console.log(`${prefix} AdSenseEnhanced [${slot}]: ${message}`);
   }, [debug, slot]);
 
-  // Load AdSense script
-  const loadScript = useCallback(async () => {
-    if (typeof window === 'undefined') return false;
+  // Check if ad blocker is active
+  useEffect(() => {
+    const testAdBlock = () => {
+      if (typeof window === 'undefined') return;
+      
+      const testAd = document.createElement('div');
+      testAd.className = 'adsbygoogle';
+      testAd.style.cssText = 'height: 1px; width: 1px; position: absolute; left: -1000px; top: -1000px;';
+      document.body.appendChild(testAd);
+      
+      setTimeout(() => {
+        const detected = testAd.offsetHeight === 0 || 
+                        testAd.offsetWidth === 0 || 
+                        window.getComputedStyle(testAd).display === 'none';
+        setAdBlockDetected(detected);
+        if (testAd.parentNode) {
+          document.body.removeChild(testAd);
+        }
+        
+        if (detected && debug) {
+          console.warn('Ad blocker detected');
+        }
+      }, 100);
+    };
     
-    try {
-      log('Loading AdSense script...');
-      await loadAdSenseScript({ debug, testMode });
-      setScriptLoaded(true);
-      log('AdSense script loaded', 'success');
-      return true;
-    } catch (error) {
-      log(`Failed to load AdSense script: ${error.message}`, 'error');
-      setStatus('error');
-      setErrorMessage('AdSense script failed to load');
-      return false;
-    }
-  }, [debug, testMode, log]);
+    testAdBlock();
+  }, [debug]);
 
-  // Initialize ad
-  const initializeAd = useCallback(async () => {
-    if (isExcluded || !slot || status === 'loaded' || status === 'loading') {
+  // Load AdSense script (with global duplicate prevention)
+  const loadAdSenseScript = useCallback((maxRetries = 3, retryDelay = 1000) => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined') {
+        reject(new Error('Window not available'));
+        return;
+      }
+      
+      // CRITICAL FIX: Check if global AdSense is already loaded by adsense-config.js
+      if (window._adsenseConfig && window._adsenseConfig.autoAdsConfigured) {
+        resolve(true);
+        return;
+      }
+      
+      if (window._adSenseScriptLoaded) {
+        resolve(true);
+        return;
+      }
+      
+      if (window._adSenseScriptLoading) {
+        const checkInterval = setInterval(() => {
+          if (window._adSenseScriptLoaded) {
+            clearInterval(checkInterval);
+            resolve(true);
+          }
+        }, 100);
+        return;
+      }
+      
+      window._adSenseScriptLoading = true;
+      
+      const loadScript = (retryCount = 0) => {
+        const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
+        if (existingScript) {
+          window._adSenseScriptLoaded = true;
+          window._adSenseScriptLoading = false;
+          resolve(true);
+          return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + client;
+        script.async = true;
+        script.crossOrigin = 'anonymous';
+        script.defer = true;
+        
+        script.onload = () => {
+          window._adSenseScriptLoaded = true;
+          window._adSenseScriptLoading = false;
+          
+          window.adsbygoogle = window.adsbygoogle || [];
+          
+          log('AdSense script loaded successfully');
+          resolve(true);
+        };
+        
+        script.onerror = () => {
+          console.error('❌ AdSense script failed to load');
+          
+          if (retryCount < maxRetries) {
+            setTimeout(() => loadScript(retryCount + 1), retryDelay * (retryCount + 1));
+          } else {
+            window._adSenseScriptLoading = false;
+            reject(new Error(`Failed to load AdSense script after ${maxRetries} retries`));
+          }
+        };
+        
+        document.head.appendChild(script);
+      };
+      
+      loadScript();
+    });
+  }, [client, log]);
+
+  // Initialize ad safely (WITHOUT auto ads config)
+  const initializeAd = useCallback(() => {
+    if (typeof window === 'undefined' || !slot || !adRef.current) return;
+
+    if (isExcluded || adBlockDetected || testMode) {
       return;
     }
 
-    setStatus('loading');
-    log(`Initializing ad slot: ${slot}`);
+    // Check if already initialized globally
+    if (window._adSenseInitializedSlots.has(slot)) {
+      log(`Slot ${slot} already initialized globally, skipping`, 'debug');
+      return;
+    }
 
     try {
-      // Wait for script to load
-      if (!scriptLoaded) {
-        const loaded = await loadScript();
-        if (!loaded) {
-          throw new Error('AdSense script not loaded');
-        }
+      const adElement = adRef.current.querySelector('.adsbygoogle');
+      if (!adElement) {
+        log('Ad element not found', 'warn');
+        return;
       }
 
-      // Check if adsbygoogle is available
-      if (!window.adsbygoogle) {
-        throw new Error('adsbygoogle not available');
-      }
+      // Mark as initialized
+      window._adSenseInitializedSlots.add(slot);
 
-      // Wait for container to be ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      if (!containerRef.current) {
-        throw new Error('Ad container not found');
-      }
-
-      // Create ad element
-      const adElement = document.createElement('ins');
-      adElement.className = 'adsbygoogle';
-      adElement.style.display = 'block';
-      adElement.dataset.adClient = 'ca-pub-4047817727348673';
-      adElement.dataset.adSlot = slot;
-      adElement.dataset.adFormat = format;
-      adElement.dataset.fullWidthResponsive = responsive;
-      
-      if (layout) adElement.dataset.adLayout = layout;
-      if (layoutKey) adElement.dataset.adLayoutKey = layoutKey;
-      if (testMode) adElement.dataset.adtest = 'on';
-
-      // Clear container and append ad
-      containerRef.current.innerHTML = '';
-      containerRef.current.appendChild(adElement);
-
-      // Initialize the ad
+      // CRITICAL FIX: Only push empty object, NO enable_page_level_ads config
       try {
         (window.adsbygoogle = window.adsbygoogle || []).push({});
-        log(`Ad pushed to adsbygoogle queue`, 'success');
+        setAdLoaded(true);
         
-        // Wait for ad to load
-        setTimeout(() => {
-          if (adElement.offsetHeight > 0 && adElement.offsetWidth > 0) {
-            setStatus('loaded');
-            log('Ad loaded successfully', 'success');
-          } else {
-            setStatus('error');
-            setErrorMessage('Ad failed to render');
-            log('Ad failed to render', 'error');
-          }
-        }, 2000);
+        if (debug) {
+          log(`AdSense ad initialized - Slot: ${slot}, Format: ${format}`);
+        }
       } catch (pushError) {
-        setStatus('error');
-        setErrorMessage(`Ad push failed: ${pushError.message}`);
-        log(`Ad push failed: ${pushError.message}`, 'error');
+        log('AdSense push error: ' + pushError.message, 'error');
+        setAdError(true);
       }
     } catch (error) {
-      setStatus('error');
-      setErrorMessage(error.message);
-      log(`Ad initialization failed: ${error.message}`, 'error');
+      log('AdSense initialization error: ' + error.message, 'error');
+      setAdError(true);
     }
-  }, [isExcluded, slot, status, scriptLoaded, format, responsive, layout, layoutKey, testMode, loadScript, log]);
+  }, [slot, format, isExcluded, adBlockDetected, testMode, debug, log]);
 
-  // Effect to load ad
+  // Main initialization effect
   useEffect(() => {
-    if (isExcluded || !slot) return;
-
     let mounted = true;
-    let timeoutId;
+    let scriptLoadTimeout = null;
+    let adInitTimeout = null;
 
-    const init = async () => {
-      if (lazyLoad) {
-        // Wait for component to be in viewport
-        const observer = new IntersectionObserver(
-          (entries) => {
-            if (entries[0].isIntersecting && mounted) {
-              observer.disconnect();
-              initializeAd();
-            }
-          },
-          { threshold: 0.1 }
-        );
+    if (isExcluded || !slot) {
+      return () => { mounted = false; };
+    }
 
-        if (containerRef.current) {
-          observer.observe(containerRef.current);
+    const initAdSense = async () => {
+      if (!mounted) return;
+
+      try {
+        if (adBlockDetected && !testMode) {
+          return;
         }
 
-        return () => {
-          if (observer) observer.disconnect();
-        };
-      } else {
-        // Non-lazy load
-        timeoutId = setTimeout(() => {
-          if (mounted) initializeAd();
-        }, 1000);
+        await new Promise(resolve => {
+          adInitTimeout = setTimeout(resolve, 500);
+        });
+
+        if (!mounted) return;
+
+        // CRITICAL FIX: Only load script if global adsense-config.js hasn't already
+        if (!window._adsenseConfig || !window._adsenseConfig.autoAdsConfigured) {
+          await loadAdSenseScript();
+        }
+
+        if (!mounted) return;
+
+        setShouldRenderAd(true);
+
+        await new Promise(resolve => {
+          scriptLoadTimeout = setTimeout(resolve, 100);
+        });
+
+        if (!mounted) return;
+
+        initializeAd();
+
+      } catch (error) {
+        if (mounted) {
+          log('Failed to initialize AdSense: ' + error.message, 'error');
+          setAdError(true);
+        }
       }
     };
 
-    init();
+    const initTimeout = setTimeout(() => {
+      initAdSense();
+    }, 1000);
 
     return () => {
       mounted = false;
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(initTimeout);
+      clearTimeout(scriptLoadTimeout);
+      clearTimeout(adInitTimeout);
+      
+      if (slot) {
+        window._adSenseInitializedSlots.delete(slot);
+      }
     };
-  }, [initializeAd, isExcluded, slot, lazyLoad]);
+  }, [slot, isExcluded, adBlockDetected, loadAdSenseScript, initializeAd, testMode, log]);
 
-  // Don't render if excluded or no slot
-  if (isExcluded || !slot) {
+  // Don't render on excluded pages
+  if (isExcluded) {
     return null;
   }
-
-  // Render based on status
-  if (status === 'error') {
-    if (fallbackContent) {
-      return <div className={`ad-container ad-error ${className}`}>{fallbackContent}</div>;
-    }
-    
+  
+  if (!slot) {
+    log('No slot provided', 'warn');
+    return null;
+  }
+  
+  if (adBlockDetected && !testMode) {
     return (
-      <div className={`ad-container ad-error ${className}`} style={style}>
-        <div className="ad-error-content">
-          <div className="ad-error-icon">❌</div>
-          <div className="ad-error-message">
-            <p>Advertisement</p>
-            <small>Ad failed to load: {errorMessage}</small>
-          </div>
+      <div className={`ad-block-message ${className}`} style={style}>
+        <div className="ad-block-content">
+          <p>Please consider disabling your ad blocker to support this site.</p>
+          <small>Advertisement helps keep this content free for everyone.</small>
         </div>
       </div>
     );
   }
-
-  if (status === 'loaded') {
+  
+  if (testMode) {
     return (
-      <div 
-        className={`ad-container ad-loaded ${className}`}
-        style={style}
-        ref={containerRef}
-        data-ad-slot={slot}
-        data-ad-status="loaded"
-      />
+      <div className={`ad-test-container ${className}`} style={style}>
+        <div className="ad-test-content">
+          <div className="ad-test-label">TEST AD</div>
+          <div className="ad-test-slot">Slot: {slot}</div>
+          <div className="ad-test-format">Format: {format}</div>
+          <div className="ad-test-message">This would be an actual ad in production</div>
+        </div>
+      </div>
     );
   }
+  
+  if (adError && fallbackContent) {
+    return <div className={`ad-fallback-container ${className}`}>{fallbackContent}</div>;
+  }
 
-  // Loading state
   return (
     <div 
-      className={`ad-container ad-loading ${className}`}
+      className={`ad-container ${className}`}
       style={style}
-      ref={containerRef}
       data-ad-slot={slot}
-      data-ad-status="loading"
+      data-ad-format={format}
+      data-ad-loaded={adLoaded}
+      data-ad-error={adError}
+      ref={adRef}
     >
-      <div className="ad-loading-content">
-        <div className="ad-loading-spinner"></div>
-        <div className="ad-loading-text">Loading advertisement...</div>
-        {debug && <div className="ad-loading-debug">Slot: {slot}</div>}
-      </div>
+      {!adLoaded && !adError && (
+        <div className="ad-loading">
+          <div className="ad-loading-spinner"></div>
+          <div className="ad-loading-text">Loading advertisement...</div>
+        </div>
+      )}
+      
+      {adError && !fallbackContent && (
+        <div className="ad-fallback">
+          <div className="ad-fallback-content">
+            <span>Advertisement</span>
+            <small>Ad could not be loaded</small>
+          </div>
+        </div>
+      )}
+
+      {shouldRenderAd && !adError && !adBlockDetected && (
+        <ins
+          className="adsbygoogle"
+          style={{
+            display: 'block',
+            textAlign: 'center',
+            minHeight: '90px',
+            overflow: 'hidden',
+            borderRadius: '8px'
+          }}
+          data-ad-client={client}
+          data-ad-slot={slot}
+          data-ad-format={format}
+          data-ad-layout={layout}
+          data-ad-layout-key={layoutKey}
+          data-full-width-responsive={responsive}
+          data-adtest={testMode ? 'on' : undefined}
+          key={`ad-${slot}-${Date.now()}`}
+        />
+      )}
     </div>
   );
 };
-
-AdSenseEnhanced.propTypes = {
-  slot: PropTypes.string.isRequired,
-  format: PropTypes.string,
-  responsive: PropTypes.string,
-  className: PropTypes.string,
-  layout: PropTypes.string,
-  layoutKey: PropTypes.string,
-  style: PropTypes.object,
-  fallbackContent: PropTypes.node,
-  debug: PropTypes.bool,
-  testMode: PropTypes.bool,
-  lazyLoad: PropTypes.bool
-};
-
-// Ad slots configuration
-export const AdSlots = {
-  HEADER: '1529123561',
-  IN_ARTICLE: '8087712926',
-  SIDEBAR: '5976732519',
-  FOOTER: '2835386242',
-  BETWEEN_POSTS: '6583059564',
-  IN_CONTENT_1: '9876543210',
-  IN_CONTENT_2: '1234567890'
-};
-
-export const AdUnits = AdSlots;
 
 export default AdSenseEnhanced;

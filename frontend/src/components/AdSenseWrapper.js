@@ -2,6 +2,13 @@
 import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 
+// Global tracking for script and ad initialization
+if (typeof window !== 'undefined') {
+  window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
+  window._adSenseScriptLoading = window._adSenseScriptLoading || false;
+  window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
+}
+
 // Ad Unit Configuration
 export const AdUnits = {
   HEADER: '1529123561',
@@ -32,13 +39,11 @@ const AdSenseWrapper = ({
   const [adBlockDetected, setAdBlockDetected] = useState(false);
   const [consentStatus, setConsentStatus] = useState(null);
   
-  // Generate unique component ID
   const componentId = useMemo(() => 
     `ad-wrapper-${position}-${Math.random().toString(36).substr(2, 9)}`,
     [position]
   );
   
-  // Enhanced excluded paths - only essential compliance pages
   const excludedPaths = useMemo(() => [
     '/privacy', 
     '/privacy-policy', 
@@ -54,7 +59,6 @@ const AdSenseWrapper = ({
     [location.pathname, excludedPaths]
   );
 
-  // Map positions to slots with optimized formats
   const positionToSlot = useMemo(() => ({
     'header': AdUnits.HEADER,
     'sidebar': AdUnits.SIDEBAR,
@@ -65,7 +69,6 @@ const AdSenseWrapper = ({
     'in-content-2': AdUnits.IN_CONTENT_2
   }), []);
 
-  // Auto-detect format based on position
   const getAutoFormat = useMemo(() => (pos) => {
     const formatMap = {
       'header': 'auto',
@@ -81,25 +84,21 @@ const AdSenseWrapper = ({
 
   const slot = useMemo(() => positionToSlot[position], [position, positionToSlot]);
 
-  // Check consent status
   const checkConsentStatus = useCallback(() => {
     try {
       const consent = localStorage.getItem('cookieConsent');
       const adsenseConsent = localStorage.getItem('adsense_consent');
       
-      // If user explicitly denied consent, don't load ads
       if (consent === 'false' || adsenseConsent === 'denied') {
         setConsentStatus('denied');
         return 'denied';
       }
       
-      // If user gave consent, load ads
       if (consent === 'true' || adsenseConsent === 'granted') {
         setConsentStatus('granted');
         return 'granted';
       }
       
-      // Check if user is from EEA (simplified check)
       const isEEA = () => {
         try {
           const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -109,13 +108,11 @@ const AdSenseWrapper = ({
         }
       };
       
-      // If not EEA, auto-consent
       if (!isEEA()) {
         setConsentStatus('granted');
         return 'granted';
       }
       
-      // EEA user without consent decision
       setConsentStatus('pending');
       return 'pending';
     } catch (error) {
@@ -125,7 +122,6 @@ const AdSenseWrapper = ({
     }
   }, []);
 
-  // Check for ad blocker
   const checkAdBlock = useCallback(() => {
     return new Promise((resolve) => {
       if (typeof window === 'undefined') {
@@ -154,14 +150,57 @@ const AdSenseWrapper = ({
     });
   }, [debug]);
 
-  // Initialize ad through AdManager
+  // CRITICAL FIX: Load script without auto ads config
+  const loadAdSenseScript = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined') {
+        reject(new Error('Window not available'));
+        return;
+      }
+      
+      // Check if global AdSense is already loaded by adsense-config.js
+      if (window._adsenseConfig && window._adsenseConfig.autoAdsConfigured) {
+        resolve(true);
+        return;
+      }
+      
+      if (window._adSenseScriptLoaded) {
+        resolve(true);
+        return;
+      }
+      
+      const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
+      if (existingScript) {
+        window._adSenseScriptLoaded = true;
+        resolve(true);
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      
+      script.onload = () => {
+        window._adSenseScriptLoaded = true;
+        window.adsbygoogle = window.adsbygoogle || [];
+        console.log('✅ AdSense script loaded (component)');
+        resolve(true);
+      };
+      
+      script.onerror = (error) => {
+        console.error('❌ Failed to load AdSense script:', error);
+        reject(error);
+      };
+      
+      document.head.appendChild(script);
+    });
+  }, []);
+
   const initializeAd = useCallback(async () => {
-    if (!slot || !containerRef.current) {
-      return;
-    }
+    if (!slot || !containerRef.current) return;
 
     try {
-      // Check consent
       const consent = checkConsentStatus();
       if (consent === 'denied') {
         if (debug) console.log('Ad blocked: Consent denied');
@@ -169,12 +208,8 @@ const AdSenseWrapper = ({
         return;
       }
       
-      if (consent === 'pending') {
-        if (debug) console.log('Ad pending: Consent required for EEA user');
-        return;
-      }
+      if (consent === 'pending') return;
 
-      // Check ad blocker
       const adBlocked = await checkAdBlock();
       if (adBlocked) {
         if (debug) console.log('Ad blocked: Ad blocker detected');
@@ -182,24 +217,11 @@ const AdSenseWrapper = ({
         return;
       }
 
-      // For test mode, show placeholder
       if (testMode) {
         if (containerRef.current) {
           containerRef.current.innerHTML = `
             <div class="ad-test-placeholder">
-              <div style="
-                background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-                border: 2px dashed #2196f3;
-                border-radius: 8px;
-                padding: 20px;
-                text-align: center;
-                min-height: 90px;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                color: #1565c0;
-              ">
+              <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); border: 2px dashed #2196f3; border-radius: 8px; padding: 20px; text-align: center; min-height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #1565c0;">
                 <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">TEST AD</div>
                 <div style="font-size: 11px; margin-bottom: 4px;">Slot: ${slot}</div>
                 <div style="font-size: 11px; margin-bottom: 8px;">Position: ${position}</div>
@@ -212,12 +234,10 @@ const AdSenseWrapper = ({
         return;
       }
 
-      // Clear container
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
       }
 
-      // Create ad element
       const adElement = document.createElement('ins');
       adElement.className = 'adsbygoogle';
       adElement.style.display = 'block';
@@ -225,53 +245,29 @@ const AdSenseWrapper = ({
       adElement.dataset.adSlot = slot;
       
       const finalFormat = format === 'auto' ? getAutoFormat(position) : format;
-      if (finalFormat !== 'auto') {
-        adElement.dataset.adFormat = finalFormat;
-      }
-      
-      if (layout) {
-        adElement.dataset.adLayout = layout;
-      }
-      
-      if (layoutKey) {
-        adElement.dataset.adLayoutKey = layoutKey;
-      }
-      
+      if (finalFormat !== 'auto') adElement.dataset.adFormat = finalFormat;
+      if (layout) adElement.dataset.adLayout = layout;
+      if (layoutKey) adElement.dataset.adLayoutKey = layoutKey;
       adElement.dataset.fullWidthResponsive = responsive ? 'true' : 'false';
       
-      // Add to container
       if (containerRef.current) {
         containerRef.current.appendChild(adElement);
       }
 
-      // Wait for AdSense script
-      const waitForAdSense = () => {
-        return new Promise((resolve, reject) => {
-          if (window.adsbygoogle) {
-            resolve();
-            return;
-          }
+      // CRITICAL FIX: Only load script if global adsense-config.js hasn't already
+      if (!window._adsenseConfig || !window._adsenseConfig.autoAdsConfigured) {
+        await loadAdSenseScript();
+      }
 
-          let attempts = 0;
-          const maxAttempts = 10;
-          const interval = setInterval(() => {
-            attempts++;
-            if (window.adsbygoogle) {
-              clearInterval(interval);
-              resolve();
-            } else if (attempts >= maxAttempts) {
-              clearInterval(interval);
-              reject(new Error('AdSense script timeout'));
-            }
-          }, 500);
-        });
-      };
+      if (window._adSenseInitializedSlots.has(slot)) {
+        if (debug) console.log(`AdSenseWrapper: Slot ${slot} already initialized globally, skipping`);
+        return;
+      }
 
-      await waitForAdSense();
-
-      // Initialize ad
+      // CRITICAL FIX: Only push empty object, NO enable_page_level_ads config
       try {
         (window.adsbygoogle = window.adsbygoogle || []).push({});
+        window._adSenseInitializedSlots.add(slot);
         setIsLoaded(true);
         
         if (debug) {
@@ -281,22 +277,10 @@ const AdSenseWrapper = ({
         console.error(`❌ AdSenseWrapper: Error pushing ad for slot ${slot}:`, pushError);
         setHasError(true);
         
-        // Show fallback
         if (containerRef.current) {
           containerRef.current.innerHTML = `
             <div class="ad-fallback">
-              <div style="
-                background: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 8px;
-                padding: 20px;
-                text-align: center;
-                min-height: 90px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: #6c757d;
-              ">
+              <div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px; text-align: center; min-height: 90px; display: flex; align-items: center; justify-content: center; color: #6c757d;">
                 <div>
                   <div style="font-size: 12px; font-weight: 600; margin-bottom: 4px;">Advertisement</div>
                   <div style="font-size: 11px; opacity: 0.7;">Ad could not be loaded</div>
@@ -311,29 +295,23 @@ const AdSenseWrapper = ({
       console.error('❌ AdSenseWrapper: Error initializing ad:', error);
       setHasError(true);
     }
-  }, [slot, position, format, responsive, layout, layoutKey, getAutoFormat, debug, testMode, checkConsentStatus, checkAdBlock]);
+  }, [slot, position, format, responsive, layout, layoutKey, getAutoFormat, debug, testMode, checkConsentStatus, checkAdBlock, loadAdSenseScript]);
 
   useEffect(() => {
-    // Don't initialize if excluded or no slot
-    if (isExcluded || !slot) {
-      return;
-    }
+    if (isExcluded || !slot) return;
 
-    // Delay initialization to ensure DOM is ready
     const timer = setTimeout(() => {
       initializeAd();
     }, 1000);
 
-    // Also initialize when page loads
     if (document.readyState === 'complete') {
       initializeAd();
     } else {
       window.addEventListener('load', initializeAd);
     }
 
-    // Listen for consent changes
     const handleConsentChange = () => {
-      setConsentStatus(null); // Reset to trigger re-check
+      setConsentStatus(null);
       setTimeout(initializeAd, 500);
     };
 
@@ -344,38 +322,21 @@ const AdSenseWrapper = ({
       window.removeEventListener('load', initializeAd);
       window.removeEventListener('consentChanged', handleConsentChange);
       
-      // Clean up
       if (containerRef.current) {
         containerRef.current.innerHTML = '';
       }
     };
   }, [slot, isExcluded, initializeAd]);
 
-  // If excluded or no slot, return null
   if (isExcluded || !slot) {
-    if (debug) {
-      console.warn(`AdSenseWrapper: No slot for position ${position} or path is excluded`);
-    }
+    if (debug) console.warn(`AdSenseWrapper: No slot for position ${position} or path is excluded`);
     return null;
   }
 
-  // Handle consent states
   if (consentStatus === 'denied') {
     return (
       <div className={`ad-wrapper consent-denied ${className}`} id={componentId}>
-        <div style={{
-          background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-          border: '1px solid #dee2e6',
-          borderRadius: '8px',
-          padding: '20px',
-          textAlign: 'center',
-          color: '#6c757d',
-          minHeight: '90px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div style={{ background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', border: '1px solid #dee2e6', borderRadius: '8px', padding: '20px', textAlign: 'center', color: '#6c757d', minHeight: '90px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ fontSize: '24px', marginBottom: '10px', opacity: 0.6 }}>🔒</div>
           <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ads Disabled</div>
           <div style={{ fontSize: '11px', opacity: 0.7 }}>You have disabled personalized ads</div>
@@ -387,19 +348,7 @@ const AdSenseWrapper = ({
   if (consentStatus === 'pending') {
     return (
       <div className={`ad-wrapper consent-required ${className}`} id={componentId}>
-        <div style={{
-          background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)',
-          border: '2px solid #ffc107',
-          borderRadius: '8px',
-          padding: '20px',
-          textAlign: 'center',
-          color: '#856404',
-          minHeight: '90px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div style={{ background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)', border: '2px solid #ffc107', borderRadius: '8px', padding: '20px', textAlign: 'center', color: '#856404', minHeight: '90px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ fontSize: '24px', marginBottom: '10px', opacity: 0.8 }}>🍪</div>
           <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Consent Required</div>
           <div style={{ fontSize: '11px', opacity: 0.7 }}>We need your consent to show personalized ads</div>
@@ -408,23 +357,10 @@ const AdSenseWrapper = ({
     );
   }
 
-  // Handle ad blocker
   if (adBlockDetected && !testMode) {
     return (
       <div className={`ad-wrapper ad-block-detected ${className}`} id={componentId}>
-        <div style={{
-          background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)',
-          border: '1px solid #ffeaa7',
-          borderRadius: '8px',
-          padding: '20px',
-          textAlign: 'center',
-          color: '#856404',
-          minHeight: '90px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div style={{ background: 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)', border: '1px solid #ffeaa7', borderRadius: '8px', padding: '20px', textAlign: 'center', color: '#856404', minHeight: '90px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ fontSize: '24px', marginBottom: '10px', opacity: 0.8 }}>🛡️</div>
           <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ad Blocker Detected</div>
           <div style={{ fontSize: '11px', opacity: 0.7 }}>Please consider disabling your ad blocker</div>
@@ -433,31 +369,14 @@ const AdSenseWrapper = ({
     );
   }
 
-  // Handle error state
   if (hasError && fallbackContent) {
-    return (
-      <div className={`ad-wrapper error-fallback ${className}`} id={componentId}>
-        {fallbackContent}
-      </div>
-    );
+    return <div className={`ad-wrapper error-fallback ${className}`} id={componentId}>{fallbackContent}</div>;
   }
 
   if (hasError) {
     return (
       <div className={`ad-wrapper ad-error ${className}`} id={componentId} ref={containerRef}>
-        <div style={{
-          background: 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)',
-          border: '1px solid #dc3545',
-          borderRadius: '8px',
-          padding: '20px',
-          textAlign: 'center',
-          color: '#721c24',
-          minHeight: '90px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center'
-        }}>
+        <div style={{ background: 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)', border: '1px solid #dc3545', borderRadius: '8px', padding: '20px', textAlign: 'center', color: '#721c24', minHeight: '90px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ fontSize: '24px', marginBottom: '10px' }}>❌</div>
           <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Ad Failed to Load</div>
           <div style={{ fontSize: '11px', opacity: 0.7 }}>Slot: {slot}</div>
@@ -466,7 +385,6 @@ const AdSenseWrapper = ({
     );
   }
 
-  // Loading or loaded state
   const containerProps = {
     className: `ad-wrapper ad-wrapper-${position} ${isLoaded ? 'ad-loaded' : 'ad-loading'} ${className}`,
     'data-ad-position': position,
@@ -481,76 +399,35 @@ const AdSenseWrapper = ({
 
   return (
     <div {...containerProps}>
-      {/* Loading placeholder (shown while ad loads) */}
       {!isLoaded && !hasError && (
-        <div style={{
-          minHeight: '90px',
-          background: '#f5f5f5',
-          borderRadius: '8px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#666',
-          fontSize: '14px'
-        }}>
+        <div style={{ minHeight: '90px', background: '#f5f5f5', borderRadius: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#666', fontSize: '14px' }}>
           <div style={{ marginBottom: '8px' }}>
-            <div style={{
-              width: '30px',
-              height: '30px',
-              border: '3px solid #e9ecef',
-              borderTopColor: '#007bff',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto'
-            }}></div>
+            <div style={{ width: '30px', height: '30px', border: '3px solid #e9ecef', borderTopColor: '#007bff', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto' }}></div>
           </div>
           <div>Loading advertisement...</div>
-          {debug && (
-            <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.6 }}>
-              Position: {position}, Slot: {slot}
-            </div>
-          )}
+          {debug && <div style={{ fontSize: '10px', marginTop: '4px', opacity: 0.6 }}>Position: {position}, Slot: {slot}</div>}
         </div>
       )}
       
-      {/* Inline CSS for spinner animation */}
-      <style jsx>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };
 
-// Helper to get ad unit description
-export const getAdUnitDescription = (slot) => {
-  const descriptions = {
-    [AdUnits.HEADER]: 'Top banner ad across all pages',
-    [AdUnits.IN_ARTICLE]: 'In-content ad within blog posts',
-    [AdUnits.SIDEBAR]: 'Sidebar vertical ad',
-    [AdUnits.FOOTER]: 'Bottom banner ad',
-    [AdUnits.BETWEEN_POSTS]: 'Between blog posts in listings',
-    [AdUnits.IN_CONTENT_1]: 'First in-content ad placement',
-    [AdUnits.IN_CONTENT_2]: 'Second in-content ad placement'
-  };
-  return descriptions[slot] || 'Advertisement';
-};
-
-// AdSense script loader (can be called from your main App.js)
+// CRITICAL FIX: Remove global auto ads initialization from all helper functions
 export const loadAdSenseScript = () => {
   if (typeof window === 'undefined') return false;
   
-  // Check if script already exists
   if (document.querySelector('script[src*="pagead2.googlesyndication.com"]')) {
     return true;
   }
   
-  // Check if script is already loaded globally
-  if (window._adSenseScriptLoaded) {
+  // Check if global AdSense is already loaded by adsense-config.js
+  if (window._adsenseConfig && window._adsenseConfig.autoAdsConfigured) {
     return true;
   }
+  
+  if (window._adSenseScriptLoaded) return true;
   
   try {
     const script = document.createElement('script');
@@ -561,7 +438,7 @@ export const loadAdSenseScript = () => {
     
     script.onload = () => {
       window._adSenseScriptLoaded = true;
-      console.log('✅ AdSense script loaded');
+      console.log('✅ AdSense script loaded (helper)');
     };
     
     script.onerror = (error) => {
@@ -576,17 +453,17 @@ export const loadAdSenseScript = () => {
   }
 };
 
-// Initialize AdSense globally (call this in your main App.js)
+// CRITICAL FIX: Remove auto ads configuration from global init
 export const initAdSense = () => {
   if (typeof window === 'undefined') return;
   
-  // Load script
+  // Only load script, NO auto ads configuration
   loadAdSenseScript();
   
-  // Initialize adsbygoogle array
+  // Initialize array only
   window.adsbygoogle = window.adsbygoogle || [];
   
-  console.log('🔧 AdSense initialized globally');
+  console.log('🔧 AdSense initialized globally (no auto ads)');
 };
 
 export default AdSenseWrapper;

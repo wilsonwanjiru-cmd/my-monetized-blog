@@ -27,6 +27,12 @@ const ConsentManager = () => {
         console.log('🍪 Showing consent banner');
       }, 1500);
     }
+    
+    // For non-EEA users, auto-grant consent on first visit
+    if (!consent && !needsConsent) {
+      console.log('🌍 Non-EEA user detected, auto-granting consent');
+      acceptCookies(); // Auto-accept for non-EEA users
+    }
   }, []);
 
   // Listen for show consent events from other components
@@ -46,6 +52,12 @@ const ConsentManager = () => {
   // Check if user needs consent (EEA/UK users)
   const checkIfNeedsConsent = () => {
     try {
+      // Skip consent check in development/localhost
+      if (window.location.hostname === 'localhost' || window.location.hostname.includes('127.0.0.1')) {
+        console.log('🏠 Development environment, skipping consent check');
+        return false;
+      }
+      
       // Method 1: Check timezone
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const eeaTimezones = [
@@ -64,7 +76,10 @@ const ConsentManager = () => {
       // Method 3: Check stored preference
       const wasEEAUser = localStorage.getItem('is_eea_user') === 'true';
       
-      return isEEA || isEEALang || wasEEAUser;
+      const needsConsent = isEEA || isEEALang || wasEEAUser;
+      console.log('🌍 Location check:', { timezone, browserLang, isEEA, isEEALang, wasEEAUser, needsConsent });
+      
+      return needsConsent;
     } catch (error) {
       console.warn('Error detecting user location:', error);
       return false;
@@ -78,6 +93,7 @@ const ConsentManager = () => {
     localStorage.setItem('cookieConsent', 'true');
     localStorage.setItem('adsense_consent', 'granted');
     localStorage.setItem('is_eea_user', 'true');
+    localStorage.setItem('consent_timestamp', new Date().toISOString());
     
     // Set all consent settings to true
     setConsentSettings({
@@ -92,7 +108,11 @@ const ConsentManager = () => {
     
     // Update all components that depend on consent
     window.dispatchEvent(new CustomEvent('consentChanged', { 
-      detail: { granted: true, source: 'accept-all' }
+      detail: { 
+        granted: true, 
+        source: 'accept-all',
+        timestamp: new Date().toISOString()
+      }
     }));
     
     // Update Google CMP if available
@@ -105,7 +125,9 @@ const ConsentManager = () => {
 
     // Reload to apply changes to ads and analytics
     console.log('🔄 Reloading page to apply consent changes...');
-    window.location.reload();
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   // Handle reject non-essential cookies
@@ -115,6 +137,7 @@ const ConsentManager = () => {
     localStorage.setItem('cookieConsent', 'false');
     localStorage.setItem('adsense_consent', 'denied');
     localStorage.setItem('is_eea_user', 'true');
+    localStorage.setItem('consent_timestamp', new Date().toISOString());
     
     // Set only necessary cookies
     setConsentSettings({
@@ -133,7 +156,11 @@ const ConsentManager = () => {
     
     // Update all components that depend on consent
     window.dispatchEvent(new CustomEvent('consentChanged', { 
-      detail: { granted: false, source: 'reject-non-essential' }
+      detail: { 
+        granted: false, 
+        source: 'reject-non-essential',
+        timestamp: new Date().toISOString()
+      }
     }));
     
     // Update Google CMP if available
@@ -146,7 +173,9 @@ const ConsentManager = () => {
 
     // Reload to apply changes to ads and analytics
     console.log('🔄 Reloading page to apply consent changes...');
-    window.location.reload();
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   // Handle custom settings save
@@ -159,6 +188,7 @@ const ConsentManager = () => {
     localStorage.setItem('cookieConsent', hasMarketingConsent ? 'true' : 'false');
     localStorage.setItem('adsense_consent', hasMarketingConsent ? 'granted' : 'denied');
     localStorage.setItem('is_eea_user', 'true');
+    localStorage.setItem('consent_timestamp', new Date().toISOString());
     localStorage.setItem('consent_settings', JSON.stringify(consentSettings));
 
     setShowBanner(false);
@@ -169,7 +199,8 @@ const ConsentManager = () => {
       detail: { 
         granted: hasMarketingConsent, 
         settings: consentSettings,
-        source: 'custom-settings'
+        source: 'custom-settings',
+        timestamp: new Date().toISOString()
       }
     }));
     
@@ -183,21 +214,43 @@ const ConsentManager = () => {
 
     // Reload to apply changes to ads and analytics
     console.log('🔄 Reloading page to apply consent changes...');
-    window.location.reload();
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   // Track consent events for analytics
   const trackConsentEvent = (action, data = {}) => {
-    if (window.trackEvent) {
-      window.trackEvent({
+    try {
+      // Simple tracking without requiring consent
+      const eventData = {
         eventName: 'consent_decision',
         eventData: {
           action,
           ...data,
           userAgent: navigator.userAgent,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          pageUrl: window.location.href
         }
-      });
+      };
+      
+      console.log('📊 Consent Event:', eventData);
+      
+      // Send to your analytics endpoint if consent is given for analytics
+      const analyticsConsent = localStorage.getItem('cookieConsent') === 'true' || 
+                               (data.settings && data.settings.analytics);
+      
+      if (analyticsConsent && window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
+        fetch(`${window.APP_CONFIG.API_BASE_URL}/api/analytics/event`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(eventData)
+        }).catch(err => console.warn('Failed to send analytics event:', err));
+      }
+    } catch (error) {
+      console.warn('Error tracking consent event:', error);
     }
   };
 
@@ -211,6 +264,26 @@ const ConsentManager = () => {
     }));
   };
 
+  // Close banner without making a decision
+  const handleCloseBanner = () => {
+    console.log('🚪 Closing consent banner without decision');
+    setShowBanner(false);
+    
+    // If user closes without deciding, assume they want only necessary cookies
+    if (!localStorage.getItem('cookieConsent')) {
+      localStorage.setItem('cookieConsent', 'false');
+      localStorage.setItem('adsense_consent', 'denied');
+      
+      window.dispatchEvent(new CustomEvent('consentChanged', { 
+        detail: { 
+          granted: false, 
+          source: 'banner-closed',
+          timestamp: new Date().toISOString()
+        }
+      }));
+    }
+  };
+
   // Don't show if user has already made a decision
   if (!showBanner) return null;
 
@@ -219,7 +292,7 @@ const ConsentManager = () => {
       {/* Backdrop overlay */}
       <div 
         className="consent-backdrop" 
-        onClick={() => setShowBanner(false)}
+        onClick={handleCloseBanner}
       ></div>
       
       <div className="consent-banner">
@@ -233,7 +306,7 @@ const ConsentManager = () => {
                 <h3>Cookie Consent</h3>
                 <button 
                   className="consent-close"
-                  onClick={() => setShowBanner(false)}
+                  onClick={handleCloseBanner}
                   aria-label="Close consent banner"
                 >
                   ×
@@ -290,11 +363,15 @@ const ConsentManager = () => {
               </div>
 
               <div className="consent-footer">
-                <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                {/* CRITICAL FIX: Updated /privacy to /privacy-policy */}
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
                   Privacy Policy
                 </a>
                 <a href="/disclaimer" target="_blank" rel="noopener noreferrer">
                   Disclaimer
+                </a>
+                <a href="/contact" target="_blank" rel="noopener noreferrer">
+                  Contact
                 </a>
               </div>
             </>
@@ -306,7 +383,7 @@ const ConsentManager = () => {
                 <h3>Cookie Settings</h3>
                 <button 
                   className="consent-close"
-                  onClick={() => setShowBanner(false)}
+                  onClick={handleCloseBanner}
                   aria-label="Close consent banner"
                 >
                   ×
@@ -413,11 +490,15 @@ const ConsentManager = () => {
               </div>
 
               <div className="consent-footer">
-                <a href="/privacy" target="_blank" rel="noopener noreferrer">
+                {/* CRITICAL FIX: Updated /privacy to /privacy-policy */}
+                <a href="/privacy-policy" target="_blank" rel="noopener noreferrer">
                   Privacy Policy
                 </a>
                 <a href="/disclaimer" target="_blank" rel="noopener noreferrer">
                   Disclaimer
+                </a>
+                <a href="/contact" target="_blank" rel="noopener noreferrer">
+                  Contact
                 </a>
               </div>
             </>
@@ -432,13 +513,23 @@ const ConsentManager = () => {
 export const consentHelper = {
   // Check current consent status
   getConsent: () => {
-    return localStorage.getItem('cookieConsent') === 'true';
+    try {
+      return localStorage.getItem('cookieConsent') === 'true';
+    } catch (error) {
+      console.warn('Error getting consent:', error);
+      return false;
+    }
   },
 
   // Check if user needs to give consent
   needsConsent: () => {
-    const consent = localStorage.getItem('cookieConsent');
-    return consent === null;
+    try {
+      const consent = localStorage.getItem('cookieConsent');
+      return consent === null;
+    } catch (error) {
+      console.warn('Error checking consent needs:', error);
+      return false;
+    }
   },
 
   // Show consent manager programmatically
@@ -448,18 +539,31 @@ export const consentHelper = {
 
   // Reset consent (for testing or user preference change)
   resetConsent: () => {
-    localStorage.removeItem('cookieConsent');
-    localStorage.removeItem('adsense_consent');
-    localStorage.removeItem('is_eea_user');
-    localStorage.removeItem('consent_settings');
-    localStorage.removeItem('analytics_session_id');
-    localStorage.removeItem('analytics_session_timestamp');
-    
-    window.dispatchEvent(new CustomEvent('consentChanged', { 
-      detail: { granted: false, source: 'reset' }
-    }));
-    
-    console.log('🔄 Consent reset successfully');
+    try {
+      localStorage.removeItem('cookieConsent');
+      localStorage.removeItem('adsense_consent');
+      localStorage.removeItem('is_eea_user');
+      localStorage.removeItem('consent_settings');
+      localStorage.removeItem('consent_timestamp');
+      localStorage.removeItem('analytics_session_id');
+      localStorage.removeItem('analytics_session_timestamp');
+      
+      window.dispatchEvent(new CustomEvent('consentChanged', { 
+        detail: { granted: false, source: 'reset' }
+      }));
+      
+      console.log('🔄 Consent reset successfully');
+      
+      // Show banner again
+      setTimeout(() => {
+        window.dispatchEvent(new Event('showConsentManager'));
+      }, 1000);
+      
+      return true;
+    } catch (error) {
+      console.error('Error resetting consent:', error);
+      return false;
+    }
   },
 
   // Get detailed consent settings
@@ -473,12 +577,40 @@ export const consentHelper = {
         personalization: false
       };
     } catch (error) {
+      console.warn('Error getting consent settings:', error);
       return {
         necessary: true,
         analytics: false,
         marketing: false,
         personalization: false
       };
+    }
+  },
+
+  // Get consent timestamp
+  getConsentTimestamp: () => {
+    try {
+      return localStorage.getItem('consent_timestamp');
+    } catch (error) {
+      console.warn('Error getting consent timestamp:', error);
+      return null;
+    }
+  },
+
+  // Check if consent is valid (not older than 13 months)
+  isConsentValid: () => {
+    try {
+      const timestamp = localStorage.getItem('consent_timestamp');
+      if (!timestamp) return false;
+      
+      const consentDate = new Date(timestamp);
+      const now = new Date();
+      const monthsDiff = (now.getTime() - consentDate.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+      
+      return monthsDiff <= 13; // GDPR requires renewal every 13 months
+    } catch (error) {
+      console.warn('Error checking consent validity:', error);
+      return false;
     }
   }
 };

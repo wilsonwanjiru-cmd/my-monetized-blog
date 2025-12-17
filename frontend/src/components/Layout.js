@@ -25,7 +25,6 @@ const Layout = ({
   useEffect(() => {
     const checkConsent = () => {
       try {
-        // Use config helper if available, otherwise fallback to localStorage
         if (window.hasAdConsent) {
           setHasConsent(window.hasAdConsent());
         } else {
@@ -38,10 +37,8 @@ const Layout = ({
       }
     };
     
-    // Initial check
     checkConsent();
     
-    // Listen for consent changes
     const handleConsentChange = () => {
       checkConsent();
     };
@@ -55,9 +52,10 @@ const Layout = ({
     };
   }, []);
   
-  // Define routes where we don't want to show ads (AdSense policy compliance)
+  // CRITICAL FIX: Update excluded routes to include BOTH /privacy and /privacy-policy
   const noAdRoutes = useMemo(() => [
     '/privacy-policy', 
+    '/privacy',  // Added this line
     '/disclaimer', 
     '/contact', 
     '/about',
@@ -92,6 +90,14 @@ const Layout = ({
     return location.pathname === '/';
   }, [location.pathname]);
   
+  // Check if current page is privacy policy or similar compliance pages
+  const isCompliancePage = useMemo(() => {
+    return location.pathname === '/privacy-policy' || 
+           location.pathname === '/privacy' || 
+           location.pathname === '/disclaimer' ||
+           location.pathname === '/terms';
+  }, [location.pathname]);
+  
   // Determine canonical URL
   const resolvedCanonicalUrl = useMemo(() => {
     if (canonicalUrl) return canonicalUrl;
@@ -117,10 +123,11 @@ const Layout = ({
         hasConsent,
         isBlogPost,
         isHomepage,
+        isCompliancePage,
         environment
       });
     }
-  }, [location.pathname, shouldShowAds, hasConsent, isBlogPost, isHomepage, environment, isDebugMode]);
+  }, [location.pathname, shouldShowAds, hasConsent, isBlogPost, isHomepage, isCompliancePage, environment, isDebugMode]);
   
   // Generate structured data based on page type
   const generateStructuredData = () => {
@@ -129,7 +136,7 @@ const Layout = ({
       "@type": "WebSite",
       "name": "Wilson Muita - Technology & Programming Blog",
       "url": "https://wilsonmuita.com",
-      "description": "Expert insights on web development, programming tutorials, and technology trends. Learn React, Node.js, JavaScript and more.",
+      "description": description,
       "publisher": {
         "@type": "Person",
         "name": "Wilson Muita",
@@ -352,7 +359,7 @@ const Layout = ({
           </main>
           
           {/* SIDEBAR WITH ADSENSE ADS - Conditionally rendered */}
-          {shouldShowAds && !noSidebar && (
+          {shouldShowAds && !noSidebar && !isCompliancePage && (
             <aside className="sidebar">
               <div className="sidebar-sticky">
                 {/* Primary Sidebar Ad */}
@@ -421,7 +428,6 @@ const Layout = ({
                   <button 
                     className="sidebar-link manage-consent-btn"
                     onClick={() => {
-                      // Trigger consent manager
                       const event = new Event('showConsentManager');
                       window.dispatchEvent(event);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -438,10 +444,10 @@ const Layout = ({
         {/* Consent Manager Component */}
         <ConsentManager />
         
-        {/* FOOTER WITH ADSENSE AD - Conditionally rendered */}
+        {/* FOOTER */}
         <footer className="footer">
           {/* Footer Ad - Conditionally shown */}
-          {shouldShowAds && (
+          {shouldShowAds && !isCompliancePage && (
             <div className="footer-ad-wrapper" data-ad-type="footer">
               <AdSenseFixed 
                 slot={AdUnits.FOOTER}
@@ -458,6 +464,7 @@ const Layout = ({
           <div className="footer-content">
             <div className="footer-section">
               <div className="footer-links">
+                {/* CRITICAL FIX: Updated Privacy Policy link to match your API endpoint */}
                 <a href="/privacy-policy" className="footer-link">
                   Privacy Policy
                 </a>
@@ -507,19 +514,7 @@ const Layout = ({
                 </p>
               )}
             </div>
-            <div className="footer-section">
-              <div className="footer-social">
-                <a href="https://twitter.com/WilsonMuita" className="footer-social-link" target="_blank" rel="noopener noreferrer">
-                  Twitter
-                </a>
-                <a href="https://linkedin.com/in/wilsonmuita" className="footer-social-link" target="_blank" rel="noopener noreferrer">
-                  LinkedIn
-                </a>
-                <a href="https://github.com/wilsonmuita" className="footer-social-link" target="_blank" rel="noopener noreferrer">
-                  GitHub
-                </a>
-              </div>
-            </div>
+            {/* FIX: Removed empty social links section entirely */}
           </div>
         </footer>
       </div>
