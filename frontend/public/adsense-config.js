@@ -102,7 +102,8 @@
     }
     
     // Check if any component has already configured auto ads
-    if (window.adsbygoogle) {
+    // Note: window.adsbygoogle might be an array, but we need to ensure it is
+    if (window.adsbygoogle && Array.isArray(window.adsbygoogle)) {
       // Look for existing enable_page_level_ads config in the adsbygoogle array
       const hasExistingConfig = window.adsbygoogle.some(config => 
         config && typeof config === 'object' && config.enable_page_level_ads
@@ -113,6 +114,10 @@
         window._adsenseConfig.autoAdsConfigured = true;
         return;
       }
+    } else {
+      // If window.adsbygoogle is not an array, then it hasn't been configured
+      console.log('ℹ️ AdSense: window.adsbygoogle is not an array, initializing as array');
+      window.adsbygoogle = [];
     }
     
     // Configure auto ads with error handling
@@ -169,7 +174,7 @@
   window.debugAdSense = function() {
     return {
       config: window._adsenseConfig,
-      adsbygoogle: window.adsbygoogle ? 'Loaded' : 'Not loaded',
+      adsbygoogle: window.adsbygoogle ? 'Array (length: ' + window.adsbygoogle.length + ')' : 'Not an array',
       autoAdsConfigured: window._adsenseConfig.autoAdsConfigured,
       consent: window.hasAdConsent ? window.hasAdConsent() : 'N/A',
       pathname: window.location.pathname
