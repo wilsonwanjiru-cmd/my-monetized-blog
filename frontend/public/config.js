@@ -57,7 +57,6 @@ window.APP_CONFIG = {
 
 // Helper function to get config values
 window.getConfig = (key, defaultValue = null) => {
-  // Support dot notation for nested keys (e.g., 'FEATURES.analytics')
   if (key.includes('.')) {
     const keys = key.split('.');
     let value = window.APP_CONFIG;
@@ -71,7 +70,6 @@ window.getConfig = (key, defaultValue = null) => {
     return value;
   }
   
-  // Simple key access
   return window.APP_CONFIG[key] !== undefined ? window.APP_CONFIG[key] : defaultValue;
 };
 
@@ -100,7 +98,6 @@ window.hasAdConsent = () => {
     const consent = localStorage.getItem(window.getConfig('CONSENT_COOKIE_NAME'));
     return consent === 'granted';
   } catch (error) {
-    // If localStorage is not available, assume no consent
     return false;
   }
 };
@@ -123,7 +120,6 @@ window.logDebug = (message, data = null) => {
 window.reportError = (error, context = {}) => {
   console.error('Application Error:', error, context);
   
-  // In production, you might want to send this to an error tracking service
   if (window.isProduction()) {
     // Example: Send to error tracking service
     // window.fetch('/api/errors', { method: 'POST', body: JSON.stringify({ error, context }) });
@@ -183,8 +179,9 @@ window.reportError = (error, context = {}) => {
     });
   }
   
-  // REMOVED: AdSense auto ads configuration from here
-  // This is now handled by adsense-config.js to prevent duplicate initialization
+  // CRITICAL: Removed all AdSense auto ads initialization from here
+  // All AdSense initialization is now handled by adsense-config.js only
+  console.log('🔧 AdSense: Auto ads configuration moved to adsense-config.js');
   
 })();
 

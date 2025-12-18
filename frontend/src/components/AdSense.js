@@ -31,7 +31,16 @@ const AdSense = ({
   const [adError, setAdError] = useState(false);
   const [shouldRenderAd, setShouldRenderAd] = useState(false);
   
-  const excludedPaths = ['/privacy', '/disclaimer', '/about', '/contact'];
+  // CRITICAL: Exclude privacy and compliance pages
+  const excludedPaths = [
+    '/privacy-policy', 
+    '/privacy', 
+    '/disclaimer', 
+    '/about', 
+    '/contact',
+    '/terms'
+  ];
+  
   const isExcluded = excludedPaths.some(path => 
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
@@ -70,7 +79,7 @@ const AdSense = ({
     testAdBlock();
   }, [debug]);
 
-  // CRITICAL FIX: Load script without auto ads config
+  // CRITICAL FIX: Load script WITHOUT auto ads config
   const loadAdSenseScript = useCallback((maxRetries = 3, retryDelay = 1000) => {
     return new Promise((resolve, reject) => {
       if (typeof window === 'undefined') {
@@ -78,9 +87,9 @@ const AdSense = ({
         return;
       }
       
-      // Check if global AdSense is already loaded by adsense-config.js
-      if (window._adsenseConfig && window._adsenseConfig.autoAdsConfigured) {
-        resolve(true);
+      // Don't load script on excluded pages
+      if (isExcluded) {
+        reject(new Error('Excluded page'));
         return;
       }
       
@@ -120,9 +129,10 @@ const AdSense = ({
           window._adSenseScriptLoaded = true;
           window._adSenseScriptLoading = false;
           
+          // Initialize array ONLY, no auto ads config
           window.adsbygoogle = window.adsbygoogle || [];
           
-          log('AdSense script loaded successfully');
+          log('AdSense script loaded successfully (component)');
           resolve(true);
         };
         
@@ -143,9 +153,9 @@ const AdSense = ({
       
       loadScript();
     });
-  }, [client, log]);
+  }, [client, log, isExcluded]);
 
-  // CRITICAL FIX: Initialize ad WITHOUT auto ads config
+  // Initialize ad WITHOUT auto ads config
   const initializeAd = useCallback(() => {
     if (typeof window === 'undefined' || !slot || !adRef.current) return;
 
@@ -167,7 +177,7 @@ const AdSense = ({
 
       window._adSenseInitializedSlots.add(slot);
 
-      // CRITICAL FIX: Only push empty object, NO enable_page_level_ads config
+      // CRITICAL: Only push empty object, NO auto ads config
       try {
         (window.adsbygoogle = window.adsbygoogle || []).push({});
         setAdLoaded(true);
@@ -208,8 +218,8 @@ const AdSense = ({
 
         if (!mounted) return;
 
-        // CRITICAL FIX: Only load script if global adsense-config.js hasn't already
-        if (!window._adsenseConfig || !window._adsenseConfig.autoAdsConfigured) {
+        // Load script if needed
+        if (!window.adsbygoogle || !window._adSenseScriptLoaded) {
           await loadAdSenseScript();
         }
 
