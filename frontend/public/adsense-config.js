@@ -1,185 +1,253 @@
 // frontend/public/adsense-config.js
 (function() {
-  // Only run this script once
-  if (window._adsenseConfigLoaded) return;
-  window._adsenseConfigLoaded = true;
+  // Use the global config set in index.html
+  const config = window._adsenseConfig || {};
   
-  // Check if we're in a React app with multiple renders
-  if (window._adSenseConfigRetries > 3) {
-    console.log('⏭️ AdSense: Too many retries, skipping config');
+  // Check if we're in test mode
+  const isTestMode = config.testMode || 
+                     window.location.hostname === 'localhost' ||
+                     window.location.hostname.includes('test') ||
+                     window.location.hostname.includes('staging');
+
+  // Only load AdSense on production, live domains
+  if (isTestMode) {
+    console.log('🛑 AdSense skipped (test mode)');
+    // In test mode, create a mock adsbygoogle to prevent errors
+    if (!window.adsbygoogle) {
+      window.adsbygoogle = [];
+      window.adsbygoogle.push = function() {
+        console.log('✅ Mock AdSense: Ad request would be made in production');
+        return [];
+      };
+      window.adsbygoogle.loaded = true;
+      window.adsbygoogle.request = function() {
+        console.log('✅ Mock AdSense: Ad refresh would be made in production');
+        return [];
+      };
+    }
     return;
   }
-  window._adSenseConfigRetries = (window._adSenseConfigRetries || 0) + 1;
-  
-  // Check if AdSense should be loaded
-  function shouldLoadAdSense() {
-    // Check if we're in test mode (localhost, test, or staging)
-    const isTestMode = window.location.hostname === 'localhost' || 
-                       window.location.hostname.includes('test') ||
-                       window.location.hostname.includes('staging');
-    
-    // Check if user is on excluded pages (compliance pages)
-    const excludedPaths = ['/privacy-policy', '/privacy', '/disclaimer', '/contact', '/about', '/terms'];
-    const isExcludedPage = excludedPaths.some(path => 
-      window.location.pathname === path || window.location.pathname.startsWith(`${path}/`)
-    );
-    
-    // Get consent status
-    const hasConsent = window.hasAdConsent ? window.hasAdConsent() : true;
-    
-    // Get AdSense enabled status from config if available
-    const isEnabled = window.getConfig ? window.getConfig('ADSENSE_ENABLED') : true;
-    
-    return isEnabled && hasConsent && !isTestMode && !isExcludedPage;
+
+  // Prevent duplicate loading
+  if (window._adSenseScriptLoaded) {
+    console.log('⏭️ AdSense script already loaded, skipping');
+    return;
   }
   
-  // Function to load AdSense script
-  function loadAdSenseScript() {
-    // Check if script is already loaded globally
-    if (window.adsbygoogle && window.adsbygoogle.loaded) {
-      console.log('✅ AdSense: Script already loaded globally');
-      return Promise.resolve();
+  // Check if script is already in DOM (loaded by another component)
+  if (document.querySelector('script[src*="adsbygoogle.js"]')) {
+    console.log('✅ AdSense script already in DOM');
+    window._adSenseScriptLoaded = true;
+    
+    // Initialize wrapper even if script already exists
+    initializeAdSenseWrapper();
+    return;
+  }
+
+  // Set loading flag
+  window._adSenseScriptLoaded = true;
+  window._adSenseScriptLoading = true;
+
+  // Create the script element
+  const script = document.createElement('script');
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${config.clientId || 'ca-pub-4047817727348673'}`;
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.defer = true;
+  script.setAttribute('data-ad-client', config.clientId || 'ca-pub-4047817727348673');
+
+  // Silent error handling - suppress all errors
+  script.onerror = function() {
+    console.log('⏭️ AdSense script failed to load (silent fail)');
+    window._adSenseScriptLoading = false;
+    window._adSenseFailed = true;
+    
+    // Even if script fails, create mock to prevent errors
+    if (!window.adsbygoogle) {
+      window.adsbygoogle = [];
+      window.adsbygoogle.push = function() {
+        return [];
+      };
+      window.adsbygoogle.loaded = false;
+      window.adsbygoogle.request = function() {
+        return [];
+      };
+    }
+  };
+
+  // Function to initialize the AdSense wrapper
+  function initializeAdSenseWrapper() {
+    // Initialize the adsbygoogle queue
+    window.adsbygoogle = window.adsbygoogle || [];
+    
+    // Only wrap push once
+    if (window.adsbygoogle._pushWrapped) {
+      console.log('✅ AdSense wrapper already initialized');
+      return;
     }
     
-    // Check if script is already in DOM
-    if (document.querySelector('script[src*="adsbygoogle.js"]')) {
-      console.log('✅ AdSense: Script already in DOM');
-      return Promise.resolve();
-    }
+    // Save original push method
+    const originalPush = window.adsbygoogle.push;
     
-    return new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${window._adsenseConfig.clientId}`;
-      script.async = true;
-      script.crossOrigin = 'anonymous';
-      script.setAttribute('data-ad-client', window._adsenseConfig.clientId);
-      
-      script.onload = function() {
-        console.log('✅ AdSense: Script loaded successfully');
+    // Wrap the push method to prevent duplicate slot requests
+    window.adsbygoogle.push = function() {
+      try {
+        const args = Array.from(arguments);
+        const results = [];
         
-        // Mark script as loaded globally
-        if (window.adsbygoogle) {
-          window.adsbygoogle.loaded = true;
+        // Track slots globally
+        window._adSenseSlots = window._adSenseSlots || new Set();
+        
+        for (const config of args) {
+          if (config && typeof config === 'object') {
+            // Skip duplicate page-level ads config
+            if (config.enable_page_level_ads || config.google_ad_client === 'ca-pub-4047817727348673') {
+              if (window._adsenseConfig.pageLevelAdsConfigured) {
+                console.log('⏭️ Skipping duplicate page-level ads configuration');
+                continue;
+              }
+              window._adsenseConfig.pageLevelAdsConfigured = true;
+            }
+            
+            // Skip duplicate ad slots
+            const slot = config.google_ad_slot || config.dataAdSlot;
+            if (slot) {
+              if (window._adSenseSlots.has(slot)) {
+                console.log('⏭️ Skipping duplicate ad slot:', slot);
+                continue;
+              }
+              window._adSenseSlots.add(slot);
+            }
+            
+            // Call original push for valid configs
+            results.push(originalPush.call(this, config));
+          }
         }
         
-        // Initialize adsbygoogle array
-        window.adsbygoogle = window.adsbygoogle || [];
+        return results;
+      } catch (error) {
+        // Silent fail for AdSense errors
+        console.log('⏭️ AdSense push error (silent):', error.message);
+        return [];
+      }
+    };
+    
+    // Mark as wrapped
+    window.adsbygoogle._pushWrapped = true;
+    console.log('✅ AdSense wrapper initialized successfully');
+    
+    // Initialize any existing ad slots
+    initializeExistingAdSlots();
+  }
+
+  // Function to initialize existing ad slots
+  function initializeExistingAdSlots() {
+    // Wait for React to render
+    setTimeout(function() {
+      try {
+        const adElements = document.querySelectorAll('ins.adsbygoogle');
+        console.log(`📊 Found ${adElements.length} ad elements`);
         
-        // Check if we should configure auto ads
-        if (shouldLoadAdSense() && !window._adsenseConfig.autoAdsConfigured) {
-          initializeAutoAds();
+        adElements.forEach(function(ad, index) {
+          if (!ad.dataset.initialized && !ad.dataset.adStatus) {
+            ad.dataset.initialized = 'true';
+            ad.dataset.initializedAt = Date.now();
+            
+            // Stagger initialization to prevent overwhelming AdSense
+            setTimeout(function() {
+              try {
+                if (window.adsbygoogle && window.adsbygoogle.push) {
+                  window.adsbygoogle.push({});
+                  console.log(`✅ Initialized ad slot ${index + 1}/${adElements.length}`);
+                }
+              } catch (e) {
+                // Silent fail
+              }
+            }, index * 300); // 300ms delay between each
+          }
+        });
+        
+        // Set up periodic checks for new ad elements
+        setTimeout(checkForNewAdElements, 3000);
+      } catch (e) {
+        // Silent fail
+      }
+    }, 1500); // Wait 1.5 seconds for React to render
+  }
+
+  // Function to check for new ad elements periodically
+  function checkForNewAdElements() {
+    try {
+      const adElements = document.querySelectorAll('ins.adsbygoogle:not([data-initialized])');
+      
+      adElements.forEach(function(ad) {
+        if (!ad.dataset.initialized && !ad.dataset.adStatus) {
+          ad.dataset.initialized = 'true';
+          ad.dataset.initializedAt = Date.now();
+          
+          if (window.adsbygoogle && window.adsbygoogle.push) {
+            window.adsbygoogle.push({});
+          }
         }
-        
-        resolve();
-      };
+      });
       
-      script.onerror = function() {
-        console.warn('❌ AdSense: Failed to load script');
-        reject(new Error('AdSense script failed to load'));
-      };
-      
-      document.head.appendChild(script);
+      // Check again in 5 seconds
+      setTimeout(checkForNewAdElements, 5000);
+    } catch (e) {
+      // Silent fail
+    }
+  }
+
+  // When script loads successfully
+  script.onload = function() {
+    console.log('✅ AdSense script loaded successfully');
+    window._adSenseScriptLoading = false;
+    window.adsbygoogle = window.adsbygoogle || [];
+    window.adsbygoogle.loaded = true;
+    
+    // Initialize the wrapper
+    initializeAdSenseWrapper();
+    
+    // Set up page visibility change handler
+    setupVisibilityHandler();
+  };
+
+  // Function to handle page visibility changes
+  function setupVisibilityHandler() {
+    if (!document.addEventListener) return;
+    
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        // Wait 10 seconds after becoming visible, then refresh ads
+        setTimeout(function() {
+          try {
+            const filledAds = document.querySelectorAll('ins.adsbygoogle[data-ad-status="filled"]');
+            if (filledAds.length > 0 && window.adsbygoogle && window.adsbygoogle.request) {
+              console.log(`🔄 Refreshing ${filledAds.length} ads after page became visible`);
+              filledAds.forEach(function(ad) {
+                try {
+                  window.adsbygoogle.request(ad);
+                } catch (e) {
+                  // Silent fail
+                }
+              });
+            }
+          } catch (e) {
+            // Silent fail
+          }
+        }, 10000);
+      }
     });
   }
+
+  // Inject the script
+  console.log('🚀 Loading AdSense script...');
+  document.head.appendChild(script);
   
-  // CRITICAL FIX: Check if auto ads have already been configured
-  function initializeAutoAds() {
-    // Don't configure auto ads on excluded pages
-    const excludedPaths = ['/privacy-policy', '/privacy', '/disclaimer', '/contact', '/about', '/terms'];
-    const isExcludedPage = excludedPaths.some(path => 
-      window.location.pathname === path || window.location.pathname.startsWith(`${path}/`)
-    );
-    
-    if (isExcludedPage) {
-      console.log('⏭️ AdSense: Skipping auto ads on excluded page:', window.location.pathname);
-      return;
+  // Also set up a fallback in case the script takes too long
+  setTimeout(function() {
+    if (!window.adsbygoogle && !window._adSenseFailed) {
+      console.log('⏳ AdSense script taking longer than expected...');
     }
-    
-    // Check if auto ads have already been configured
-    if (window._adsenseConfig.autoAdsConfigured) {
-      console.log('⏭️ AdSense: Auto ads already configured, skipping');
-      return;
-    }
-    
-    // Check if any component has already configured auto ads
-    // Note: window.adsbygoogle might be an array, but we need to ensure it is
-    if (window.adsbygoogle && Array.isArray(window.adsbygoogle)) {
-      // Look for existing enable_page_level_ads config in the adsbygoogle array
-      const hasExistingConfig = window.adsbygoogle.some(config => 
-        config && typeof config === 'object' && config.enable_page_level_ads
-      );
-      
-      if (hasExistingConfig) {
-        console.log('⏭️ AdSense: Found existing enable_page_level_ads config');
-        window._adsenseConfig.autoAdsConfigured = true;
-        return;
-      }
-    } else {
-      // If window.adsbygoogle is not an array, then it hasn't been configured
-      console.log('ℹ️ AdSense: window.adsbygoogle is not an array, initializing as array');
-      window.adsbygoogle = [];
-    }
-    
-    // Configure auto ads with error handling
-    try {
-      // Ensure adsbygoogle array exists
-      window.adsbygoogle = window.adsbygoogle || [];
-      
-      // Push auto ads configuration
-      window.adsbygoogle.push({
-        google_ad_client: window._adsenseConfig.clientId,
-        enable_page_level_ads: true,
-        overlays: false
-      });
-      
-      window._adsenseConfig.autoAdsConfigured = true;
-      console.log('✅ AdSense: Auto ads configured successfully');
-    } catch (error) {
-      // Check if it's the duplicate enable_page_level_ads error
-      if (error.message && error.message.includes('Only one \'enable_page_level_ads\'')) {
-        console.warn('⚠️ AdSense: Auto ads already configured on page');
-        window._adsenseConfig.autoAdsConfigured = true;
-      } else {
-        console.error('❌ AdSense: Error configuring auto ads:', error);
-      }
-    }
-  }
-  
-  // Wait for DOM to be ready
-  function domReady(callback) {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', callback);
-    } else {
-      callback();
-    }
-  }
-  
-  // Initialize when DOM is ready
-  domReady(function() {
-    // Check if we should load AdSense
-    if (!shouldLoadAdSense()) {
-      console.log('⏭️ AdSense: Disabled or not consented');
-      return;
-    }
-    
-    // Small delay to ensure React has rendered
-    setTimeout(() => {
-      loadAdSenseScript().catch(() => {
-        // Silent fail - script might already be loaded by another component
-      });
-    }, 1000);
-  });
-  
-  // Export for debugging
-  window.debugAdSense = function() {
-    return {
-      config: window._adsenseConfig,
-      adsbygoogle: window.adsbygoogle ? 'Array (length: ' + window.adsbygoogle.length + ')' : 'Not an array',
-      autoAdsConfigured: window._adsenseConfig.autoAdsConfigured,
-      consent: window.hasAdConsent ? window.hasAdConsent() : 'N/A',
-      pathname: window.location.pathname
-    };
-  };
-  
-  console.log('✅ AdSense: Configuration loaded');
+  }, 5000);
 })();

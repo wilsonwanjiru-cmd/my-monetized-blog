@@ -4,10 +4,8 @@ import PropTypes from 'prop-types';
 import { useLocation } from 'react-router-dom';
 import './AdSense.css';
 
-// Global tracking for script and ad initialization
+// Global tracking for ad slot initialization
 if (typeof window !== 'undefined') {
-  window._adSenseScriptLoaded = window._adSenseScriptLoaded || false;
-  window._adSenseScriptLoading = window._adSenseScriptLoading || false;
   window._adSenseInitializedSlots = window._adSenseInitializedSlots || new Set();
 }
 
@@ -26,7 +24,7 @@ const AdSense = ({
 }) => {
   const location = useLocation();
   const adRef = useRef(null);
-  const [adBlockDetected, setAdBlockDetected] = useState(false);
+  const executed = useRef(false);
   const [adLoaded, setAdLoaded] = useState(false);
   const [adError, setAdError] = useState(false);
   const [shouldRenderAd, setShouldRenderAd] = useState(false);
@@ -45,6 +43,10 @@ const AdSense = ({
     location.pathname === path || location.pathname.startsWith(`${path}/`)
   );
   
+  // Use global test mode if available
+  const globalTestMode = window._adsenseConfig ? window._adsenseConfig.testMode : false;
+  const isTest = testMode || globalTestMode;
+  
   const log = useCallback((message, type = 'info') => {
     if (!debug && type === 'debug') return;
     
@@ -52,114 +54,11 @@ const AdSense = ({
     console.log(`${prefix} AdSense [${slot}]: ${message}`);
   }, [debug, slot]);
 
-  useEffect(() => {
-    const testAdBlock = () => {
-      if (typeof window === 'undefined') return;
-      
-      const testAd = document.createElement('div');
-      testAd.className = 'adsbygoogle';
-      testAd.style.cssText = 'height: 1px; width: 1px; position: absolute; left: -1000px; top: -1000px;';
-      document.body.appendChild(testAd);
-      
-      setTimeout(() => {
-        const detected = testAd.offsetHeight === 0 || 
-                        testAd.offsetWidth === 0 || 
-                        window.getComputedStyle(testAd).display === 'none';
-        setAdBlockDetected(detected);
-        if (testAd.parentNode) {
-          document.body.removeChild(testAd);
-        }
-        
-        if (detected && debug) {
-          console.warn('Ad blocker detected');
-        }
-      }, 100);
-    };
-    
-    testAdBlock();
-  }, [debug]);
-
-  // CRITICAL FIX: Load script WITHOUT auto ads config
-  const loadAdSenseScript = useCallback((maxRetries = 3, retryDelay = 1000) => {
-    return new Promise((resolve, reject) => {
-      if (typeof window === 'undefined') {
-        reject(new Error('Window not available'));
-        return;
-      }
-      
-      // Don't load script on excluded pages
-      if (isExcluded) {
-        reject(new Error('Excluded page'));
-        return;
-      }
-      
-      if (window._adSenseScriptLoaded) {
-        resolve(true);
-        return;
-      }
-      
-      if (window._adSenseScriptLoading) {
-        const checkInterval = setInterval(() => {
-          if (window._adSenseScriptLoaded) {
-            clearInterval(checkInterval);
-            resolve(true);
-          }
-        }, 100);
-        return;
-      }
-      
-      window._adSenseScriptLoading = true;
-      
-      const loadScript = (retryCount = 0) => {
-        const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
-        if (existingScript) {
-          window._adSenseScriptLoaded = true;
-          window._adSenseScriptLoading = false;
-          resolve(true);
-          return;
-        }
-        
-        const script = document.createElement('script');
-        script.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + client;
-        script.async = true;
-        script.crossOrigin = 'anonymous';
-        script.defer = true;
-        
-        script.onload = () => {
-          window._adSenseScriptLoaded = true;
-          window._adSenseScriptLoading = false;
-          
-          // Initialize array ONLY, no auto ads config
-          window.adsbygoogle = window.adsbygoogle || [];
-          
-          log('AdSense script loaded successfully (component)');
-          resolve(true);
-        };
-        
-        script.onerror = () => {
-          console.error('❌ AdSense script failed to load');
-          
-          if (retryCount < maxRetries) {
-            console.log(`Retrying AdSense script load (${retryCount + 1}/${maxRetries})...`);
-            setTimeout(() => loadScript(retryCount + 1), retryDelay * (retryCount + 1));
-          } else {
-            window._adSenseScriptLoading = false;
-            reject(new Error(`Failed to load AdSense script after ${maxRetries} retries`));
-          }
-        };
-        
-        document.head.appendChild(script);
-      };
-      
-      loadScript();
-    });
-  }, [client, log, isExcluded]);
-
   // Initialize ad WITHOUT auto ads config
   const initializeAd = useCallback(() => {
     if (typeof window === 'undefined' || !slot || !adRef.current) return;
 
-    if (isExcluded || adBlockDetected || testMode) {
+    if (isExcluded || isTest) {
       return;
     }
 
@@ -193,48 +92,41 @@ const AdSense = ({
       log('AdSense initialization error: ' + error.message, 'error');
       setAdError(true);
     }
-  }, [slot, format, isExcluded, adBlockDetected, testMode, debug, log]);
+  }, [slot, format, isExcluded, isTest, debug, log]);
 
   useEffect(() => {
+    if (executed.current || !slot || isExcluded) return;
+    executed.current = true;
+
     let mounted = true;
-    let scriptLoadTimeout = null;
-    let adInitTimeout = null;
+    let initTimeout = null;
 
-    if (isExcluded || !slot) {
-      return () => { mounted = false; };
-    }
-
-    const initAdSense = async () => {
+    const initAdSense = () => {
       if (!mounted) return;
 
       try {
-        if (adBlockDetected && !testMode) {
+        if (isTest) {
+          log('Test mode enabled, showing test ad');
+          setShouldRenderAd(true);
           return;
         }
 
-        await new Promise(resolve => {
-          adInitTimeout = setTimeout(resolve, 500);
-        });
-
-        if (!mounted) return;
-
-        // Load script if needed
-        if (!window.adsbygoogle || !window._adSenseScriptLoaded) {
-          await loadAdSenseScript();
+        // Check if AdSense script is loaded
+        if (!window.adsbygoogle) {
+          log('AdSense script not loaded yet, waiting...');
+          // Script will be loaded by adsense-config.js, wait for it
+          const checkInterval = setInterval(() => {
+            if (window.adsbygoogle && mounted) {
+              clearInterval(checkInterval);
+              setShouldRenderAd(true);
+              setTimeout(initializeAd, 500);
+            }
+          }, 100);
+          return;
         }
 
-        if (!mounted) return;
-
         setShouldRenderAd(true);
-
-        await new Promise(resolve => {
-          scriptLoadTimeout = setTimeout(resolve, 100);
-        });
-
-        if (!mounted) return;
-
-        initializeAd();
-
+        setTimeout(initializeAd, 500);
       } catch (error) {
         if (mounted) {
           log('Failed to initialize AdSense: ' + error.message, 'error');
@@ -243,21 +135,14 @@ const AdSense = ({
       }
     };
 
-    const initTimeout = setTimeout(() => {
-      initAdSense();
-    }, 1000);
+    // Wait a bit for page to stabilize
+    initTimeout = setTimeout(initAdSense, 1000);
 
     return () => {
       mounted = false;
       clearTimeout(initTimeout);
-      clearTimeout(scriptLoadTimeout);
-      clearTimeout(adInitTimeout);
-      
-      if (slot) {
-        window._adSenseInitializedSlots.delete(slot);
-      }
     };
-  }, [slot, isExcluded, adBlockDetected, loadAdSenseScript, initializeAd, testMode, log]);
+  }, [slot, isExcluded, isTest, initializeAd, log]);
 
   if (isExcluded) return null;
   
@@ -266,18 +151,7 @@ const AdSense = ({
     return null;
   }
   
-  if (adBlockDetected && !testMode) {
-    return (
-      <div className={`ad-block-message ${className}`} style={style}>
-        <div className="ad-block-content">
-          <p>Please consider disabling your ad blocker to support this site.</p>
-          <small>Advertisement helps keep this content free for everyone.</small>
-        </div>
-      </div>
-    );
-  }
-  
-  if (testMode) {
+  if (isTest) {
     return (
       <div className={`ad-test-container ${className}`} style={style}>
         <div className="ad-test-content">
@@ -320,7 +194,7 @@ const AdSense = ({
         </div>
       )}
 
-      {shouldRenderAd && !adError && !adBlockDetected && (
+      {shouldRenderAd && !adError && (
         <ins
           className="adsbygoogle"
           style={{
@@ -336,8 +210,7 @@ const AdSense = ({
           data-ad-layout={layout}
           data-ad-layout-key={layoutKey}
           data-full-width-responsive={responsive}
-          data-adtest={testMode ? 'on' : undefined}
-          key={`ad-${slot}-${Date.now()}`}
+          key={`ad-${slot}`}
         />
       )}
     </div>
@@ -390,11 +263,11 @@ export const areAdsLoaded = () => {
   return Array.from(ads).some(ad => ad.offsetHeight > 0);
 };
 
+// CONSENT HELPER - Simplified and made more reliable
 export const consentHelper = {
   setConsent: (granted) => {
     try {
       localStorage.setItem('cookieConsent', granted ? 'true' : 'false');
-      localStorage.setItem('adsense_consent', granted ? 'granted' : 'denied');
       
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
@@ -407,20 +280,17 @@ export const consentHelper = {
       
       console.log(`🔄 AdSense: Consent ${granted ? 'granted' : 'denied'}`);
       
-      if (granted) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-      }
+      // No automatic reload - let the user decide or handle at app level
+      return true;
     } catch (error) {
       console.error('❌ AdSense: Error setting consent:', error);
+      return false;
     }
   },
   
   clearConsent: () => {
     try {
       localStorage.removeItem('cookieConsent');
-      localStorage.removeItem('adsense_consent');
       
       if (window._adSenseInitializedSlots) {
         window._adSenseInitializedSlots.clear();
@@ -428,21 +298,24 @@ export const consentHelper = {
       
       window.dispatchEvent(new Event('consentChanged'));
       console.log('🔄 AdSense: Consent cleared');
+      return true;
     } catch (error) {
       console.error('❌ AdSense: Error clearing consent:', error);
+      return false;
     }
   },
   
   getConsent: () => {
     try {
-      return localStorage.getItem('cookieConsent');
+      return localStorage.getItem('cookieConsent') === 'true';
     } catch {
-      return null;
+      return false;
     }
   },
   
   isEEAUser: () => {
     try {
+      // Simple check - can be enhanced with IP geolocation API if needed
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const eeaTimezones = ['Europe/', 'GB', 'UK', 'London'];
       return eeaTimezones.some(tz => timezone.includes(tz));
@@ -455,8 +328,6 @@ export const consentHelper = {
     try {
       const consent = localStorage.getItem('cookieConsent');
       const isEEA = consentHelper.isEEAUser();
-      
-      console.log(`🔍 AdSense: Initialized - EEA: ${isEEA}, Consent: ${consent}`);
       
       return {
         isEEA,

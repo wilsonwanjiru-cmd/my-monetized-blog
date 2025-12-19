@@ -1,156 +1,59 @@
 // frontend/src/utils/loadAdSense.js
+
+// This file is now DEPRECATED - AdSense is loaded via adsense-config.js in public folder
+// Keeping this file for backward compatibility only
+
 export const loadAdSenseScript = (options = {}) => {
-  if (typeof window === 'undefined') return Promise.reject(new Error('Window not available'));
-
-  const {
-    maxRetries = 3,
-    retryDelay = 2000,
-    debug = false,
-    testMode = false
-  } = options;
-
-  return new Promise((resolve, reject) => {
-    // Prevent multiple loads
-    if (window._adSenseScriptLoading) {
-      if (debug) console.log('⏳ AdSense script already loading...');
-      const checkInterval = setInterval(() => {
-        if (window._adSenseScriptLoaded) {
-          clearInterval(checkInterval);
-          resolve(true);
-        }
-      }, 100);
-      return;
-    }
-
-    if (window._adSenseScriptLoaded) {
-      if (debug) console.log('✅ AdSense script already loaded');
-      resolve(true);
-      return;
-    }
-
-    window._adSenseScriptLoading = true;
-
-    const loadScript = (attempt = 0) => {
-      // Check if script already exists
-      const existingScript = document.querySelector('script[src*="pagead2.googlesyndication.com"]');
-      if (existingScript) {
-        window._adSenseScriptLoaded = true;
-        window._adSenseScriptLoading = false;
-        resolve(true);
-        return;
-      }
-
-      const script = document.createElement('script');
-      const clientId = 'ca-pub-4047817727348673';
-      let scriptSrc = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${clientId}`;
-      
-      if (testMode) {
-        scriptSrc += '&adtest=on';
-      }
-
-      script.src = scriptSrc;
-      script.async = true;
-      script.crossOrigin = 'anonymous';
-      script.setAttribute('data-ad-client', clientId);
-      
-      // Add integrity check if needed
-      // script.integrity = 'sha256-...';
-      
-      script.onload = () => {
-        window._adSenseScriptLoaded = true;
-        window._adSenseScriptLoading = false;
-        window.adsbygoogle = window.adsbygoogle || [];
-        
-        if (debug) {
-          console.log('✅ AdSense script loaded successfully');
-          console.log('📊 window.adsbygoogle initialized:', window.adsbygoogle);
-        }
-        
-        resolve(true);
+  console.log('⚠️ loadAdSenseScript() is deprecated - AdSense is now loaded via adsense-config.js');
+  
+  // Return a resolved promise for backward compatibility
+  return new Promise((resolve) => {
+    // If in test mode or development, create mock adsbygoogle
+    const isTestMode = options.testMode || 
+                       window.location.hostname === 'localhost' ||
+                       window.location.hostname.includes('test') ||
+                       window.location.hostname.includes('staging');
+    
+    if (isTestMode && !window.adsbygoogle) {
+      window.adsbygoogle = [];
+      window.adsbygoogle.push = function() {
+        console.log('✅ Mock AdSense: Ad request would be made in production');
+        return [];
       };
-
-      script.onerror = (error) => {
-        console.error(`❌ AdSense script failed to load (attempt ${attempt + 1}/${maxRetries}):`, error);
-        
-        // Remove failed script
-        if (script.parentNode) {
-          script.parentNode.removeChild(script);
-        }
-
-        if (attempt < maxRetries - 1) {
-          const nextDelay = retryDelay * (attempt + 1);
-          console.log(`⏳ Retrying in ${nextDelay}ms...`);
-          setTimeout(() => loadScript(attempt + 1), nextDelay);
-        } else {
-          window._adSenseScriptLoading = false;
-          reject(new Error(`Failed to load AdSense script after ${maxRetries} attempts`));
-        }
-      };
-
-      // Add to document head
-      document.head.appendChild(script);
-      
-      if (debug) {
-        console.log(`🔄 Loading AdSense script (attempt ${attempt + 1}):`, script.src);
-      }
-    };
-
-    loadScript();
+      window.adsbygoogle.loaded = true;
+    }
+    
+    resolve(true);
   });
 };
 
-// Preload AdSense script
 export const preloadAdSenseScript = () => {
-  if (typeof window === 'undefined') return;
-  
-  // Create preload link
-  const link = document.createElement('link');
-  link.rel = 'preload';
-  link.as = 'script';
-  link.href = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4047817727348673';
-  link.crossOrigin = 'anonymous';
-  
-  document.head.appendChild(link);
-  
-  console.log('🔗 AdSense script preloaded');
+  console.log('⚠️ preloadAdSenseScript() is deprecated - AdSense is now loaded via adsense-config.js');
+  // No-op for backward compatibility
 };
 
-// Initialize AdSense
 export const initAdSense = async (options = {}) => {
-  try {
-    await loadAdSenseScript(options);
-    return { success: true, message: 'AdSense initialized successfully' };
-  } catch (error) {
-    console.error('❌ Failed to initialize AdSense:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-// Auto-initialize on page load
-if (typeof window !== 'undefined') {
-  // Preload immediately
-  preloadAdSenseScript();
+  console.log('⚠️ initAdSense() is deprecated - AdSense is now loaded via adsense-config.js');
   
-  // Load after page is mostly loaded
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      initAdSense({ debug: true }).then(result => {
-        if (!result.success) {
-          console.error('AdSense initialization failed, showing fallback content');
-          showAdSenseFallback();
-        }
-      });
-    }, 2000);
-  });
-}
+  // For backward compatibility, return success
+  return { 
+    success: true, 
+    message: 'AdSense managed by adsense-config.js in public folder' 
+  };
+};
 
 // Show fallback content when AdSense fails
-const showAdSenseFallback = () => {
+export const showAdSenseFallback = () => {
   const adContainers = document.querySelectorAll('.ad-container, .adsbygoogle');
   
   adContainers.forEach(container => {
-    if (container.innerHTML.includes('adsbygoogle')) {
-      container.innerHTML = `
+    // Check if the container already has an ad
+    const hasAd = container.querySelector('.adsbygoogle');
+    const isUnfilled = container.querySelector('.adsbygoogle[data-ad-status="unfilled"]');
+    
+    if (hasAd && isUnfilled) {
+      // Only replace unfilled ads
+      const fallbackHTML = `
         <div class="ad-fallback-content">
           <div style="
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -176,8 +79,153 @@ const showAdSenseFallback = () => {
           </div>
         </div>
       `;
+      
+      // Replace the unfilled ad with fallback
+      const adElement = container.querySelector('.adsbygoogle');
+      if (adElement) {
+        adElement.style.display = 'none';
+        container.insertAdjacentHTML('beforeend', fallbackHTML);
+      }
     }
   });
+  
+  return adContainers.length > 0;
 };
 
-export default { loadAdSenseScript, preloadAdSenseScript, initAdSense };
+// New function to check if AdSense is available
+export const isAdSenseAvailable = () => {
+  if (typeof window === 'undefined') return false;
+  
+  // Check if AdSense is loaded
+  if (!window.adsbygoogle) {
+    return false;
+  }
+  
+  // Check if we're in a development/test environment
+  const isTestMode = window.location.hostname === 'localhost' ||
+                     window.location.hostname.includes('test') ||
+                     window.location.hostname.includes('staging');
+  
+  return !isTestMode;
+};
+
+// New function to get AdSense status
+export const getAdSenseStatus = () => {
+  if (typeof window === 'undefined') {
+    return {
+      available: false,
+      reason: 'Window not available',
+      testMode: false
+    };
+  }
+  
+  const isTestMode = window.location.hostname === 'localhost' ||
+                     window.location.hostname.includes('test') ||
+                     window.location.hostname.includes('staging');
+  
+  if (isTestMode) {
+    return {
+      available: false,
+      reason: 'Test mode enabled',
+      testMode: true
+    };
+  }
+  
+  if (!window.adsbygoogle) {
+    return {
+      available: false,
+      reason: 'AdSense not loaded',
+      testMode: false
+    };
+  }
+  
+  // Check if ads are being blocked
+  const adElements = document.querySelectorAll('.adsbygoogle');
+  const filledAds = document.querySelectorAll('.adsbygoogle[data-ad-status="filled"]');
+  const unfilledAds = document.querySelectorAll('.adsbygoogle[data-ad-status="unfilled"]');
+  
+  return {
+    available: true,
+    reason: 'AdSense is available',
+    testMode: false,
+    stats: {
+      totalAds: adElements.length,
+      filledAds: filledAds.length,
+      unfilledAds: unfilledAds.length
+    }
+  };
+};
+
+// New function to safely refresh ads
+export const refreshAdSenseAds = () => {
+  if (typeof window === 'undefined') return false;
+  
+  if (!window.adsbygoogle || !window.adsbygoogle.request) {
+    console.log('⚠️ AdSense not available for refresh');
+    return false;
+  }
+  
+  try {
+    const adElements = document.querySelectorAll('ins.adsbygoogle[data-ad-status="filled"]');
+    let refreshedCount = 0;
+    
+    adElements.forEach((ad) => {
+      try {
+        window.adsbygoogle.request(ad);
+        refreshedCount++;
+      } catch (e) {
+        // Silent fail for individual ads
+      }
+    });
+    
+    console.log(`🔄 Refreshed ${refreshedCount} ads`);
+    return refreshedCount > 0;
+  } catch (error) {
+    console.log('⚠️ Failed to refresh ads:', error);
+    return false;
+  }
+};
+
+// New function to handle page visibility changes
+export const setupAdSenseVisibilityHandler = () => {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  
+  let visibilityTimeout = null;
+  
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      // Clear any existing timeout
+      if (visibilityTimeout) {
+        clearTimeout(visibilityTimeout);
+      }
+      
+      // Refresh ads after 10 seconds of becoming visible
+      visibilityTimeout = setTimeout(() => {
+        refreshAdSenseAds();
+      }, 10000);
+    }
+  };
+  
+  // Set up the event listener
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  // Return a cleanup function
+  return () => {
+    if (visibilityTimeout) {
+      clearTimeout(visibilityTimeout);
+    }
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+};
+
+// Export all functions for backward compatibility and new functionality
+export default { 
+  loadAdSenseScript, 
+  preloadAdSenseScript, 
+  initAdSense,
+  showAdSenseFallback,
+  isAdSenseAvailable,
+  getAdSenseStatus,
+  refreshAdSenseAds,
+  setupAdSenseVisibilityHandler
+};

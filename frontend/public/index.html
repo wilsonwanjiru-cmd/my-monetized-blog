@@ -118,7 +118,7 @@
     <link rel="apple-touch-icon" sizes="60x60" href="%PUBLIC_URL%/apple-icon-60x60.png">
     <link rel="apple-touch-icon" sizes="72x72" href="%PUBLIC_URL%/apple-icon-72x72.png">
     <link rel="apple-touch-icon" sizes="76x76" href="%PUBLIC_URL%/apple-icon-76x76.png">
-    <link rel="apple-touch-icon" sizes="114x114" href="%PUBLIC_URL%/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="%PUBLIC_URL%/apple-icon-114x57.png">
     <link rel="apple-touch-icon" sizes="120x120" href="%PUBLIC_URL%/apple-icon-120x120.png">
     <link rel="apple-touch-icon" sizes="144x144" href="%PUBLIC_URL%/apple-icon-144x144.png">
     <link rel="apple-touch-icon" sizes="152x152" href="%PUBLIC_URL%/apple-icon-152x152.png">
@@ -268,8 +268,58 @@
       })(window, document, "clarity", "script", "tmnk4u8wvm");
     </script>
     
-    <!-- ✅ Google AdSense Script (NO AUTO ADS INITIALIZATION HERE) -->
-    <!-- This will be loaded conditionally via adsense-config.js -->
+    <!-- ✅ CRITICAL: Error Suppression for AdSense - MUST BE BEFORE ANY ADSCRIPT -->
+    <script>
+      // Suppress all AdSense-related console errors and warnings
+      (function() {
+        const originalError = console.error;
+        console.error = function(...args) {
+          if (typeof args[0] === 'string') {
+            const errorMessage = args[0];
+            const suppressedPatterns = [
+              'no_div',
+              'adsbygoogle',
+              'googleads',
+              'googlesyndication',
+              'TagError',
+              'All ins elements',
+              'Failed to load resource',
+              'ERR_BLOCKED_BY_CLIENT',
+              'ERR_BLOCKED_BY_RESPONSE',
+              'ca-pub-4047817727348673',
+              'NetworkError',
+              'ad blocker',
+              'zrt_lookup',
+              'pagead/html',
+              'd doubleclick'
+            ];
+            if (suppressedPatterns.some(pattern => errorMessage.includes(pattern))) {
+              return;
+            }
+          }
+          originalError.apply(console, args);
+        };
+
+        const originalWarn = console.warn;
+        console.warn = function(...args) {
+          if (typeof args[0] === 'string') {
+            const warningMessage = args[0];
+            const suppressedPatterns = [
+              'adsbygoogle',
+              'googleads',
+              'googlesyndication',
+              'zrt_lookup'
+            ];
+            if (suppressedPatterns.some(pattern => warningMessage.includes(pattern))) {
+              return;
+            }
+          }
+          originalWarn.apply(console, args);
+        };
+      })();
+    </script>
+    
+    <!-- ✅ Google AdSense Config (NO AUTO ADS INITIALIZATION) -->
     <script>
       // Define AdSense configuration globally
       window._adsenseConfig = {
@@ -278,8 +328,8 @@
         testMode: window.location.hostname === 'localhost' || 
                   window.location.hostname.includes('test') ||
                   window.location.hostname.includes('staging'),
-        autoAdsConfigured: false, // Flag to track if auto ads have been configured
-        pageLevelAdsConfigured: false // Flag to track if page-level ads have been configured
+        autoAdsConfigured: false,
+        pageLevelAdsConfigured: false
       };
     </script>
   </head>
@@ -326,57 +376,8 @@
     <!-- ✅ Load AdSense configuration -->
     <script src="%PUBLIC_URL%/adsense-config.js"></script>
     
-    <!-- ✅ Critical: AdSense Error Prevention & Performance Optimization -->
+    <!-- ✅ Performance monitoring -->
     <script>
-      // Suppress common AdSense errors
-      (function() {
-        const originalError = console.error;
-        console.error = function(...args) {
-          // Suppress AdSense related errors
-          if (typeof args[0] === 'string') {
-            const errorMessage = args[0];
-            const suppressedPatterns = [
-              'no_div',
-              'adsbygoogle',
-              'googleads',
-              'googlesyndication',
-              'TagError',
-              'All ins elements',
-              'Failed to load resource',
-              'ERR_BLOCKED_BY_CLIENT',
-              'ERR_BLOCKED_BY_RESPONSE',
-              'ca-pub-4047817727348673',
-              'NetworkError',
-              'ad blocker'
-            ];
-            
-            if (suppressedPatterns.some(pattern => errorMessage.includes(pattern))) {
-              return;
-            }
-          }
-          originalError.apply(console, args);
-        };
-
-        // Also suppress warning logs
-        const originalWarn = console.warn;
-        console.warn = function(...args) {
-          if (typeof args[0] === 'string') {
-            const warningMessage = args[0];
-            const suppressedPatterns = [
-              'adsbygoogle',
-              'googleads',
-              'googlesyndication'
-            ];
-            
-            if (suppressedPatterns.some(pattern => warningMessage.includes(pattern))) {
-              return;
-            }
-          }
-          originalWarn.apply(console, args);
-        };
-      })();
-
-      // Performance monitoring
       window.addEventListener('load', function() {
         console.log('🚀 Page loaded successfully');
         
@@ -402,7 +403,7 @@
         });
       });
 
-      // Global error handler
+      // Global error handler (non-AdSense errors only)
       window.addEventListener('error', function(e) {
         // Filter out AdSense errors
         if (e.message && e.message.includes('adsbygoogle')) return;
@@ -410,113 +411,12 @@
         console.error('JavaScript Error:', e.message);
       });
 
-      // Unhandled promise rejection handler
+      // Unhandled promise rejection handler (non-AdSense errors only)
       window.addEventListener('unhandledrejection', function(e) {
         // Filter out AdSense promise rejections
         if (e.reason && e.reason.toString().includes('adsbygoogle')) return;
         console.warn('Unhandled Promise Rejection:', e.reason);
       });
-    </script>
-
-    <!-- ✅ Enhanced AdSense Safe Loader -->
-    <script>
-      (function() {
-        // Prevent duplicate AdSense script loading
-        if (window._adSenseLoaded) return;
-        window._adSenseLoaded = true;
-        
-        // Global tracking for ad slots
-        window._adSenseSlots = window._adSenseSlots || new Set();
-        
-        // Enhanced ad push wrapper to prevent duplicates
-        function wrapAdSensePush() {
-          if (!window.adsbygoogle || !window.adsbygoogle.push) return;
-          
-          const originalPush = window.adsbygoogle.push;
-          window.adsbygoogle.push = function() {
-            try {
-              const args = Array.from(arguments);
-              
-              // Check for duplicate enable_page_level_ads
-              for (const config of args) {
-                if (config && typeof config === 'object') {
-                  // Prevent multiple page level ads configurations
-                  if (config.enable_page_level_ads) {
-                    if (window._adsenseConfig.pageLevelAdsConfigured) {
-                      console.log('⏩ Skipping duplicate enable_page_level_ads configuration');
-                      continue;
-                    }
-                    window._adsenseConfig.pageLevelAdsConfigured = true;
-                  }
-                  
-                  // Check for duplicate slots
-                  const slot = config.google_ad_slot || config.dataAdSlot;
-                  if (slot && window._adSenseSlots.has(slot)) {
-                    console.log('⏩ Skipping duplicate ad slot:', slot);
-                    continue;
-                  }
-                  if (slot) {
-                    window._adSenseSlots.add(slot);
-                  }
-                }
-              }
-              
-              // Call original push
-              return originalPush.apply(this, args);
-            } catch (error) {
-              // Silent fail for AdSense errors
-              return;
-            }
-          };
-        }
-        
-        // Initialize when AdSense loads
-        function onAdSenseLoad() {
-          window.adsbygoogle = window.adsbygoogle || [];
-          wrapAdSensePush();
-          console.log('✅ AdSense wrapper initialized successfully');
-        }
-        
-        // Check if AdSense is already loaded
-        const adSenseScript = document.querySelector('script[src*="adsbygoogle"]');
-        if (adSenseScript) {
-          adSenseScript.addEventListener('load', onAdSenseLoad);
-          // Also check if already loaded
-          if (window.adsbygoogle) {
-            setTimeout(onAdSenseLoad, 100);
-          }
-        }
-        
-        // Safe DOM ready check
-        function domReady(callback) {
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', callback);
-          } else {
-            callback();
-          }
-        }
-        
-        // Initialize on DOM ready
-        domReady(function() {
-          // Ensure ad containers exist
-          setTimeout(function() {
-            // This ensures React has time to render initial components
-            if (window.adsbygoogle && window.adsbygoogle.request) {
-              // Request ad refresh for any existing ads
-              const adElements = document.querySelectorAll('ins.adsbygoogle');
-              adElements.forEach(function(ad) {
-                try {
-                  if (ad.dataset.adStatus !== 'filled') {
-                    window.adsbygoogle.request(ad);
-                  }
-                } catch (e) {
-                  // Silent fail
-                }
-              });
-            }
-          }, 2000);
-        });
-      })();
     </script>
 
     <!-- ✅ Schema.org for Current Page -->
@@ -591,17 +491,23 @@
       });
     </script>
     
-    <!-- ✅ Critical AdSense Fix Script -->
+    <!-- ✅ CRITICAL: Simplified AdSense Fix Script -->
     <script>
       // This script runs after everything else to fix remaining AdSense issues
       (function() {
         // Wait for everything to settle
         setTimeout(function() {
-          // Fix for "no_div" error: ensure all ad containers are properly attached
+          // Only run in production
+          if (window.location.hostname === 'localhost' || 
+              window.location.hostname.includes('test') ||
+              window.location.hostname.includes('staging')) {
+            return;
+          }
+          
+          // Fix for detached ad containers
           const adContainers = document.querySelectorAll('.ad-container, ins.adsbygoogle');
           adContainers.forEach(function(container) {
             if (!document.body.contains(container)) {
-              console.warn('Found detached ad container, reattaching...');
               document.body.appendChild(container);
             }
             
@@ -617,12 +523,11 @@
             const unfilledAds = document.querySelectorAll('ins.adsbygoogle[data-ad-status="unfilled"], ins.adsbygoogle:not([data-ad-status])');
             unfilledAds.forEach(function(ad) {
               try {
-                // Mark as requested to prevent duplicates
                 if (!ad.dataset.requested) {
                   ad.dataset.requested = 'true';
                   setTimeout(function() {
                     window.adsbygoogle.request(ad);
-                  }, Math.random() * 2000); // Stagger requests
+                  }, Math.random() * 2000);
                 }
               } catch (e) {
                 // Silent fail
