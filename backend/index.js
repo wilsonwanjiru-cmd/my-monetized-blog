@@ -26,17 +26,6 @@ const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
-// ✅ Add error handling for uncaught exceptions and rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  console.error('Stack:', reason.stack || reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  console.error('Stack:', error.stack);
-});
-
 // ✅ SECURITY: Trust proxy for Render deployment
 app.set('trust proxy', 1);
 
@@ -435,6 +424,15 @@ app.get('/api/test-cors', (req, res) => {
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/build');
   
+  // Check if frontend build exists
+  const fs = require('fs');
+  if (!fs.existsSync(frontendPath)) {
+    console.warn('⚠️ Frontend build not found at:', frontendPath);
+    console.log('💡 Tip: Build your React app with "npm run build" in the frontend directory');
+  } else {
+    console.log('✅ Frontend build found at:', frontendPath);
+  }
+  
   // Serve static files from React build
   app.use(express.static(frontendPath, {
     index: false,
@@ -443,44 +441,52 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ FIXED: SPA fallback route - using regex instead of wildcard to avoid path-to-regexp error
-  app.get('(.*)', (req, res, next) => {
-    // Skip if it's an API route or static file route
-    const excludedRoutes = [
-      '/api/',
-      '/sitemap.xml',
-      '/robots.txt',
-      '/rss.xml',
-      '/video-sitemap.xml',
-      '/blog/',
-      '/image-sitemap.xml',
-      '/sitemap-index.xml',
-      '/sitemap-posts.xml',
-      '/amp/'
-    ];
-    
-    const isExcluded = excludedRoutes.some(route => {
-      if (route.endsWith('/')) {
-        return req.originalUrl.startsWith(route);
+  // ✅ FIXED: SPA fallback route - using a simple approach
+  // Instead of using a catch-all route, we'll handle SPA routing differently
+  
+  // First, define all the specific routes that should be handled by the frontend
+  const spaRoutes = [
+    '/',
+    '/about',
+    '/contact',
+    '/portfolio',
+    '/projects',
+    '/resume',
+    '/services'
+  ];
+  
+  // Handle specific SPA routes
+  spaRoutes.forEach(route => {
+    app.get(route, (req, res) => {
+      console.log(`🔄 SPA Route: ${route}`);
+      if (fs.existsSync(path.join(frontendPath, 'index.html'))) {
+        res.sendFile(path.join(frontendPath, 'index.html'));
+      } else {
+        res.status(404).send('Frontend build not found');
       }
-      return req.originalUrl === route;
     });
-    
-    // Also skip if it's a file with extension (like .js, .css, .png, etc.)
-    const hasExtension = /\.\w+$/.test(req.originalUrl);
-    
-    if (isExcluded || hasExtension) {
-      return next();
+  });
+  
+  // For all other non-API, non-asset routes, serve the SPA
+  // Use a simple regex that doesn't trigger path-to-regexp parsing issues
+  app.get(/^\/(?!api|sitemap|robots|rss|video-sitemap|blog|image-sitemap|sitemap-index|sitemap-posts|amp|.*\.[a-z]+$).*/, (req, res) => {
+    // Skip if it's a file with extension
+    const hasExtension = /\.[a-zA-Z0-9]+$/.test(req.originalUrl);
+    if (hasExtension) {
+      return res.status(404).json({
+        success: false,
+        message: 'Static file not found',
+        path: req.originalUrl
+      });
     }
     
-    // Serve index.html for all other routes (SPA routing)
-    console.log(`🔄 SPA Routing: ${req.originalUrl}`);
-    res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
-      if (err) {
-        console.error(`❌ Error serving SPA route ${req.originalUrl}:`, err);
-        next(err);
-      }
-    });
+    // Serve index.html for SPA routing
+    console.log(`🔄 SPA Fallback Routing: ${req.originalUrl}`);
+    if (fs.existsSync(path.join(frontendPath, 'index.html'))) {
+      res.sendFile(path.join(frontendPath, 'index.html'));
+    } else {
+      res.status(404).send('Frontend build not found');
+    }
   });
 }
 
@@ -536,7 +542,7 @@ app.use((err, req, res, next) => {
     url: req.originalUrl,
     method: req.method,
     ip: req.ip,
-    stack: err.stack
+    stack: process.env.NODE_ENV !== 'production' ? err.stack : undefined
   });
 
   // Handle CORS errors
@@ -560,7 +566,7 @@ app.use((err, req, res, next) => {
 
   // Handle path-to-regexp errors
   if (err.message && err.message.includes('Missing parameter name')) {
-    console.error('⚠️ Path-to-regexp error detected. Please check route patterns.');
+    console.error('⚠️ Path-to-regexp error detected.');
     return res.status(500).json({
       success: false,
       message: 'Server configuration error',
@@ -601,21 +607,21 @@ app.use((req, res) => {
 // ✅ Start server
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 🚀 Server started successfully!
 📡 Port: ${PORT}
 🌍 Environment: ${process.env.NODE_ENV || 'development'}
 🔗 Frontend: https://wilsonmuita.com
-⚙️ Backend: http://localhost:${PORT}
+⚙️ Backend: https://api.wilsonmuita.com
 
 ✅ Health Checks:
-   • http://localhost:${PORT}/api/health
-   • http://localhost:${PORT}/api/test-cors
+   • https://api.wilsonmuita.com/api/health
+   • https://api.wilsonmuita.com/api/test-cors
 
 ✅ Analytics Endpoints:
-   • POST http://localhost:${PORT}/api/analytics/pageview
-   • POST http://localhost:${PORT}/api/analytics/debug-pageview
+   • POST https://api.wilsonmuita.com/api/analytics/pageview
+   • POST https://api.wilsonmuita.com/api/analytics/debug-pageview
 
 🔧 CORS Configuration:
    • Allowed Origins: ${allowedOrigins.length} domains
@@ -627,10 +633,10 @@ const server = app.listen(PORT, () => {
    • Status: ${mongoose.connection.readyState === 1 ? 'Connected' : 'Connecting...'}
    • URI: ${MONGODB_URI.split('@')[1] ? 'Configured' : 'Local'}
 
-💡 Next Steps:
-   1. Test CORS: Visit http://localhost:${PORT}/api/test-cors
-   2. Test Analytics: Run: curl -X POST http://localhost:${PORT}/api/analytics/debug-pageview -H "Content-Type: application/json" -d '{"sessionId":"test123","page":"/test"}'
-   3. Check frontend console for 400 error details
+💡 Application Status:
+   • Server: Running on port ${PORT}
+   • MongoDB: ${mongoose.connection.readyState === 1 ? 'Connected ✓' : 'Connecting...'}
+   • CORS: Configured for ${allowedOrigins.length} origins
   `);
 });
 
