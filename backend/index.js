@@ -26,6 +26,17 @@ const etagMiddleware = require('./middleware/etag');
 
 const app = express();
 
+// ✅ Add error handling for uncaught exceptions and rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Stack:', reason.stack || reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('Stack:', error.stack);
+});
+
 // ✅ SECURITY: Trust proxy for Render deployment
 app.set('trust proxy', 1);
 
@@ -432,8 +443,8 @@ if (process.env.NODE_ENV === 'production') {
     lastModified: true
   }));
 
-  // ✅ FIXED: SPA fallback route - simplified to avoid path-to-regexp error
-  app.get('*', (req, res, next) => {
+  // ✅ FIXED: SPA fallback route - using regex instead of wildcard to avoid path-to-regexp error
+  app.get('(.*)', (req, res, next) => {
     // Skip if it's an API route or static file route
     const excludedRoutes = [
       '/api/',
@@ -473,7 +484,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// ✅ FIXED: 404 handler for API routes - using regex instead of '/api/*'
+// ✅ FIXED: 404 handler for API routes
 app.use((req, res, next) => {
   // Check if this is an API route that wasn't handled
   if (req.originalUrl.startsWith('/api/')) {
@@ -524,7 +535,8 @@ app.use((err, req, res, next) => {
     message: err.message,
     url: req.originalUrl,
     method: req.method,
-    ip: req.ip
+    ip: req.ip,
+    stack: err.stack
   });
 
   // Handle CORS errors
@@ -546,10 +558,21 @@ app.use((err, req, res, next) => {
     });
   }
 
+  // Handle path-to-regexp errors
+  if (err.message && err.message.includes('Missing parameter name')) {
+    console.error('⚠️ Path-to-regexp error detected. Please check route patterns.');
+    return res.status(500).json({
+      success: false,
+      message: 'Server configuration error',
+      error: 'Route pattern parsing failed'
+    });
+  }
+
   // Default error response
   res.status(err.status || 500).json({
     success: false,
-    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack })
   });
 });
 
