@@ -362,14 +362,6 @@ const BlogListPage = () => {
                         {post.excerpt || 'Read this insightful article about technology and programming...'}
                       </p>
                       
-                      {post.tags && post.tags.length > 0 && (
-                        <div className="post-tags">
-                          {post.tags.slice(0, 3).map(tag => (
-                            <span key={tag} className="tag">#{tag}</span>
-                          ))}
-                        </div>
-                      )}
-                      
                       <div className="post-footer">
                         <span className="author">👤 By {post.author || 'Wilson Muita'}</span>
                         <span className="date">
