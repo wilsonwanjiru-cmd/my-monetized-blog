@@ -72,7 +72,7 @@ const BlogPost = () => {
       setTimeout(() => {
         processContentImages(postData);
         enhanceContentLinks(postData);
-        generateTableOfContents();
+        // Removed: generateTableOfContents();
         initializeReadingProgress();
       }, 100);
 
@@ -126,37 +126,6 @@ const BlogPost = () => {
     }
   };
 
-  // Generate table of contents from headings
-  const generateTableOfContents = () => {
-    const contentElement = contentRef.current || document.querySelector('.post-content');
-    if (!contentElement) {
-      // Retry after a short delay if content isn't ready
-      setTimeout(generateTableOfContents, 200);
-      return;
-    }
-
-    const headings = contentElement.querySelectorAll('h2, h3');
-    const toc = [];
-
-    headings.forEach((heading, index) => {
-      // Generate a safe ID for the heading
-      let id = heading.id;
-      if (!id) {
-        id = `section-${index + 1}-${Date.now()}`;
-        heading.id = id;
-      }
-      
-      toc.push({
-        id: id,
-        text: heading.textContent || `Section ${index + 1}`,
-        level: heading.tagName.toLowerCase(),
-        element: heading
-      });
-    });
-
-    setTableOfContents(toc);
-  };
-
   // Enhanced reading progress tracking
   const initializeReadingProgress = () => {
     const handleScroll = () => {
@@ -176,9 +145,6 @@ const BlogPost = () => {
 
       // Show/hide scroll to top button
       setShowScrollTop(scrollPosition > 500);
-
-      // Update active heading in table of contents
-      updateActiveHeading();
 
       // Track reading progress milestones
       trackReadingMilestones(progress);
@@ -207,42 +173,6 @@ const BlogPost = () => {
           postId: post?._id
         });
       }
-    }
-  };
-
-  // Update active heading in table of contents
-  const updateActiveHeading = () => {
-    if (tableOfContents.length === 0) return;
-
-    const headings = tableOfContents.map(item => item.element).filter(Boolean);
-    const scrollPosition = window.scrollY + 100;
-
-    let currentActive = '';
-    
-    for (let i = headings.length - 1; i >= 0; i--) {
-      if (headings[i] && headings[i].offsetTop <= scrollPosition) {
-        currentActive = headings[i].id;
-        break;
-      }
-    }
-
-    setActiveHeading(currentActive);
-  };
-
-  // Enhanced scroll to section
-  const scrollToSection = (sectionId) => {
-    const element = document.getElementById(sectionId);
-    if (element) {
-      const offset = 100; // Account for fixed header
-      const elementPosition = element.offsetTop - offset;
-      
-      window.scrollTo({
-        top: elementPosition,
-        behavior: 'smooth'
-      });
-
-      // Update URL hash without page jump
-      window.history.replaceState(null, null, `#${sectionId}`);
     }
   };
 
@@ -323,100 +253,6 @@ const BlogPost = () => {
     });
   };
 
-  // Social sharing with analytics
-  const handleSocialShare = (platform) => {
-    if (!post) return;
-
-    const postUrl = encodeURIComponent(window.location.href);
-    const postTitle = encodeURIComponent(post.title || '');
-    const shareText = encodeURIComponent(`Check out this article: ${post.title}`);
-
-    let shareUrl = '';
-    switch (platform) {
-      case 'twitter':
-        shareUrl = `https://twitter.com/intent/tweet?text=${shareText}&url=${postUrl}`;
-        break;
-      case 'linkedin':
-        shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${postUrl}`;
-        break;
-      case 'facebook':
-        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${postUrl}`;
-        break;
-      case 'reddit':
-        shareUrl = `https://reddit.com/submit?url=${postUrl}&title=${postTitle}`;
-        break;
-      default:
-        return;
-    }
-
-    // Update share count
-    setSocialShareCount(prev => prev + 1);
-
-    // Open share window
-    window.open(shareUrl, '_blank', 'width=600,height=400,menubar=no,toolbar=no,resizable=yes,scrollbars=yes');
-  };
-
-  // Copy URL to clipboard
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      
-      // Show feedback
-      const buttons = document.querySelectorAll('.share-button.copy');
-      buttons.forEach(button => {
-        const originalText = button.innerHTML;
-        button.innerHTML = '✅ Copied!';
-        button.style.backgroundColor = '#28a745';
-        setTimeout(() => {
-          button.innerHTML = originalText;
-          button.style.backgroundColor = '';
-        }, 2000);
-      });
-
-    } catch (err) {
-      console.error('Failed to copy URL:', err);
-      
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = window.location.href;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-    }
-  };
-
-  // Print article functionality
-  const printArticle = () => {
-    // Add print-specific styles
-    const printStyle = document.createElement('style');
-    printStyle.innerHTML = `
-      @media print {
-        .no-print, .social-sharing, .table-of-contents, .scroll-to-top, .reading-progress,
-        .newsletter-section, .post-footer, .related-posts, .ad-container {
-          display: none !important;
-        }
-        body {
-          font-size: 12pt;
-          line-height: 1.4;
-        }
-        .post-content {
-          max-width: 100% !important;
-        }
-      }
-    `;
-    document.head.appendChild(printStyle);
-    
-    window.print();
-    
-    // Clean up print styles
-    setTimeout(() => {
-      if (printStyle.parentNode) {
-        document.head.removeChild(printStyle);
-      }
-    }, 1000);
-  };
-
   // Enhanced cleanup function
   const cleanup = () => {
     // Cleanup scroll listeners
@@ -455,13 +291,6 @@ const BlogPost = () => {
     return cleanup;
   }, [fetchPost, slug]);
 
-  // Update active heading when table of contents changes
-  useEffect(() => {
-    if (tableOfContents.length > 0) {
-      updateActiveHeading();
-    }
-  }, [tableOfContents]);
-
   // Debug logging
   useEffect(() => {
     if (isDebugMode && post) {
@@ -492,14 +321,6 @@ const BlogPost = () => {
             <div className="skeleton skeleton-title"></div>
             <div className="skeleton skeleton-meta"></div>
             <div className="skeleton skeleton-tags"></div>
-          </div>
-
-          {/* Table of Contents Skeleton */}
-          <div className="toc-skeleton">
-            <div className="skeleton skeleton-toc-title"></div>
-            {[...Array(4)].map((_, index) => (
-              <div key={index} className="skeleton skeleton-toc-item"></div>
-            ))}
           </div>
 
           {/* Content Skeleton */}
@@ -749,104 +570,20 @@ const BlogPost = () => {
             )}
           </div>
 
-          {/* CATEGORY & TAGS */}
-          <div className="post-categories">
-            {post.category && (
+          {/* CATEGORY & TAGS - Simplified for AdSense compliance */}
+          {post.category && (
+            <div className="post-categories">
               <span className="category-tag" itemProp="articleSection">
-                {post.category}
+                Category: {post.category}
               </span>
-            )}
-            {post.tags && post.tags.map(tag => (
-              <span
-                key={tag}
-                className="tag"
-                itemProp="keywords"
-              >
-                #{tag}
-              </span>
-            ))}
-          </div>
-
-          {/* SOCIAL SHARING */}
-          <div className="social-sharing">
-            <span className="share-label">Share this article:</span>
-            <button
-              onClick={() => handleSocialShare('twitter')}
-              className="social-button twitter"
-              aria-label="Share on Twitter"
-            >
-              <span className="social-icon">🐦</span>
-              Twitter
-            </button>
-            <button
-              onClick={() => handleSocialShare('linkedin')}
-              className="social-button linkedin"
-              aria-label="Share on LinkedIn"
-            >
-              <span className="social-icon">💼</span>
-              LinkedIn
-            </button>
-            <button
-              onClick={() => handleSocialShare('facebook')}
-              className="social-button facebook"
-              aria-label="Share on Facebook"
-            >
-              <span className="social-icon">📘</span>
-              Facebook
-            </button>
-            <button
-              onClick={() => handleSocialShare('reddit')}
-              className="social-button reddit"
-              aria-label="Share on Reddit"
-            >
-              <span className="social-icon">🤖</span>
-              Reddit
-            </button>
-            <button
-              onClick={copyToClipboard}
-              className="social-button copy"
-              aria-label="Copy URL to clipboard"
-            >
-              <span className="social-icon">📋</span>
-              Copy URL
-            </button>
-            <button
-              onClick={printArticle}
-              className="social-button print"
-              aria-label="Print article"
-            >
-              <span className="social-icon">🖨️</span>
-              Print
-            </button>
-          </div>
-          {socialShareCount > 0 && (
-            <div className="share-count">
-              Shared {socialShareCount} time{socialShareCount !== 1 ? 's' : ''}
+              {post.tags && post.tags.length > 0 && (
+                <span className="tags-text" itemProp="keywords">
+                  Topics: {post.tags.join(', ')}
+                </span>
+              )}
             </div>
           )}
         </header>
-
-        {/* TABLE OF CONTENTS */}
-        {tableOfContents.length > 0 && (
-          <aside className="table-of-contents">
-            <h3 className="toc-title">📑 Table of Contents</h3>
-            <nav className="toc-nav" aria-label="Table of Contents">
-              {tableOfContents.map((item) => (
-                <a
-                  key={item.id}
-                  href={`#${item.id}`}
-                  className={`toc-link ${item.level} ${activeHeading === item.id ? 'active' : ''}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    scrollToSection(item.id);
-                  }}
-                >
-                  {item.text}
-                </a>
-              ))}
-            </nav>
-          </aside>
-        )}
 
         {/* POST CONTENT */}
         <article 
@@ -855,14 +592,6 @@ const BlogPost = () => {
           itemProp="articleBody"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
-
-        {/* READING PROGRESS SUMMARY */}
-        <div className="reading-summary">
-          <p>
-            You've read {Math.round(readingProgress)}% of this article. 
-            {readingProgress >= 90 && " Thanks for reading!"}
-          </p>
-        </div>
 
         {/* AUTHOR BIO */}
         <section className="author-bio">
@@ -941,12 +670,6 @@ const BlogPost = () => {
             >
               📚 Browse More Articles
             </Link>
-            <button
-              onClick={printArticle}
-              className="post-action-button"
-            >
-              🖨️ Print Article
-            </button>
           </div>
           {isDebugMode && (
             <div className="post-debug-info">
