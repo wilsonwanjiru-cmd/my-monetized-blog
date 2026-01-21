@@ -632,7 +632,7 @@ function App() {
                 
                 <footer className="bg-white border-t py-6">
                   <div className="container mx-auto px-4 text-center text-gray-600">
-                    <p>&copy; 2025 Wilson Muita. All rights reserved.</p>
+                    <p>&copy; 2026 Wilson Muita. All rights reserved.</p>
                     <div className="mt-2 space-x-4">
                       <a href="/privacy-policy" className="text-blue-600 hover:text-blue-800 text-sm">
                         Privacy Policy

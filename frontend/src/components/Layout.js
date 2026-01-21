@@ -503,7 +503,7 @@ const Layout = ({
             </div>
             <div className="footer-section">
               <p className="footer-text">
-                &copy; 2025 Wilson Muita. All rights reserved.
+                &copy; 2026 Wilson Muita. All rights reserved.
               </p>
               <p className="footer-text-small">
                 This site is GDPR compliant and uses Google CMP for consent management.
