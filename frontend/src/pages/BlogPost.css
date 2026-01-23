@@ -12,9 +12,9 @@
   --info-color: #4299e1;
   
   /* Neutral Colors */
-  --background-light: #f8fafc;
-  --background-white: #ffffff;
-  --background-card: #ffffff;
+  --background-light:#eaf6f0;
+  --background-white: #f3fbf7;
+  --background-card: #dff1e8;
   --text-dark: #2d3748;
   --text-gray: #4a5568;
   --text-light: #718096;
@@ -705,6 +705,7 @@
   box-shadow: var(--shadow-lg);
   color: white;
   text-align: center;
+  position: relative;
 }
 
 .newsletter-header h2 {
@@ -715,11 +716,137 @@
 }
 
 .newsletter-header p {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-size: var(--font-size-lg);
   line-height: 1.6;
   max-width: 600px;
   margin: 0 auto;
+  margin-bottom: var(--space-xl);
+}
+
+/* NEWSLETTER SECTION OVERRIDES - CRITICAL FIX */
+.newsletter-section .newsletter-signup {
+  background: rgba(355, 355, 355, 0.85) !important;
+  backdrop-filter: blur(10px) !important;
+  padding: var(--space-xl) !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: var(--shadow-lg) !important;
+  margin: 0 auto !important;
+  max-width: 600px !important;
+}
+
+/* Make newsletter button stand out with contrast */
+.newsletter-section .newsletter-signup .newsletter-button {
+  background: var(--primary-color) !important;
+  color: black !important;
+  border:  3px solid red !important;
+  border-radius: 8px !important;
+  padding: 14px 28px !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  box-shadow:0 0 20px yellow !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  margin-top: 15px !important;
+  width: 100% !important;
+  max-width: 300px !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-button:hover:not(:disabled) {
+  background: var(--primary-dark) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 20px rgba(102, 126, 237, 0.7) !important;
+}
+
+/* Style the email input */
+.newsletter-section .newsletter-signup .newsletter-input {
+  background: white !important;
+  color: var(--text-dark) !important;
+  border: 2px solid var(--border-light) !important;
+  border-radius: 8px !important;
+  padding: 14px 20px !important;
+  font-size: 1rem !important;
+  width: 100% !important;
+  max-width: 400px !important;
+  margin: 0 auto 15px auto !important;
+  display: block !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-input:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2) !important;
+  outline: none !important;
+}
+
+/* Style the newsletter form */
+.newsletter-section .newsletter-signup .newsletter-form {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 15px !important;
+}
+
+/* Style form row for mobile responsiveness */
+.newsletter-section .newsletter-signup .form-row {
+  width: 100% !important;
+  max-width: 400px !important;
+  margin: 0 auto !important;
+}
+
+/* Style the success/error messages */
+.newsletter-section .newsletter-signup .newsletter-message {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: var(--text-dark) !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  margin: 15px auto !important;
+  max-width: 400px !important;
+  text-align: center !important;
+  font-weight: 500 !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-message.success {
+  background: rgba(72, 187, 120, 0.1) !important;
+  color: var(--success-color) !important;
+  border: 1px solid rgba(72, 187, 120, 0.2) !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-message.error {
+  background: rgba(245, 101, 101, 0.1) !important;
+  color: var(--error-color) !important;
+  border: 1px solid rgba(245, 101, 101, 0.2) !important;
+}
+
+/* Style the privacy note */
+.newsletter-section .newsletter-signup .privacy-note {
+  color: var(--text-light) !important;
+  font-size: 0.85rem !important;
+  margin-top: 15px !important;
+  opacity: 0.9 !important;
+}
+
+/* Style the newsletter header inside the component */
+.newsletter-section .newsletter-signup .newsletter-header {
+  margin-bottom: 20px !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-title {
+  color: var(--text-dark) !important;
+  font-size: 1.3rem !important;
+  margin-bottom: 8px !important;
+}
+
+.newsletter-section .newsletter-signup .newsletter-description {
+  color: var(--text-gray) !important;
+  font-size: 0.95rem !important;
+  line-height: 1.5 !important;
 }
 
 /* ===== RELATED POSTS SECTION ===== */
@@ -757,7 +884,7 @@
   gap: var(--space-sm);
   text-decoration: none;
   background: var(--primary-color);
-  color: white;
+  color: black;
 }
 
 .post-action-button:hover {
@@ -1023,6 +1150,16 @@
   .in-article-ad-bottom {
     margin: var(--space-xl) auto;
   }
+  
+  /* Mobile adjustments for newsletter */
+  .newsletter-section .newsletter-signup {
+    padding: var(--space-lg) !important;
+  }
+  
+  .newsletter-section .newsletter-signup .newsletter-button {
+    padding: 12px 20px !important;
+    font-size: 0.95rem !important;
+  }
 }
 
 /* Small Mobile Devices (480px and below) */
@@ -1076,6 +1213,21 @@
   .post-action-button {
     padding: var(--space-sm) var(--space-md);
     font-size: var(--font-size-sm);
+  }
+  
+  /* Small mobile adjustments for newsletter */
+  .newsletter-section .newsletter-signup {
+    padding: var(--space-md) !important;
+  }
+  
+  .newsletter-section .newsletter-signup .newsletter-button {
+    padding: 10px 16px !important;
+    font-size: 0.9rem !important;
+  }
+  
+  .newsletter-section .newsletter-signup .newsletter-input {
+    padding: 12px 16px !important;
+    font-size: 0.95rem !important;
   }
 }
 
@@ -1157,4 +1309,25 @@
 ::-moz-selection {
   background: var(--primary-light);
   color: var(--text-dark);
+}
+
+/* ===== NEWSLETTER BUTTON VISIBILITY FIX ===== */
+/* These styles ensure the newsletter button is always visible */
+.newsletter-section .newsletter-signup .newsletter-button {
+  /* Debug border to ensure visibility - remove after testing */
+  border: 2px solid #4f46e5 !important;
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%) !important;
+  color: white !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px !important;
+}
+
+/* Force the entire newsletter component to be visible */
+.newsletter-signup {
+  visibility: visible !important;
+  opacity: 1 !important;
+  display: block !important;
+  position: relative !important;
+  z-index: 10 !important;
 }
